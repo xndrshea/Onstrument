@@ -2,7 +2,8 @@
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "server": "nodemon server/index.ts"
     },
     "name": "startup",
     "version": "1.0.0",
@@ -12,12 +13,31 @@
     "author": "xandershea <xandershea@gmail.com>",
     "license": "Apache-2.0",
     "dependencies": {
+        "@solana/spl-token": "^0.4.9",
+        "@solana/wallet-adapter-base": "^0.9.23",
+        "@solana/wallet-adapter-react": "^0.15.35",
+        "@solana/wallet-adapter-react-ui": "^0.9.35",
+        "@solana/wallet-adapter-wallets": "^0.19.32",
+        "@solana/web3.js": "^1.95.5",
         "@types/react": "^18.3.12",
         "@types/react-dom": "^18.3.1",
         "@vitejs/plugin-react": "^4.3.3",
+        "buffer": "^6.0.3",
+        "cors": "^2.8.5",
+        "express": "^4.21.1",
+        "process": "^0.11.10",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
+        "readable-stream": "^4.5.2",
+        "stream-browserify": "^3.0.0",
         "typescript": "^5.6.3",
+        "util": "^0.12.5",
         "vite": "^5.4.11"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.0",
+        "nodemon": "^3.1.7",
+        "ts-node": "^10.9.2"
     }
 }
