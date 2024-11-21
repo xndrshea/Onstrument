@@ -10,6 +10,7 @@ import {
     TOKEN_PROGRAM_ID,
     MINT_SIZE,
     getMinimumBalanceForRentExemptMint,
+    Token
 } from '@solana/spl-token'
 
 export async function createToken(
@@ -49,5 +50,26 @@ export async function createToken(
     return {
         transaction,
         mintKeypair,
+    }
+}
+
+export async function addTokenToWallet(
+    mintAddress: string,
+    wallet: any // Phantom wallet instance
+) {
+    try {
+        await wallet.request({
+            method: "wallet_watchAsset",
+            params: {
+                type: "SPL",
+                options: {
+                    address: mintAddress,
+                }
+            }
+        })
+        return true
+    } catch (error) {
+        console.error('Error adding token to wallet:', error)
+        return false
     }
 } 

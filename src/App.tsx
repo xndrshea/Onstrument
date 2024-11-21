@@ -8,6 +8,12 @@ import { Modal } from './components/Modal/Modal'
 function App() {
     const { connected, publicKey } = useWallet()
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+    const handleTokenCreated = () => {
+        setRefreshTrigger(prev => prev + 1)
+        setIsModalOpen(false)
+    }
 
     return (
         <div style={{ minHeight: '100vh', backgroundColor: '#1a1b1f' }}>
@@ -29,9 +35,15 @@ function App() {
                             <p>✅ Wallet Connected</p>
                             <p>Address: {publicKey?.toString()}</p>
                         </div>
-                        <TokenList onCreateClick={() => setIsModalOpen(true)} />
+                        <TokenList
+                            onCreateClick={() => setIsModalOpen(true)}
+                            key={refreshTrigger}
+                        />
                         <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-                            <TokenCreationForm onSuccess={() => setIsModalOpen(false)} />
+                            <TokenCreationForm
+                                onSuccess={() => setIsModalOpen(false)}
+                                onTokenCreated={handleTokenCreated}
+                            />
                         </Modal>
                     </>
                 ) : (

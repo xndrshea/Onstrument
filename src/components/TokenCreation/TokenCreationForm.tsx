@@ -2,6 +2,9 @@ import React, { useState } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { createToken } from '../../utils/tokenCreation'
 import { tokenService } from '../../services/tokenService'
+import { ConfirmOptions } from '@solana/web3.js'
+import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
+import { clusterApiUrl } from '@solana/web3.js'
 
 interface TokenFormData {
     name: string
@@ -13,9 +16,10 @@ interface TokenFormData {
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
+    onTokenCreated?: () => void
 }
 
-export function TokenCreationForm({ onSuccess }: TokenCreationFormProps) {
+export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFormProps) {
     const { connection } = useConnection()
     const { connected, publicKey, sendTransaction } = useWallet()
     const [formData, setFormData] = useState<TokenFormData>({
@@ -34,52 +38,143 @@ export function TokenCreationForm({ onSuccess }: TokenCreationFormProps) {
             return
         }
 
+        // Check if wallet is on the correct network
         try {
+            const currentEndpoint = connection.rpcEndpoint
+            const devnetEndpoint = clusterApiUrl(WalletAdapterNetwork.Devnet)
+
+            if (currentEndpoint !== devnetEndpoint) {
+                alert('Please switch your wallet to Devnet network before creating a token. In Phantom wallet: Settings -> Developer Settings -> Change Network to Devnet')
+                return
+            }
+
+            // Check if wallet has enough SOL
+            const balance = await connection.getBalance(publicKey)
+            if (balance < 10000000) { // 0.01 SOL minimum
+                alert('Insufficient SOL balance. You need at least 0.01 SOL on Devnet. You can get free Devnet SOL from https://solfaucet.com')
+                return
+            }
+
             setIsCreating(true)
+            console.log('Starting token creation process...')
 
             // Create the token with fixed 9 decimals
+            console.log('Creating token transaction...')
             const { transaction, mintKeypair } = await createToken(
                 connection,
                 publicKey,
                 9
             )
+            console.log('Token transaction created, mint address:', mintKeypair.publicKey.toString())
 
-            // Send the transaction
-            const signature = await sendTransaction(transaction, connection, {
-                signers: [mintKeypair]
-            })
-
-            // Wait for confirmation
-            await connection.confirmTransaction(signature)
-
-            // Save token data
-            await tokenService.createToken({
-                mint: mintKeypair.publicKey.toString(),
-                name: formData.name,
-                symbol: formData.symbol,
-                description: formData.description,
-                creator: publicKey.toString(),
-                supply: formData.supply,
-                // Handle image upload separately in production
-            })
-
-            alert(`Token created successfully! Mint address: ${mintKeypair.publicKey.toString()}`)
-
-            if (onSuccess) {
-                onSuccess()
+            // Set confirmation options
+            const confirmOptions: ConfirmOptions = {
+                commitment: 'confirmed',
+                preflightCommitment: 'confirmed',
+                skipPreflight: false,
+                maxRetries: 3
             }
 
-            // Reset form
-            setFormData({
-                name: '',
-                symbol: '',
-                description: '',
-                image: null,
-                supply: 1000000000,
+            // Send the transaction
+            console.log('Sending transaction...')
+            const signature = await sendTransaction(transaction, connection, {
+                signers: [mintKeypair],
+                ...confirmOptions
             })
+            console.log('Transaction sent, signature:', signature)
+
+            // Wait for confirmation with longer timeout and better error handling
+            console.log('Waiting for confirmation...')
+            try {
+                const latestBlockhash = await connection.getLatestBlockhash()
+                const confirmation = await connection.confirmTransaction({
+                    signature,
+                    blockhash: latestBlockhash.blockhash,
+                    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+                }, 'confirmed')
+
+                if (confirmation.value.err) {
+                    throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`)
+                }
+
+                console.log('Transaction confirmed:', confirmation)
+
+                // Add instructions for viewing the token
+                const mintAddress = mintKeypair.publicKey.toString()
+                const successMessage = `
+                    Token created successfully!
+                    
+                    Mint Address: ${mintAddress}
+                    
+                    To view your token:
+                    1. Make sure your wallet is on Devnet
+                    2. Click the "Add Token" button in your wallet
+                    3. Paste this mint address: ${mintAddress}
+                    
+                    Note: This token is on Devnet and won't be visible while your wallet is on Mainnet.
+                `
+
+                alert(successMessage)
+
+                // Save token data
+                console.log('Saving token data to backend...')
+                const tokenData = {
+                    mint: mintKeypair.publicKey.toString(),
+                    name: formData.name,
+                    symbol: formData.symbol,
+                    description: formData.description,
+                    creator: publicKey.toString(),
+                    supply: formData.supply,
+                }
+                console.log('Token data to save:', tokenData)
+
+                const savedToken = await tokenService.createToken(tokenData)
+                console.log('Token data saved:', savedToken)
+
+                if (onSuccess) {
+                    onSuccess()
+                }
+
+                // Trigger token list refresh
+                if (onTokenCreated) {
+                    onTokenCreated()
+                }
+
+                // Reset form
+                setFormData({
+                    name: '',
+                    symbol: '',
+                    description: '',
+                    image: null,
+                    supply: 1000000000,
+                })
+            } catch (confirmError) {
+                console.error('Confirmation error:', confirmError)
+
+                // Check if transaction was actually successful despite timeout
+                const signatureStatus = await connection.getSignatureStatus(signature)
+                if (signatureStatus.value?.confirmationStatus === 'confirmed' ||
+                    signatureStatus.value?.confirmationStatus === 'finalized') {
+                    console.log('Transaction was actually successful!')
+                    // Continue with token data saving...
+                    const tokenData = {
+                        mint: mintKeypair.publicKey.toString(),
+                        name: formData.name,
+                        symbol: formData.symbol,
+                        description: formData.description,
+                        creator: publicKey.toString(),
+                        supply: formData.supply,
+                    }
+                    const savedToken = await tokenService.createToken(tokenData)
+                    alert(`Token created successfully (despite timeout)! Mint address: ${mintKeypair.publicKey.toString()}`)
+                    if (onSuccess) onSuccess()
+                } else {
+                    throw new Error('Transaction failed or expired')
+                }
+            }
         } catch (error) {
-            console.error('Error creating token:', error)
-            alert('Failed to create token. See console for details.')
+            console.error('Detailed error creating token:', error)
+            alert(`Failed to create token: ${error instanceof Error ? error.message : 'Unknown error'}`)
         } finally {
             setIsCreating(false)
         }
@@ -87,6 +182,15 @@ export function TokenCreationForm({ onSuccess }: TokenCreationFormProps) {
 
     return (
         <div className="token-creation-form">
+            <div className="network-warning" style={{
+                backgroundColor: '#fff3cd',
+                color: '#856404',
+                padding: '1rem',
+                marginBottom: '1rem',
+                borderRadius: '4px'
+            }}>
+                ⚠️ You are creating a token on Devnet. Make sure your wallet is connected to Devnet network.
+            </div>
             <h2>Create Your Token</h2>
             <form onSubmit={handleSubmit}>
                 <div className="form-group">
