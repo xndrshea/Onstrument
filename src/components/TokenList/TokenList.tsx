@@ -2,7 +2,11 @@ import React, { useEffect, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { tokenService, TokenData } from '../../services/tokenService'
 
-export function TokenList() {
+interface TokenListProps {
+    onCreateClick: () => void
+}
+
+export function TokenList({ onCreateClick }: TokenListProps) {
     const { publicKey } = useWallet()
     const [tokens, setTokens] = useState<TokenData[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -38,7 +42,7 @@ export function TokenList() {
         <div className="token-list">
             <div className="token-list-header">
                 <h2>Created Tokens</h2>
-                <button className="create-token-button" onClick={() => setIsModalOpen(true)}>
+                <button className="create-token-button" onClick={onCreateClick}>
                     + Create Token
                 </button>
             </div>

@@ -13,7 +13,7 @@ export interface TokenData {
 
 class TokenService {
     private readonly STORAGE_KEY = 'created_tokens'
-    private readonly API_URL = 'http://localhost:3001/api'  // We'll create this server next
+    private readonly API_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001/api'
 
     // Local Storage Methods
     private getFromStorage(): TokenData[] {

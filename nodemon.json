@@ -1,0 +1,8 @@
+{
+    "watch": [
+        "server/src"
+    ],
+    "ext": ".ts,.js",
+    "ignore": [],
+    "exec": "NODE_ENV=development ts-node --project tsconfig.server.json ./server/src/index.ts"
+}

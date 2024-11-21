@@ -29,7 +29,7 @@ function App() {
                             <p>✅ Wallet Connected</p>
                             <p>Address: {publicKey?.toString()}</p>
                         </div>
-                        <TokenList />
+                        <TokenList onCreateClick={() => setIsModalOpen(true)} />
                         <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
                             <TokenCreationForm onSuccess={() => setIsModalOpen(false)} />
                         </Modal>
