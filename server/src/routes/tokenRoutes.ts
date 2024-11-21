@@ -1,11 +1,11 @@
 import { Router } from 'express'
 import { tokenController } from '../controllers/tokenController'
+import { validateToken } from '../middleware/validation'
 
 const router = Router()
 
-router.post('/', tokenController.createToken)
+router.post('/', validateToken, tokenController.createToken)
 router.get('/', tokenController.getTokens)
 router.get('/:mint', tokenController.getToken)
-router.patch('/:mint/stats', tokenController.updateTokenStats)
 
 export const tokenRoutes = router 

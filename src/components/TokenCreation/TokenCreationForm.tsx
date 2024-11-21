@@ -10,6 +10,8 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Transaction } from '@solana/web3.js'
 import { Keypair } from '@solana/web3.js'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
+import { getMint, getAccount } from '@solana/spl-token'
+import { Connection, PublicKey } from '@solana/web3.js'
 
 interface TokenFormData {
     name: string
@@ -40,7 +42,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         symbol: '',
         description: '',
         image: null,
-        supply: 1000000000,
+        supply: 1000000,
         initialPrice: '0.1',
         slope: '0.1',
         initialSupply: '1000000',
@@ -56,48 +58,14 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             return
         }
 
+        setIsCreating(true)
+        setTransactionStatus('Creating token...')
+
         try {
-            setIsCreating(true)
-            setTransactionStatus('Creating token...')
-            console.log('Starting token creation process...')
+            const { mintKeypair, bondingCurveKeypair, reserveAccount, transaction, bondingCurveATA, metadata, bondingCurveConfig } =
+                await createToken(connection, publicKey, formData)
 
-            // Verify network connection
-            const currentEndpoint = connection.rpcEndpoint
-            const devnetEndpoint = clusterApiUrl('devnet')
-
-            if (currentEndpoint !== devnetEndpoint) {
-                alert('Please switch to Devnet network before creating tokens')
-                return
-            }
-
-            // Verify wallet balance
-            const balance = await connection.getBalance(publicKey)
-            const minimumSol = 0.1 * LAMPORTS_PER_SOL
-            if (balance < minimumSol) {
-                alert('Insufficient SOL balance. You need at least 0.1 SOL')
-                return
-            }
-
-            // Create token with transaction
-            const {
-                transaction,
-                mintKeypair,
-                bondingCurveKeypair,
-                reserveAccount,
-                bondingCurveATA
-            } = await createToken(
-                connection,
-                publicKey,
-                {
-                    initialPrice: parseFloat(formData.initialPrice),
-                    slope: parseFloat(formData.slope),
-                    initialSupply: parseFloat(formData.initialSupply),
-                    maxSupply: formData.supply,
-                    reserveRatio: parseFloat(formData.reserveRatio)
-                }
-            )
-
-            // Add recent blockhash
+            // Get the latest blockhash
             const { blockhash } = await connection.getLatestBlockhash()
             transaction.recentBlockhash = blockhash
             transaction.feePayer = publicKey
@@ -105,30 +73,25 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             // Add all signers
             transaction.sign(mintKeypair, bondingCurveKeypair, reserveAccount)
 
-            // Send transaction
-            const signature = await sendTransaction(transaction, connection, {
-                skipPreflight: false,
-                preflightCommitment: 'confirmed',
-                maxRetries: 5
-            })
-
+            // Send and confirm transaction
+            const signature = await sendTransaction(transaction, connection)
             console.log('Transaction sent:', signature)
             await connection.confirmTransaction(signature, 'confirmed')
             console.log('Transaction confirmed')
 
-            // Save token metadata
-            await tokenService.createToken({
+            // Save token with actual on-chain data
+            await tokenService.saveToken({
                 mint_address: mintKeypair.publicKey.toBase58(),
                 name: formData.name,
                 symbol: formData.symbol,
                 description: formData.description,
                 creator: publicKey.toBase58(),
-                total_supply: formData.supply,
+                total_supply: metadata.initialSupply,
                 metadata: {
-                    bondingCurveATA: bondingCurveATA,
+                    bondingCurveATA,
                     reserveAccount: reserveAccount.publicKey.toBase58(),
-                    initialSupply: 0,
-                    currentSupply: 0
+                    initialSupply: metadata.initialSupply,
+                    currentSupply: metadata.currentSupply
                 },
                 bondingCurveConfig: {
                     initialPrice: parseFloat(formData.initialPrice),
@@ -138,12 +101,12 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             })
 
             setTransactionStatus('Token created successfully!')
-            onSuccess?.()
-            onTokenCreated?.()
+            if (onSuccess) onSuccess()
+            if (onTokenCreated) onTokenCreated()
 
         } catch (error) {
-            console.error('Error creating token:', error)
-            setTransactionStatus('Failed to create token')
+            console.error('Token creation error:', error)
+            setTransactionStatus('')
             alert(error instanceof Error ? error.message : 'Failed to create token')
         } finally {
             setIsCreating(false)
@@ -156,7 +119,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             symbol: '',
             description: '',
             image: null,
-            supply: 1000000000,
+            supply: 1000000,
             initialPrice: '0.1',
             slope: '0.1',
             initialSupply: '1000000',
@@ -191,14 +154,14 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 </div>
 
                 <div className="form-group">
-                    <label htmlFor="symbol">Token Symbol</label>
+                    <label htmlFor="symbol">Symbol</label>
                     <input
                         type="text"
                         id="symbol"
                         value={formData.symbol}
                         onChange={(e) => setFormData(prev => ({ ...prev, symbol: e.target.value.toUpperCase() }))}
-                        placeholder="e.g., MAT"
-                        maxLength={5}
+                        placeholder="e.g., TOKEN"
+                        maxLength={10}
                         required
                     />
                 </div>

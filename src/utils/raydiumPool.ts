@@ -41,9 +41,9 @@ export async function createRaydiumPool(
         // Create pool configuration
         const ammConfig: LiquidityStateV4 = {
             status: new BN(1),
-            baseDecimals: 9,
-            quoteDecimals: 9,
-            lpDecimals: 9,
+            baseDecimal: new BN(9),
+            quoteDecimal: new BN(9),
+            lpDecimal: new BN(9),
             baseReserve: new TokenAmount(customToken, '0'),
             quoteReserve: new TokenAmount(WSOL, '0'),
             lpSupply: new TokenAmount(new Token(TOKEN_PROGRAM_ID, lpMintKeypair.publicKey, 9, 'LP', 'LP Token'), '0'),
@@ -80,7 +80,18 @@ export async function createRaydiumPool(
 
         // Create pool initialization instruction
         const instructions = await Liquidity.makeCreatePoolV4InstructionV2({
-            poolKeys,
+            programId: poolKeys.programId,
+            ammId: poolKeys.id,
+            ammAuthority: poolKeys.authority,
+            ammOpenOrders: poolKeys.openOrders,
+            lpMint: lpMintKeypair.publicKey,
+            coinMint: mintAddress,
+            quoteMint: SystemProgram.programId,
+            baseVault: poolKeys.baseVault,
+            quoteVault: poolKeys.quoteVault,
+            lpVault: poolKeys.lpVault,
+            marketId: poolKeys.marketId,
+            marketProgramId: poolKeys.marketProgramId,
             userKeys: {
                 payer: bondingCurveKeypair.publicKey
             },
@@ -89,7 +100,7 @@ export async function createRaydiumPool(
         });
 
         // Add instructions to transaction
-        transaction.add(...instructions.instructions);
+        transaction.add(...instructions.innerTransaction.instructions);
 
         // Send and confirm transaction
         const signature = await connection.sendTransaction(transaction, [bondingCurveKeypair, lpMintKeypair]);

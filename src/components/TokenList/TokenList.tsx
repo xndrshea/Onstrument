@@ -20,39 +20,86 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         setRefreshTrigger(prev => prev + 1)
     }
 
+    // Add a function to deduplicate tokens
+    const deduplicateTokens = (tokens: TokenData[]) => {
+        const seen = new Set();
+        return tokens.filter(token => {
+            const duplicate = seen.has(token.mint_address);
+            seen.add(token.mint_address);
+            return !duplicate;
+        });
+    };
+
     useEffect(() => {
         const fetchTokens = async () => {
+            setIsLoading(true);
             try {
-                setIsLoading(true);
-                const fetchedTokens = await tokenService.getAllTokens();
+                const tokens = await tokenService.getAllTokens();
+                console.log('Raw fetched tokens:', tokens);
 
-                // Sort tokens by creation time, newest first
-                const sortedTokens = fetchedTokens.sort((a, b) => {
-                    // If createdAt is available, use it
-                    if (a.createdAt && b.createdAt) {
-                        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                if (!Array.isArray(tokens)) {
+                    console.error('Invalid tokens data received:', tokens);
+                    setError('Invalid data received from server');
+                    setTokens([]);
+                    return;
+                }
+
+                // Filter out any invalid tokens and ensure all required fields
+                const validTokens = tokens.filter(token => {
+                    const isValid = token &&
+                        typeof token === 'object' &&
+                        token.mint_address &&
+                        token.name &&
+                        token.symbol;
+
+                    if (!isValid) {
+                        console.warn('Invalid token data:', token);
                     }
-                    // Fallback to comparing mint addresses if no timestamp
-                    return b.mint_address.localeCompare(a.mint_address);
-                });
+                    return isValid;
+                }).map(token => ({
+                    ...token,
+                    // Ensure metadata is parsed if it's a string
+                    metadata: typeof token.metadata === 'string' ?
+                        JSON.parse(token.metadata) : token.metadata || {},
+                    // Ensure bondingCurveConfig is parsed if it's a string
+                    bondingCurveConfig: typeof token.bondingCurveConfig === 'string' ?
+                        JSON.parse(token.bondingCurveConfig) : token.bondingCurveConfig || {},
+                    // Ensure other required fields have defaults
+                    name: token.name || 'Unnamed Token',
+                    symbol: token.symbol || 'UNKNOWN',
+                    description: token.description || '',
+                    total_supply: token.total_supply || 0,
+                    created_at: token.created_at || new Date().toISOString()
+                }));
 
-                setTokens(sortedTokens);
+                console.log('Processed tokens:', validTokens);
+                setTokens(deduplicateTokens(validTokens));
+                setError(null);
             } catch (error) {
                 console.error('Error fetching tokens:', error);
-                setError('Failed to load tokens');
+                setError('Failed to fetch tokens. Please try again later.');
+                setTokens([]);
             } finally {
                 setIsLoading(false);
             }
         };
 
         fetchTokens();
-    }, []);
+    }, [refreshTrigger]);
 
     // Reduce refresh frequency to avoid rate limiting
     useEffect(() => {
         const interval = setInterval(refreshTokens, 10000) // Change to 10 seconds
         return () => clearInterval(interval)
     }, [])
+
+    const formatSupply = (supply: number): string => {
+        // Convert from raw units (with 9 decimals) to actual token amount
+        const actualSupply = supply / Math.pow(10, 9)
+        return actualSupply.toLocaleString(undefined, {
+            maximumFractionDigits: 2
+        })
+    }
 
     if (isLoading) {
         return <div className="loading">Loading tokens...</div>
@@ -84,30 +131,30 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 <div className="token-grid">
                     {tokens.map((token) => (
                         <div key={token.mint_address} className="token-card">
-                            {token.image_url && (
-                                <img
-                                    src={token.image_url}
-                                    alt={`${token.name} logo`}
-                                    className="token-logo"
-                                />
-                            )}
-                            <h3>{token.name}</h3>
-                            <p className="token-symbol">{token.symbol}</p>
-                            <p className="token-description">{token.description}</p>
+                            <h3>{token.name || 'Unnamed Token'}</h3>
+                            <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
+                            <p className="token-description">{token.description || 'No description available'}</p>
                             <p className="token-mint">
                                 Mint: {token.mint_address ?
                                     `${token.mint_address.slice(0, 4)}...${token.mint_address.slice(-4)}` :
                                     'N/A'}
                             </p>
                             <p className="token-date">
-                                {token.created_at ? new Date(token.created_at).toLocaleDateString() : 'N/A'}
+                                {token.created_at ?
+                                    new Date(token.created_at).toLocaleDateString() :
+                                    'N/A'}
                             </p>
                             <p className="token-supply">
-                                Supply: {token.total_supply ? token.total_supply.toLocaleString() : 'N/A'}
+                                Supply: {token.total_supply ?
+                                    formatSupply(token.total_supply) :
+                                    'N/A'}
                             </p>
                             <div className="trading-section">
                                 <h4>Trade Token</h4>
-                                <TradingInterface token={token} />
+                                <TradingInterface
+                                    token={token}
+                                    onTradeComplete={() => refreshTokens()}
+                                />
                             </div>
                             <div className="token-actions">
                                 <button

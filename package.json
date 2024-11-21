@@ -20,6 +20,7 @@
         "@solana/wallet-adapter-wallets": "^0.19.23",
         "@solana/web3.js": "^1.95.5",
         "@types/chart.js": "^2.9.41",
+        "bs58": "^6.0.0",
         "chart.js": "^4.4.6",
         "cors": "^2.8.5",
         "dotenv": "^16.3.1",
