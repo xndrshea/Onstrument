@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { AppError } from './errorHandler'
 
-export const validateToken = (req: Request, res: Response, next: NextFunction) => {
+export const validateToken = (req: Request, _res: Response, next: NextFunction) => {
     const { mint, name, symbol, creator, supply } = req.body
 
     if (!mint || !name || !symbol || !creator || !supply) {

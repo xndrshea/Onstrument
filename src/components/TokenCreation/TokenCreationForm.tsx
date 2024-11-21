@@ -5,6 +5,11 @@ import { tokenService } from '../../services/tokenService'
 import { ConfirmOptions } from '@solana/web3.js'
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
 import { clusterApiUrl } from '@solana/web3.js'
+import { DEFAULT_BONDING_CURVE_CONFIG } from '../../services/bondingCurve'
+import { LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { Transaction } from '@solana/web3.js'
+import { Keypair } from '@solana/web3.js'
+import { getAssociatedTokenAddress } from '@solana/spl-token'
 
 interface TokenFormData {
     name: string
@@ -12,11 +17,19 @@ interface TokenFormData {
     description: string
     image: File | null
     supply: number
+    initialPrice: string
+    slope: string
+    initialSupply: string
+    reserveRatio: string
 }
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
     onTokenCreated?: () => void
+}
+
+function serializeKeypair(keypair: Keypair): string {
+    return Buffer.from(keypair.secretKey).toString('base58')
 }
 
 export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFormProps) {
@@ -28,8 +41,13 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         description: '',
         image: null,
         supply: 1000000000,
+        initialPrice: '0.1',
+        slope: '0.1',
+        initialSupply: '1000000',
+        reserveRatio: '0.5'
     })
     const [isCreating, setIsCreating] = useState(false)
+    const [transactionStatus, setTransactionStatus] = useState<string>('')
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -38,146 +56,113 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             return
         }
 
-        // Check if wallet is on the correct network
         try {
-            const currentEndpoint = connection.rpcEndpoint
-            const devnetEndpoint = clusterApiUrl(WalletAdapterNetwork.Devnet)
-
-            if (currentEndpoint !== devnetEndpoint) {
-                alert('Please switch your wallet to Devnet network before creating a token. In Phantom wallet: Settings -> Developer Settings -> Change Network to Devnet')
-                return
-            }
-
-            // Check if wallet has enough SOL
-            const balance = await connection.getBalance(publicKey)
-            if (balance < 10000000) { // 0.01 SOL minimum
-                alert('Insufficient SOL balance. You need at least 0.01 SOL on Devnet. You can get free Devnet SOL from https://solfaucet.com')
-                return
-            }
-
             setIsCreating(true)
+            setTransactionStatus('Creating token...')
             console.log('Starting token creation process...')
 
-            // Create the token with fixed 9 decimals
-            console.log('Creating token transaction...')
-            const { transaction, mintKeypair } = await createToken(
+            // Verify network connection
+            const currentEndpoint = connection.rpcEndpoint
+            const devnetEndpoint = clusterApiUrl('devnet')
+
+            if (currentEndpoint !== devnetEndpoint) {
+                alert('Please switch to Devnet network before creating tokens')
+                return
+            }
+
+            // Verify wallet balance
+            const balance = await connection.getBalance(publicKey)
+            const minimumSol = 0.1 * LAMPORTS_PER_SOL
+            if (balance < minimumSol) {
+                alert('Insufficient SOL balance. You need at least 0.1 SOL')
+                return
+            }
+
+            // Create token with transaction
+            const {
+                transaction,
+                mintKeypair,
+                bondingCurveKeypair,
+                reserveAccount,
+                bondingCurveATA
+            } = await createToken(
                 connection,
                 publicKey,
-                9
+                {
+                    initialPrice: parseFloat(formData.initialPrice),
+                    slope: parseFloat(formData.slope),
+                    initialSupply: parseFloat(formData.initialSupply),
+                    maxSupply: formData.supply,
+                    reserveRatio: parseFloat(formData.reserveRatio)
+                }
             )
-            console.log('Token transaction created, mint address:', mintKeypair.publicKey.toString())
 
-            // Set confirmation options
-            const confirmOptions: ConfirmOptions = {
-                commitment: 'confirmed',
-                preflightCommitment: 'confirmed',
-                skipPreflight: false,
-                maxRetries: 3
-            }
+            // Add recent blockhash
+            const { blockhash } = await connection.getLatestBlockhash()
+            transaction.recentBlockhash = blockhash
+            transaction.feePayer = publicKey
 
-            // Send the transaction
-            console.log('Sending transaction...')
+            // Add all signers
+            transaction.sign(mintKeypair, bondingCurveKeypair, reserveAccount)
+
+            // Send transaction
             const signature = await sendTransaction(transaction, connection, {
-                signers: [mintKeypair],
-                ...confirmOptions
+                skipPreflight: false,
+                preflightCommitment: 'confirmed',
+                maxRetries: 5
             })
-            console.log('Transaction sent, signature:', signature)
 
-            // Wait for confirmation with longer timeout and better error handling
-            console.log('Waiting for confirmation...')
-            try {
-                const latestBlockhash = await connection.getLatestBlockhash()
-                const confirmation = await connection.confirmTransaction({
-                    signature,
-                    blockhash: latestBlockhash.blockhash,
-                    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
-                }, 'confirmed')
+            console.log('Transaction sent:', signature)
+            await connection.confirmTransaction(signature, 'confirmed')
+            console.log('Transaction confirmed')
 
-                if (confirmation.value.err) {
-                    throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`)
+            // Save token metadata
+            await tokenService.createToken({
+                mint_address: mintKeypair.publicKey.toBase58(),
+                name: formData.name,
+                symbol: formData.symbol,
+                description: formData.description,
+                creator: publicKey.toBase58(),
+                total_supply: formData.supply,
+                metadata: {
+                    bondingCurveATA: bondingCurveATA,
+                    reserveAccount: reserveAccount.publicKey.toBase58(),
+                    initialSupply: 0,
+                    currentSupply: 0
+                },
+                bondingCurveConfig: {
+                    initialPrice: parseFloat(formData.initialPrice),
+                    slope: parseFloat(formData.slope),
+                    reserveRatio: parseFloat(formData.reserveRatio)
                 }
+            })
 
-                console.log('Transaction confirmed:', confirmation)
+            setTransactionStatus('Token created successfully!')
+            onSuccess?.()
+            onTokenCreated?.()
 
-                // Add instructions for viewing the token
-                const mintAddress = mintKeypair.publicKey.toString()
-                const successMessage = `
-                    Token created successfully!
-                    
-                    Mint Address: ${mintAddress}
-                    
-                    To view your token:
-                    1. Make sure your wallet is on Devnet
-                    2. Click the "Add Token" button in your wallet
-                    3. Paste this mint address: ${mintAddress}
-                    
-                    Note: This token is on Devnet and won't be visible while your wallet is on Mainnet.
-                `
-
-                alert(successMessage)
-
-                // Save token data
-                console.log('Saving token data to backend...')
-                const tokenData = {
-                    mint: mintKeypair.publicKey.toString(),
-                    name: formData.name,
-                    symbol: formData.symbol,
-                    description: formData.description,
-                    creator: publicKey.toString(),
-                    supply: formData.supply,
-                }
-                console.log('Token data to save:', tokenData)
-
-                const savedToken = await tokenService.createToken(tokenData)
-                console.log('Token data saved:', savedToken)
-
-                if (onSuccess) {
-                    onSuccess()
-                }
-
-                // Trigger token list refresh
-                if (onTokenCreated) {
-                    onTokenCreated()
-                }
-
-                // Reset form
-                setFormData({
-                    name: '',
-                    symbol: '',
-                    description: '',
-                    image: null,
-                    supply: 1000000000,
-                })
-            } catch (confirmError) {
-                console.error('Confirmation error:', confirmError)
-
-                // Check if transaction was actually successful despite timeout
-                const signatureStatus = await connection.getSignatureStatus(signature)
-                if (signatureStatus.value?.confirmationStatus === 'confirmed' ||
-                    signatureStatus.value?.confirmationStatus === 'finalized') {
-                    console.log('Transaction was actually successful!')
-                    // Continue with token data saving...
-                    const tokenData = {
-                        mint: mintKeypair.publicKey.toString(),
-                        name: formData.name,
-                        symbol: formData.symbol,
-                        description: formData.description,
-                        creator: publicKey.toString(),
-                        supply: formData.supply,
-                    }
-                    const savedToken = await tokenService.createToken(tokenData)
-                    alert(`Token created successfully (despite timeout)! Mint address: ${mintKeypair.publicKey.toString()}`)
-                    if (onSuccess) onSuccess()
-                } else {
-                    throw new Error('Transaction failed or expired')
-                }
-            }
         } catch (error) {
-            console.error('Detailed error creating token:', error)
-            alert(`Failed to create token: ${error instanceof Error ? error.message : 'Unknown error'}`)
+            console.error('Error creating token:', error)
+            setTransactionStatus('Failed to create token')
+            alert(error instanceof Error ? error.message : 'Failed to create token')
         } finally {
             setIsCreating(false)
         }
+    }
+
+    const resetForm = () => {
+        setFormData({
+            name: '',
+            symbol: '',
+            description: '',
+            image: null,
+            supply: 1000000000,
+            initialPrice: '0.1',
+            slope: '0.1',
+            initialSupply: '1000000',
+            reserveRatio: '0.5'
+        })
+        setIsCreating(false)
     }
 
     return (
@@ -261,10 +246,63 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                     <small className="help-text">The total number of tokens to create (with 9 decimal places)</small>
                 </div>
 
+                <div className="form-group">
+                    <label htmlFor="initialPrice">Initial Price (SOL)</label>
+                    <input
+                        type="number"
+                        id="initialPrice"
+                        value={formData.initialPrice}
+                        onChange={(e) => setFormData(prev => ({ ...prev, initialPrice: e.target.value }))}
+                        step="0.000001"
+                        min="0"
+                        required
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="slope">Price Slope</label>
+                    <input
+                        type="number"
+                        id="slope"
+                        value={formData.slope}
+                        onChange={(e) => setFormData(prev => ({ ...prev, slope: e.target.value }))}
+                        step="0.01"
+                        min="0"
+                        required
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="initialSupply">Initial Supply</label>
+                    <input
+                        type="number"
+                        id="initialSupply"
+                        value={formData.initialSupply}
+                        onChange={(e) => setFormData(prev => ({ ...prev, initialSupply: e.target.value }))}
+                        min="1"
+                        required
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="reserveRatio">Reserve Ratio</label>
+                    <input
+                        type="number"
+                        id="reserveRatio"
+                        value={formData.reserveRatio}
+                        onChange={(e) => setFormData(prev => ({ ...prev, reserveRatio: e.target.value }))}
+                        step="0.01"
+                        min="0"
+                        max="1"
+                        required
+                    />
+                </div>
+
                 <button type="submit" disabled={!connected || isCreating}>
                     {isCreating ? 'Creating Token...' : 'Create Token'}
                 </button>
             </form>
+            {transactionStatus && <div className="transaction-status">{transactionStatus}</div>}
         </div>
     )
 } 

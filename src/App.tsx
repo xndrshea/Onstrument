@@ -10,9 +10,12 @@ function App() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-    const handleTokenCreated = () => {
-        setRefreshTrigger(prev => prev + 1)
-        setIsModalOpen(false)
+    const handleCreateClick = () => {
+        if (!connected) {
+            alert('Please connect your wallet to create a token')
+            return
+        }
+        setIsModalOpen(true)
     }
 
     return (
@@ -29,27 +32,36 @@ function App() {
             </nav>
 
             <main style={{ padding: '20px', color: 'white' }}>
-                {connected ? (
-                    <>
-                        <div className="wallet-info">
-                            <p>✅ Wallet Connected</p>
-                            <p>Address: {publicKey?.toString()}</p>
-                        </div>
-                        <TokenList
-                            onCreateClick={() => setIsModalOpen(true)}
-                            key={refreshTrigger}
-                        />
-                        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-                            <TokenCreationForm
-                                onSuccess={() => setIsModalOpen(false)}
-                                onTokenCreated={handleTokenCreated}
-                            />
-                        </Modal>
-                    </>
-                ) : (
-                    <div className="connect-prompt">
-                        <p>Please connect your wallet to continue.</p>
+                {connected && (
+                    <div className="wallet-info">
+                        <p>✅ Wallet Connected</p>
+                        <p>Address: {publicKey?.toString()}</p>
                     </div>
+                )}
+
+                <TokenList
+                    onCreateClick={handleCreateClick}
+                    key={refreshTrigger}
+                />
+
+                {isModalOpen && !connected ? (
+                    <Modal isOpen={true} onClose={() => setIsModalOpen(false)}>
+                        <div className="connect-wallet-prompt" style={{ padding: '20px', textAlign: 'center' }}>
+                            <h2>Connect Wallet Required</h2>
+                            <p>Please connect your wallet to create a token.</p>
+                            <WalletMultiButton />
+                        </div>
+                    </Modal>
+                ) : (
+                    <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+                        <TokenCreationForm
+                            onSuccess={() => setIsModalOpen(false)}
+                            onTokenCreated={() => {
+                                setRefreshTrigger(prev => prev + 1)
+                                setIsModalOpen(false)
+                            }}
+                        />
+                    </Modal>
                 )}
             </main>
         </div>

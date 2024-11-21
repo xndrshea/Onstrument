@@ -1,0 +1,1 @@
+// This file can be deleted as we don't need external price data

@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { tokenService, TokenData } from '../../services/tokenService'
 import { addTokenToWallet } from '../../utils/tokenCreation'
+import { TradingInterface } from '../Trading/TradingInterface'
 
 interface TokenListProps {
     onCreateClick: () => void
 }
 
 export function TokenList({ onCreateClick }: TokenListProps) {
-    const { publicKey } = useWallet()
+    const { publicKey, connected } = useWallet()
     const [tokens, setTokens] = useState<TokenData[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -20,39 +21,32 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     }
 
     useEffect(() => {
-        let mounted = true
-
-        const loadTokens = async () => {
-            if (!publicKey) return
-
+        const fetchTokens = async () => {
             try {
-                setIsLoading(true)
-                setError(null)
-                console.log('Fetching tokens for wallet:', publicKey.toString())
-                const fetchedTokens = await tokenService.getTokens(publicKey.toString())
+                setIsLoading(true);
+                const fetchedTokens = await tokenService.getAllTokens();
 
-                if (mounted) {
-                    console.log('Setting tokens:', fetchedTokens)
-                    setTokens(fetchedTokens)
-                }
-            } catch (err) {
-                console.error('Error loading tokens:', err)
-                if (mounted) {
-                    setError('Failed to load tokens')
-                }
+                // Sort tokens by creation time, newest first
+                const sortedTokens = fetchedTokens.sort((a, b) => {
+                    // If createdAt is available, use it
+                    if (a.createdAt && b.createdAt) {
+                        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                    }
+                    // Fallback to comparing mint addresses if no timestamp
+                    return b.mint_address.localeCompare(a.mint_address);
+                });
+
+                setTokens(sortedTokens);
+            } catch (error) {
+                console.error('Error fetching tokens:', error);
+                setError('Failed to load tokens');
             } finally {
-                if (mounted) {
-                    setIsLoading(false)
-                }
+                setIsLoading(false);
             }
-        }
+        };
 
-        loadTokens()
-
-        return () => {
-            mounted = false
-        }
-    }, [publicKey, refreshTrigger])
+        fetchTokens();
+    }, []);
 
     // Reduce refresh frequency to avoid rate limiting
     useEffect(() => {
@@ -76,7 +70,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     return (
         <div className="token-list">
             <div className="token-list-header">
-                <h2>Created Tokens</h2>
+                <h2>All Tokens</h2>
                 <div>
                     <button onClick={refreshTokens} className="refresh-button">
                         🔄 Refresh
@@ -89,10 +83,10 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             {tokens.length > 0 ? (
                 <div className="token-grid">
                     {tokens.map((token) => (
-                        <div key={token.mint} className="token-card">
-                            {token.imageUrl && (
+                        <div key={token.mint_address} className="token-card">
+                            {token.image_url && (
                                 <img
-                                    src={token.imageUrl}
+                                    src={token.image_url}
                                     alt={`${token.name} logo`}
                                     className="token-logo"
                                 />
@@ -100,14 +94,26 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                             <h3>{token.name}</h3>
                             <p className="token-symbol">{token.symbol}</p>
                             <p className="token-description">{token.description}</p>
-                            <p className="token-mint">Mint: {token.mint.slice(0, 4)}...{token.mint.slice(-4)}</p>
-                            <p className="token-date">{new Date(token.createdAt).toLocaleDateString()}</p>
-                            <p className="token-supply">Supply: {token.supply.toLocaleString()}</p>
+                            <p className="token-mint">
+                                Mint: {token.mint_address ?
+                                    `${token.mint_address.slice(0, 4)}...${token.mint_address.slice(-4)}` :
+                                    'N/A'}
+                            </p>
+                            <p className="token-date">
+                                {token.created_at ? new Date(token.created_at).toLocaleDateString() : 'N/A'}
+                            </p>
+                            <p className="token-supply">
+                                Supply: {token.total_supply ? token.total_supply.toLocaleString() : 'N/A'}
+                            </p>
+                            <div className="trading-section">
+                                <h4>Trade Token</h4>
+                                <TradingInterface token={token} />
+                            </div>
                             <div className="token-actions">
                                 <button
                                     onClick={async () => {
-                                        if ((window as any).solana) {
-                                            await addTokenToWallet(token.mint, (window as any).solana)
+                                        if ((window as any).solana && token.mint_address) {
+                                            await addTokenToWallet(token.mint_address, (window as any).solana)
                                         } else {
                                             alert('Phantom wallet not found')
                                         }
@@ -117,7 +123,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                                     Add to Wallet
                                 </button>
                                 <a
-                                    href={`https://explorer.solana.com/address/${token.mint}?cluster=devnet`}
+                                    href={`https://explorer.solana.com/address/${token.mint_address}?cluster=devnet`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="view-explorer-btn"

@@ -19,7 +19,7 @@ export const errorHandler = (
     err: Error | AppError,
     req: Request,
     res: Response,
-    next: NextFunction
+    _next: NextFunction
 ) => {
     if (err.message === 'Not allowed by CORS') {
         logger.error(`CORS Error - Origin: ${req.headers.origin}`)

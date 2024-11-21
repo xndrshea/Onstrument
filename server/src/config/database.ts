@@ -1,13 +1,21 @@
-import { Pool } from 'pg'
+import { Pool, PoolConfig } from 'pg'
 import { logger } from '../utils/logger'
+import dotenv from 'dotenv'
 
-const pool = new Pool({
-    user: 'alexandershea',
-    host: 'localhost',
-    database: 'token_launchpad',
-    password: '',
-    port: 5432,
-})
+// Load environment variables
+dotenv.config({ path: 'server/.env' })
+
+const config: PoolConfig = {
+    user: process.env.DB_USER || 'alexandershea',
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_NAME || 'token_launchpad',
+    password: process.env.DB_PASSWORD || '',
+    port: parseInt(process.env.DB_PORT || '5432'),
+}
+
+logger.info('Database config:', { ...config, password: '****' })
+
+const pool = new Pool(config)
 
 export async function initializeDatabase() {
     try {

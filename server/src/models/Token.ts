@@ -2,35 +2,50 @@ import { pool } from '../config/database'
 import { logger } from '../utils/logger'
 
 export interface Token {
-    mint: string
+    mint_address: string
     name: string
     symbol: string
     description?: string
-    creator: string
-    supply: number
-    imageUrl?: string
+    creator_id?: number
+    total_supply: number
+    image_url?: string
     network?: 'mainnet' | 'devnet'
-    metadata?: Record<string, string>
-    stats?: {
-        holders: number
-        transactions: number
+    metadata?: {
+        bondingCurve?: string
+        bondingCurveATA?: string
+        reserveAccount?: string
+        initialSupply?: number
+        currentSupply?: number
     }
-    createdAt?: Date
 }
 
 export const TokenModel = {
     async create(token: Token) {
         const client = await pool.connect()
         try {
+            await client.query('BEGIN')
+
             const result = await client.query(
                 `INSERT INTO token_platform.tokens 
-                (mint_address, name, symbol, description, total_supply, image_url, network)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (mint_address, name, symbol, description, total_supply, image_url, network, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING *`,
-                [token.mint, token.name, token.symbol, token.description, token.supply, token.imageUrl, token.network || 'devnet']
+                [
+                    token.mint_address,
+                    token.name,
+                    token.symbol,
+                    token.description,
+                    token.total_supply,
+                    token.image_url,
+                    token.network || 'devnet',
+                    JSON.stringify(token.metadata)
+                ]
             )
+
+            await client.query('COMMIT')
             return result.rows[0]
         } catch (error) {
+            await client.query('ROLLBACK')
             logger.error('Error creating token:', error)
             throw error
         } finally {
@@ -74,5 +89,10 @@ export const TokenModel = {
         } finally {
             client.release()
         }
+    },
+
+    async findAll() {
+        const result = await pool.query('SELECT * FROM token_platform.tokens')
+        return result.rows
     }
 } 

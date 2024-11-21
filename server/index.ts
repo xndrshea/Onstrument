@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import { TokenData } from '../src/services/tokenService'
 import dotenv from 'dotenv'
+import { TokenModel } from './src/models/Token'
 
 dotenv.config()
 
@@ -20,24 +21,27 @@ app.use(cors({
 }))
 app.use(express.json())
 
-// In-memory storage (replace with a database in production)
-let tokens: TokenData[] = []
-
 // Get all tokens
-app.get('/api/tokens', (req, res) => {
+app.get('/api/tokens', async (req, res) => {
     const { creator } = req.query
-    if (creator) {
-        res.json(tokens.filter(token => token.creator === creator))
-    } else {
+    try {
+        const tokens = creator ?
+            await TokenModel.findByCreator(creator as string) :
+            await TokenModel.findAll()
         res.json(tokens)
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch tokens' })
     }
 })
 
 // Create a new token
-app.post('/api/tokens', (req, res) => {
-    const newToken = req.body as TokenData
-    tokens.push(newToken)
-    res.status(201).json(newToken)
+app.post('/api/tokens', async (req, res) => {
+    try {
+        const newToken = await TokenModel.create(req.body)
+        res.status(201).json(newToken)
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create token' })
+    }
 })
 
 app.listen(port, () => {

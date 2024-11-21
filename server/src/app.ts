@@ -1,7 +1,6 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import { initializeDatabase } from './config/database'
 import { errorHandler } from './middleware/errorHandler'
 import { tokenRoutes } from './routes/tokenRoutes'
 import { logger } from './utils/logger'

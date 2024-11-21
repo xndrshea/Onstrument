@@ -1,14 +1,27 @@
 import { PublicKey } from '@solana/web3.js'
 
 export interface TokenData {
-    mint: string
-    name: string
-    symbol: string
-    description: string
-    createdAt: number
-    creator: string
-    supply: number
-    imageUrl?: string
+    mint_address: string;
+    name: string;
+    symbol: string;
+    description?: string;
+    creator?: string;
+    total_supply: number;
+    image_url?: string;
+    network?: 'mainnet' | 'devnet';
+    metadata: {
+        bondingCurve?: string;
+        bondingCurveATA: string;
+        reserveAccount: string;
+        initialSupply?: number;
+        currentSupply?: number;
+    };
+    created_at?: string;
+    bondingCurveConfig?: {
+        initialPrice: number;
+        slope: number;
+        reserveRatio: number;
+    };
 }
 
 interface BackendToken {
@@ -39,24 +52,29 @@ class TokenService {
 
     private convertBackendToken(backendToken: BackendToken): TokenData {
         return {
-            mint: backendToken.mint_address,
+            mint_address: backendToken.mint_address,
             name: backendToken.name,
             symbol: backendToken.symbol,
             description: backendToken.description,
             creator: backendToken.creator_id?.toString() || '',
-            supply: backendToken.total_supply,
-            imageUrl: backendToken.image_url,
-            createdAt: backendToken.created_at ? new Date(backendToken.created_at).getTime() : Date.now()
+            total_supply: backendToken.total_supply,
+            image_url: backendToken.image_url,
+            created_at: backendToken.created_at,
+            network: 'devnet',
+            metadata: {
+                bondingCurveATA: '',
+                reserveAccount: ''
+            }
         }
     }
 
     // Combined Methods (using both local storage and API)
-    async createToken(tokenData: Omit<TokenData, 'createdAt'>): Promise<TokenData> {
+    async createToken(tokenData: Omit<TokenData, 'created_at'>): Promise<TokenData> {
         console.log('TokenService: Creating token with data:', tokenData)
 
         const newToken = {
             ...tokenData,
-            createdAt: Date.now()
+            created_at: new Date().toISOString()
         }
 
         // Save to local storage
@@ -72,12 +90,12 @@ class TokenService {
         try {
             // Convert to backend format
             const backendToken = {
-                mint_address: tokenData.mint,
+                mint_address: tokenData.mint_address,
                 name: tokenData.name,
                 symbol: tokenData.symbol,
                 description: tokenData.description,
-                total_supply: tokenData.supply,
-                image_url: tokenData.imageUrl,
+                total_supply: tokenData.total_supply,
+                image_url: tokenData.image_url,
                 creator: tokenData.creator,
                 network: 'devnet'
             }
@@ -112,43 +130,25 @@ class TokenService {
         try {
             console.log('Fetching tokens for wallet address:', walletAddress)
             const url = `${this.API_URL}/tokens${walletAddress ? `?creator=${walletAddress}` : ''}`
-            console.log('Fetching from URL:', url)
 
             const response = await fetch(url)
-            const responseText = await response.text()
-            console.log('Raw response from backend:', responseText)
-
             if (!response.ok) {
-                throw new Error(`Backend error: ${responseText}`)
+                throw new Error(`Backend error: ${response.statusText}`)
             }
 
-            const backendTokens: BackendToken[] = JSON.parse(responseText)
-            console.log('Raw backend response:', backendTokens)
-
-            // If backend returns null or undefined, use empty array
+            const backendTokens: BackendToken[] = await response.json()
             const tokens = (backendTokens || []).map(token => this.convertBackendToken(token))
-            console.log('Converted tokens:', tokens)
 
-            // Merge with local storage tokens
+            // Merge with local storage and validate
             const localTokens = this.getFromStorage()
-            console.log('Local storage tokens:', localTokens)
+            const mergedTokens = [...tokens, ...localTokens]
 
-            const allTokens = [...tokens, ...localTokens]
-            // Remove duplicates based on mint address
-            const uniqueTokens = allTokens.filter((token, index, self) =>
-                index === self.findIndex((t) => t.mint === token.mint)
+            // Remove duplicates
+            return mergedTokens.filter((token, index, self) =>
+                index === self.findIndex((t) => t.mint_address === token.mint_address)
             )
-
-            console.log('Final merged tokens:', uniqueTokens)
-            return uniqueTokens
         } catch (error) {
-            console.error('Failed to fetch from backend:', error)
-            // Fallback to local storage
-            const tokens = this.getFromStorage()
-            console.log('Falling back to local storage tokens:', tokens)
-            return walletAddress
-                ? tokens.filter(token => token.creator === walletAddress)
-                : tokens
+            return this.getFromStorage() // Fallback to local storage
         }
     }
 
@@ -167,7 +167,10 @@ class TokenService {
             return false
         }
     }
+
+    clearLocalStorage() {
+        localStorage.removeItem(this.STORAGE_KEY)
+    }
 }
 
-export const tokenService = new TokenService()
-export type { TokenData } 
+export const tokenService = new TokenService() 
