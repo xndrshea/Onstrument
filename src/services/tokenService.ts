@@ -1,4 +1,5 @@
 import { PublicKey } from '@solana/web3.js'
+import axios, { AxiosInstance } from 'axios'
 
 export interface TokenData {
     mint_address: string;
@@ -9,8 +10,7 @@ export interface TokenData {
     total_supply: number;
     image_url?: string;
     network?: 'mainnet' | 'devnet';
-    metadata: {
-        bondingCurve?: string;
+    metadata?: {
         bondingCurveATA: string;
         reserveAccount: string;
         initialSupply?: number;
@@ -44,6 +44,17 @@ export class TokenService {
     private maxRetries = 3;
     private cache: { tokens: TokenData[]; timestamp: number } | null = null;
     private cacheTimeout = 5000; // 5 seconds
+    private api: AxiosInstance;
+
+    constructor() {
+        this.api = axios.create({
+            baseURL: this.API_URL,
+            timeout: 10000,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    }
 
     // Local Storage Methods
     private getFromStorage(): TokenData[] {
@@ -68,7 +79,8 @@ export class TokenService {
             network: 'devnet',
             metadata: {
                 bondingCurveATA: '',
-                reserveAccount: ''
+                initialSupply: 0,
+                currentSupply: 0
             }
         }
     }
@@ -232,12 +244,26 @@ export class TokenService {
     }
 
     async getAllTokens(): Promise<TokenData[]> {
-        return this.getTokens(); // Use the existing getTokens method
+        try {
+            const response = await this.api.get('/tokens');
+            return response.data.map((token: any) => ({
+                ...token,
+                metadata: typeof token.metadata === 'string' ?
+                    JSON.parse(token.metadata) : token.metadata,
+                bondingCurveConfig: token.bondingCurveConfig || {
+                    initialPrice: 0.1,
+                    slope: 0.1,
+                    reserveRatio: 0.5
+                }
+            }));
+        } catch (error) {
+            console.error('Error fetching tokens:', error);
+            return [];
+        }
     }
 
     async saveToken(token: TokenData): Promise<void> {
         try {
-            // Add required fields with defaults if missing
             const tokenToSave = {
                 mint_address: token.mint_address,
                 name: token.name || 'Unnamed Token',
@@ -249,9 +275,9 @@ export class TokenService {
                 network: 'devnet' as const,
                 metadata: {
                     bondingCurveATA: token.metadata?.bondingCurveATA || '',
-                    reserveAccount: token.metadata?.reserveAccount || '',
+                    initialSupply: token.metadata?.initialSupply || 0,
                     currentSupply: token.metadata?.currentSupply || 0,
-                    initialSupply: token.metadata?.initialSupply || 0
+                    reserveAccount: token.metadata?.reserveAccount || ''
                 },
                 created_at: token.created_at || new Date().toISOString(),
                 bondingCurveConfig: token.bondingCurveConfig || {

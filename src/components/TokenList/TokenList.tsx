@@ -58,18 +58,10 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                     return isValid;
                 }).map(token => ({
                     ...token,
-                    // Ensure metadata is parsed if it's a string
                     metadata: typeof token.metadata === 'string' ?
-                        JSON.parse(token.metadata) : token.metadata || {},
-                    // Ensure bondingCurveConfig is parsed if it's a string
-                    bondingCurveConfig: typeof token.bondingCurveConfig === 'string' ?
-                        JSON.parse(token.bondingCurveConfig) : token.bondingCurveConfig || {},
-                    // Ensure other required fields have defaults
-                    name: token.name || 'Unnamed Token',
-                    symbol: token.symbol || 'UNKNOWN',
-                    description: token.description || '',
-                    total_supply: token.total_supply || 0,
-                    created_at: token.created_at || new Date().toISOString()
+                        JSON.parse(token.metadata) : token.metadata,
+                    bondingCurveConfig: typeof token.bonding_curve_config === 'string' ?
+                        JSON.parse(token.bonding_curve_config) : token.bonding_curve_config
                 }));
 
                 console.log('Processed tokens:', validTokens);

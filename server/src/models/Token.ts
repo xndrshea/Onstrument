@@ -15,8 +15,6 @@ export interface Token {
     metadata?: {
         bondingCurveATA?: string
         reserveAccount?: string
-        initialSupply?: number
-        currentSupply?: number
     }
     bondingCurveConfig?: {
         initialPrice: number
@@ -32,7 +30,6 @@ export const TokenModel = {
         try {
             await client.query('BEGIN')
 
-            // First check if token already exists
             const existingToken = await client.query(
                 'SELECT * FROM token_platform.tokens WHERE mint_address = $1',
                 [token.mint_address]
@@ -44,7 +41,6 @@ export const TokenModel = {
                 return existingToken.rows[0]
             }
 
-            // Create or get creator_id
             let creator_id = null
             if (token.creator) {
                 const userResult = await client.query(
@@ -60,8 +56,8 @@ export const TokenModel = {
             const result = await client.query(
                 `INSERT INTO token_platform.tokens 
                 (mint_address, name, symbol, description, creator_id, total_supply, 
-                 image_url, network, metadata, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+                 image_url, network, metadata, bonding_curve_config)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 RETURNING *`,
                 [
                     token.mint_address,
@@ -74,14 +70,12 @@ export const TokenModel = {
                     token.network || 'devnet',
                     JSON.stringify({
                         bondingCurveATA: token.metadata?.bondingCurveATA || '',
-                        reserveAccount: token.metadata?.reserveAccount || '',
-                        initialSupply: token.metadata?.initialSupply || 0,
-                        currentSupply: token.metadata?.currentSupply || 0,
-                        bondingCurveConfig: token.bondingCurveConfig || {
-                            initialPrice: 0.1,
-                            slope: 0.1,
-                            reserveRatio: 0.5
-                        }
+                        reserveAccount: token.metadata?.reserveAccount || ''
+                    }),
+                    JSON.stringify(token.bondingCurveConfig || {
+                        initialPrice: 0.1,
+                        slope: 0.1,
+                        reserveRatio: 0.5
                     })
                 ]
             )
@@ -106,7 +100,9 @@ export const TokenModel = {
             return result.rows.map(token => ({
                 ...token,
                 metadata: typeof token.metadata === 'string' ?
-                    JSON.parse(token.metadata) : token.metadata
+                    JSON.parse(token.metadata) : token.metadata,
+                bondingCurveConfig: typeof token.bonding_curve_config === 'string' ?
+                    JSON.parse(token.bonding_curve_config) : token.bonding_curve_config
             }))
         } catch (error) {
             logger.error('Error fetching all tokens:', error)
@@ -145,7 +141,6 @@ export const TokenModel = {
                 return null
             }
 
-            // Parse metadata JSON if it's a string
             const token = result.rows[0]
             return {
                 ...token,

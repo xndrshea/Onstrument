@@ -1,59 +1,38 @@
-import { PublicKey } from '@solana/web3.js'
-import BN from 'bn.js'
-
-export interface BondingCurveConfig {
-    initialPrice: number;
-    slope: number;
-    initialSupply: number;
-    maxSupply: number;
-    reserveRatio: number;
-}
-
-export const DEFAULT_BONDING_CURVE_CONFIG: BondingCurveConfig = {
-    initialPrice: 0.001, // 0.001 SOL
-    slope: 0.00001,
-    initialSupply: 1000000,
-    maxSupply: 1000000000,
-    reserveRatio: 0.5
-}
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 export class BondingCurve {
-    private config: BondingCurveConfig;
+    private static instance: BondingCurve | null = null;
+    private static MINIMUM_RESERVE_SOL = 1; // 1 SOL minimum phantom reserve
 
-    constructor(config: Partial<BondingCurveConfig>) {
-        this.config = {
-            ...DEFAULT_BONDING_CURVE_CONFIG,
-            ...config
-        };
-    }
+    private constructor() { }
 
-    getCurrentPrice(currentSupply: number): number {
-        return this.config.initialPrice + (this.config.slope * currentSupply);
-    }
-
-    getCost(amount: number): number {
-        const currentSupply = this.config.initialSupply;
-        const finalSupply = currentSupply + amount;
-
-        // Using the integral of the price function (linear)
-        const area = (this.config.initialPrice * amount) +
-            (this.config.slope * amount * (2 * currentSupply + amount)) / 2;
-
-        return area;
-    }
-
-    getReturn(amount: number): number {
-        const currentSupply = this.config.initialSupply;
-        if (amount > currentSupply) {
-            throw new Error('Cannot sell more tokens than current supply');
+    static getInstance(): BondingCurve {
+        if (!BondingCurve.instance) {
+            BondingCurve.instance = new BondingCurve();
         }
-
-        const finalSupply = currentSupply - amount;
-
-        // Using the integral of the price function (linear)
-        const area = (this.config.initialPrice * amount) +
-            (this.config.slope * amount * (2 * currentSupply - amount)) / 2;
-
-        return area;
+        return BondingCurve.instance;
     }
-} 
+
+    getEffectiveReserve(actualReserve: number): number {
+        // Use 1 SOL minimum for price calculations
+        return Math.max(actualReserve, BondingCurve.MINIMUM_RESERVE_SOL);
+    }
+
+    getPrice(currentSupply: number, actualReserve: number): number {
+        if (currentSupply <= 0) return 0;
+        const effectiveReserve = this.getEffectiveReserve(actualReserve);
+        return effectiveReserve / currentSupply;
+    }
+
+    getCost(amount: number, currentSupply: number, actualReserve: number): number {
+        if (amount <= 0) return 0;
+        const effectiveReserve = this.getEffectiveReserve(actualReserve);
+        return effectiveReserve * (amount / currentSupply);
+    }
+
+    getReturn(amount: number, currentSupply: number, actualReserve: number): number {
+        if (amount <= 0 || currentSupply < amount) return 0;
+        // For selling, we use actual reserve, not phantom
+        return actualReserve * (amount / currentSupply);
+    }
+}

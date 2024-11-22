@@ -1,192 +1,64 @@
-# Solana Token Launchpad Platform
+# Solana Token Creator with Bonding Curve
 
-## Project Overview
-A decentralized platform for creating and trading tokens on the Solana blockchain, featuring automated market making through bonding curves and eventual Raydium integration.
-
-## Key Features
-
-### Token Creation & Trading Flow
-1. **Token Creation**:
-   - Creator sets token parameters (name, symbol, supply, etc.)
-   - Configures bonding curve (initial price, slope, reserve ratio)
-   - Initial supply is minted to bonding curve's Associated Token Account (ATA)
-   - Mint authority transferred to bonding curve account
-
-2. **Trading Through Bonding Curve**:
-   - Users can buy tokens:
-     - Send SOL to reserve account
-     - Receive tokens from bonding curve ATA
-   - Users can sell tokens:
-     - Send tokens back to bonding curve ATA
-     - Receive SOL from reserve account
-   - Price automatically adjusts based on supply/demand
-
-3. **Raydium Migration**:
-   - When market cap threshold reached
-   - Remaining tokens and SOL transferred to Raydium pool
-   - Liquidity provided automatically
-   - Trading continues on Raydium DEX
-
-### Bonding Curve Implementation
-- Automated market maker functionality
-- Dynamic pricing based on supply
-- Reserve pool management
-- Liquidity guarantees through mathematical curve
-- Configurable parameters:
-  - Initial price
-  - Slope (price change rate)
-  - Reserve ratio (liquidity backing)
-  - Initial & maximum supply
+A web application for creating and managing tokens on the Solana blockchain with an integrated bonding curve mechanism.
 
 ## Architecture
 
-### Frontend (React + TypeScript)
-- `src/App.tsx`: Main application component handling routing and wallet connection
-- `src/index.tsx`: Entry point, sets up React with Solana wallet adapters
-- `src/polyfills.ts`: Browser polyfills for Solana web3 compatibility
+### Token Creation
+- Creates SPL tokens with customizable parameters
+- Implements an automated market maker using a bonding curve
+- Single account (bonding curve) manages both token and SOL reserves
+- Configurable parameters include:
+  - Initial supply
+  - Initial price
+  - Price slope
+  - Reserve ratio
 
-#### Components
-1. **Token Creation**
-   - `TokenCreationForm.tsx`: Handles token creation with customizable parameters
-   - Features: name, symbol, supply, description, logo upload
+### Bonding Curve Mechanism
+The bonding curve acts as an automated market maker (AMM) that:
+- Holds the token supply in its Associated Token Account (ATA)
+- Manages SOL reserves in the same account
+- Automatically calculates token prices based on:
+  - Reserve ratio
+  - Slope parameter
 
-2. **Token Trading**
-   - `TradingInterface.tsx`: Manages token buying/selling through bonding curve
-   - Features:
-     - Real-time price calculations
-     - Balance checking
-     - Transaction handling
-     - Network validation (Devnet)
+### Key Components
+1. **Token Mint**: The SPL token mint account
+2. **Bonding Curve Account**: 
+   - Holds token supply (via ATA)
+   - Manages SOL reserves
+   - Controls mint authority
+   - Executes buy/sell operations
 
-3. **Token Display**
-   - `TokenList.tsx`: Displays all created tokens
-   - Features:
-     - Token cards with details
-     - Add to wallet functionality
-     - Solana Explorer links
+### Transaction Flow
+1. **Token Purchase**:
+   - User sends SOL to bonding curve account
+   - Bonding curve transfers tokens from its ATA to user's ATA
+   - Price calculated based on bonding curve formula
 
-4. **Charts**
-   - `PriceChart.tsx`: Visualizes token price curves
-   - Uses Chart.js for rendering
-   - Shows price/supply relationship
+2. **Token Sale**:
+   - User sends tokens to bonding curve's ATA
+   - Bonding curve transfers SOL to user
+   - Return amount calculated based on bonding curve formula
 
-5. **UI Components**
-   - `Modal.tsx`: Reusable modal component
-   - Styling: CSS modules in `styles/main.css`
+## Technical Details
 
-### Backend (Node.js + Express)
-- `server/src/index.ts`: Entry point
-- `server/src/app.ts`: Express application setup
+### Smart Contract Interactions
+- Uses Solana Web3.js for blockchain interactions
+- Implements SPL Token program for token operations
+- Manages Associated Token Accounts (ATAs) for token holdings
 
-#### Components
-1. **API Routes**
-   - `tokenRoutes.ts`: Token-related endpoints
-   - Endpoints:
-     - POST /tokens: Create token
-     - GET /tokens: List tokens
-     - GET /tokens/:mint: Get specific token
-     - PATCH /tokens/:mint/stats: Update stats
+### Configuration Parameters
+- `initialSupply`: Initial token supply minted to bonding curve
+- `initialPrice`: Starting price per token in SOL
+- `slope`: Rate of price increase
+- `reserveRatio`: Ratio between token supply and SOL reserves
 
-2. **Controllers**
-   - `tokenController.ts`: Business logic for token operations
+## Development
 
-3. **Database**
-   - PostgreSQL for token storage
-   - `dbMigration.ts`: Database schema management
-   - `database.ts`: Connection configuration
-
-4. **Middleware**
-   - `errorHandler.ts`: Global error handling
-   - `validation.ts`: Request validation
-
-### Services
-1. **Bonding Curve**
-   - Implements automated market maker functionality
-   - Calculates token prices based on supply
-   - Manages liquidity pool
-
-2. **Token Service**
-   - Handles token creation and management
-   - Interfaces with Solana blockchain
-   - Manages token metadata
-
-### Security Features
-- Rate limiting
-- CORS protection
-- Input validation
-- Transaction verification
-- Network validation
-
-### Development Tools
-- Vite for frontend bundling
-- TypeScript for type safety
-- Nodemon for development
-- Environment configuration
-- Logging system
-
-## Technical Requirements
-- Node.js 16+
-- PostgreSQL
+### Prerequisites
+- Node.js
 - Solana CLI tools
-- Phantom Wallet (or compatible)
+- Phantom Wallet or other Solana wallet
 
-## Setup Instructions
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Configure environment:
-   - Create `.env` file
-   - Set required variables
-
-3. Start development:
-   ```bash
-   # Frontend
-   npm run dev
-
-   # Backend
-   npm run server:dev
-   ```
-
-4. Database setup:
-   ```bash
-   npm run db:migrate
-   ```
-
-## Network Configuration
-- Default: Solana Devnet
-- Configurable through environment variables
-- Supports wallet network validation
-
-## Deployment
-- Frontend: Static hosting (Vercel/Netlify)
-- Backend: Node.js hosting (Render)
-- Database: PostgreSQL instance
-
-## Contributing
-1. Fork repository
-2. Create feature branch
-3. Submit pull request
-
-## License
-[Your License]
-
-## Technical Implementation
-
-### Token Creation Flow
-1. **Creator Actions**:
-   - Submits token metadata
-   - Configures bonding curve parameters
-   - Generates and stores keypairs
-
-2. **First Purchase**:
-   - Checks if token needs initialization
-   - Combines initialization and purchase instructions
-   - Updates token metadata with initialization status
-   - Sets up bonding curve accounts
-
-3. **Subsequent Trades**:
-   - Normal buy/sell operations through bonding curve
-   - Price calculations based on current supply
-   - Reserve pool management
+### Setup
