@@ -12,16 +12,10 @@ export interface TokenData {
     network?: 'mainnet' | 'devnet';
     metadata?: {
         bondingCurveATA: string;
-        reserveAccount: string;
-        initialSupply?: number;
+        initialSupply: number;
         currentSupply?: number;
     };
     created_at?: string;
-    bondingCurveConfig?: {
-        initialPrice: number;
-        slope: number;
-        reserveRatio: number;
-    };
 }
 
 interface BackendToken {
@@ -275,16 +269,10 @@ export class TokenService {
                 network: 'devnet' as const,
                 metadata: {
                     bondingCurveATA: token.metadata?.bondingCurveATA || '',
-                    initialSupply: token.metadata?.initialSupply || 0,
-                    currentSupply: token.metadata?.currentSupply || 0,
-                    reserveAccount: token.metadata?.reserveAccount || ''
+                    initialSupply: token.total_supply || 0,
+                    currentSupply: token.total_supply || 0
                 },
-                created_at: token.created_at || new Date().toISOString(),
-                bondingCurveConfig: token.bondingCurveConfig || {
-                    initialPrice: 0.1,
-                    slope: 0.1,
-                    reserveRatio: 0.5
-                }
+                created_at: token.created_at || new Date().toISOString()
             };
 
             // Save to in-memory array
@@ -298,11 +286,8 @@ export class TokenService {
             // Save to backend
             const backendToken = {
                 ...tokenToSave,
-                metadata: JSON.stringify(tokenToSave.metadata),
-                bondingCurveConfig: JSON.stringify(tokenToSave.bondingCurveConfig)
+                metadata: JSON.stringify(tokenToSave.metadata)
             };
-
-            console.log('Saving token to backend:', backendToken);
 
             const response = await fetch(`${this.API_URL}/tokens`, {
                 method: 'POST',
@@ -314,7 +299,6 @@ export class TokenService {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error('Backend save error:', errorData);
                 throw new Error(`Backend error: ${JSON.stringify(errorData)}`);
             }
         } catch (error) {

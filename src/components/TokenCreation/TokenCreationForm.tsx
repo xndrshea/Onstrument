@@ -82,7 +82,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 total_supply: formData.supply,
                 metadata: {
                     bondingCurveATA: result.bondingCurveATA,
-                    reserveAccount: result.metadata.reserveAccount
+                    initialSupply: formData.supply,
                 }
             })
 

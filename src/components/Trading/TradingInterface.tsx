@@ -143,12 +143,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                     throw e;
                 }
             }
-
-            // Get reserve balance if available
-            if (token.metadata?.reserveAccount) {
-                const reserveBalance = await connection.getBalance(new PublicKey(token.metadata.reserveAccount));
-                setReserveBalance(reserveBalance);
-            }
         } catch (error) {
             console.error('Error updating balances:', error);
         }
@@ -159,7 +153,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         updateBalances();
         const interval = setInterval(updateBalances, 5000);
         return () => clearInterval(interval);
-    }, [publicKey, connection, token.mint_address, token.metadata?.bondingCurveATA, token.metadata?.reserveAccount]);
+    }, [publicKey, connection, token.mint_address, token.metadata?.bondingCurveATA]);
 
     // Update button disabled logic
     const isButtonDisabled = useMemo(() => {
@@ -195,18 +189,29 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             const bondingCurveKeypair = BONDING_CURVE_KEYPAIR;
             const mintPubkey = new PublicKey(token.mint_address);
             const bondingCurveATA = new PublicKey(token.metadata.bondingCurveATA);
+            const userATA = await getAssociatedTokenAddress(mintPubkey, publicKey);
 
-            // Get or create user's token account
-            const userATA = await createUserTokenAccount(
-                connection,
-                publicKey,
-                mintPubkey
-            );
+            // Check if user's ATA exists
+            try {
+                await getAccount(connection, userATA);
+            } catch (error) {
+                // If ATA doesn't exist, add creation instruction to the same transaction
+                transaction.add(
+                    createAssociatedTokenAccountInstruction(
+                        publicKey,
+                        userATA,
+                        publicKey,
+                        mintPubkey,
+                        TOKEN_PROGRAM_ID,
+                        ASSOCIATED_TOKEN_PROGRAM_ID
+                    )
+                );
+            }
 
             // Calculate the cost in lamports
             const costInLamports = Math.floor(totalCost * LAMPORTS_PER_SOL);
 
-            // Transfer SOL from user to bonding curve
+            // Add transfer instructions
             transaction.add(
                 SystemProgram.transfer({
                     fromPubkey: publicKey,
@@ -215,7 +220,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                 })
             );
 
-            // Transfer tokens from bonding curve to user
             transaction.add(
                 createTransferInstruction(
                     bondingCurveATA,
@@ -241,9 +245,11 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
 
             setTransactionStatus('Purchase successful!');
             await updateBalances();
+            setAmount('');
         } catch (error) {
             console.error('Purchase error:', error);
             setTransactionStatus('Transaction failed');
+            alert(error instanceof Error ? error.message : 'Transaction failed');
         } finally {
             setIsLoading(false);
         }
@@ -319,41 +325,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         }
     };
 
-    const createUserTokenAccount = async (
-        connection: import('@solana/web3.js').Connection,
-        publicKey: PublicKey,
-        mintAddress: PublicKey
-    ): Promise<PublicKey> => {
-        try {
-            const userATA = await getAssociatedTokenAddress(mintAddress, publicKey)
-
-            // Check if account already exists
-            try {
-                await getAccount(connection, userATA)
-                return userATA
-            } catch (error) {
-                // Account doesn't exist, create it
-                const transaction = new Transaction().add(
-                    createAssociatedTokenAccountInstruction(
-                        publicKey,
-                        userATA,
-                        publicKey,
-                        mintAddress,
-                        TOKEN_PROGRAM_ID,
-                        ASSOCIATED_TOKEN_PROGRAM_ID
-                    )
-                )
-
-                const signature = await sendTransaction(transaction, connection)
-                await connection.confirmTransaction(signature, 'confirmed')
-                return userATA
-            }
-        } catch (error) {
-            console.error('Error creating token account:', error)
-            throw new Error('Failed to create token account')
-        }
-    }
-
     // Add this near the top of the component
     useEffect(() => {
         const checkNetwork = async () => {
@@ -371,10 +342,8 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         console.log('Token data:', {
             mint_address: token.mint_address,
             metadata: token.metadata,
-            bondingCurveConfig: token.bondingCurveConfig,
             currentSupply: token.metadata?.currentSupply,
             bondingCurveATA: token.metadata?.bondingCurveATA,
-            reserveAccount: token.metadata?.reserveAccount
         });
     }, [token]);
 
@@ -386,7 +355,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                 network: connection.rpcEndpoint,
                 tokenMint: token.mint_address,
                 bondingCurveATA: token.metadata?.bondingCurveATA,
-                reserveAccount: token.metadata?.reserveAccount,
                 currentPrice,
                 availableSupply,
                 userBalance,
@@ -424,8 +392,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
     useEffect(() => {
         console.log("Token metadata in TradingInterface:", {
             metadata: token.metadata,
-            bondingCurveATA: token.metadata?.bondingCurveATA,
-            reserveAccount: token.metadata?.reserveAccount
+            bondingCurveATA: token.metadata?.bondingCurveATA
         });
     }, [token]);
 
@@ -455,7 +422,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                 borderRadius: '4px',
                 fontSize: '0.9rem'
             }}>
-                ⚠️ This token is on Devnet network. Make sure your wallet is connected to Devnet.
+                ⚠ This token is on Devnet network. Make sure your wallet is connected to Devnet.
             </div>
 
             <div className="price-info">
@@ -491,7 +458,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                         min="0"
                         max={isSelling ?
                             Number(userBalance) / Math.pow(10, 9) :
-                            availableSupply}
+                            Number(availableSupply) / Math.pow(10, 9)}
                         step="1"
                     />
                 </div>
