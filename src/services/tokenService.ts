@@ -1,311 +1,134 @@
 import { PublicKey } from '@solana/web3.js'
 import axios, { AxiosInstance } from 'axios'
 
+export interface TokenBondingCurveConfig {
+    curveType: 'linear' | 'exponential' | 'logarithmic';
+    basePrice: number;
+    slope?: number;
+    exponent?: number;
+    logBase?: number;
+}
+
+export interface TokenMetadata {
+    currentSupply: number;
+    solReserves: number;
+    bondingCurveATA: string;
+    [key: string]: any; // Allow for additional metadata fields
+}
+
 export interface TokenData {
+    id?: number;
+    mint_address: string;
+    name: string;
+    symbol: string;
+    description?: string;
+    metadata: TokenMetadata;
+    bonding_curve_config: TokenBondingCurveConfig;
+    created_at?: string;
+}
+
+export interface TokenCreationData {
     mint_address: string;
     name: string;
     symbol: string;
     description?: string;
     creator?: string;
     total_supply: number;
-    image_url?: string;
-    network?: 'mainnet' | 'devnet';
-    metadata?: {
+    network?: string;
+    metadata: {
         bondingCurveATA: string;
-        initialSupply: number;
-        currentSupply?: number;
     };
-    created_at?: string;
-}
-
-interface BackendToken {
-    id: number
-    mint_address: string
-    creator_id: number | null
-    name: string
-    symbol: string
-    description: string
-    total_supply: number
-    image_url?: string
-    created_at?: string
+    bondingCurveConfig: {
+        curveType: string;
+        basePrice: number;
+        slope?: number;
+        exponent?: number;
+        logBase?: number;
+    };
 }
 
 export class TokenService {
-    private readonly STORAGE_KEY = 'created_tokens'
-    private readonly API_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001/api'
-    private tokens: TokenData[] = [];
-    private retryDelay = 1000; // 1 second
-    private maxRetries = 3;
-    private cache: { tokens: TokenData[]; timestamp: number } | null = null;
-    private cacheTimeout = 5000; // 5 seconds
     private api: AxiosInstance;
 
-    constructor() {
+    constructor(baseURL: string) {
         this.api = axios.create({
-            baseURL: this.API_URL,
-            timeout: 10000,
+            baseURL,
             headers: {
                 'Content-Type': 'application/json'
             }
         });
     }
 
-    // Local Storage Methods
-    private getFromStorage(): TokenData[] {
-        const stored = localStorage.getItem(this.STORAGE_KEY)
-        return stored ? JSON.parse(stored) : []
-    }
-
-    private saveToStorage(tokens: TokenData[]) {
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tokens))
-    }
-
-    private convertBackendToken(backendToken: BackendToken): TokenData {
-        return {
-            mint_address: backendToken.mint_address,
-            name: backendToken.name,
-            symbol: backendToken.symbol,
-            description: backendToken.description,
-            creator: backendToken.creator_id?.toString() || '',
-            total_supply: backendToken.total_supply,
-            image_url: backendToken.image_url,
-            created_at: backendToken.created_at,
-            network: 'devnet',
-            metadata: {
-                bondingCurveATA: '',
-                initialSupply: 0,
-                currentSupply: 0
-            }
-        }
-    }
-
-    // Combined Methods (using both local storage and API)
-    async createToken(tokenData: Omit<TokenData, 'created_at'>): Promise<TokenData> {
-        console.log('TokenService: Creating token with data:', tokenData)
-
-        const newToken = {
-            ...tokenData,
-            created_at: new Date().toISOString()
-        }
-
-        // Save to local storage
+    async create(token: TokenCreationData) {
         try {
-            const tokens = this.getFromStorage()
-            tokens.push(newToken)
-            this.saveToStorage(tokens)
-            console.log('TokenService: Saved to local storage successfully')
-        } catch (error) {
-            console.error('TokenService: Failed to save to local storage:', error)
-        }
-
-        try {
-            // Convert to backend format
-            const backendToken = {
-                mint_address: tokenData.mint_address,
-                name: tokenData.name,
-                symbol: tokenData.symbol,
-                description: tokenData.description,
-                total_supply: tokenData.total_supply,
-                image_url: tokenData.image_url,
-                creator: tokenData.creator,
-                network: 'devnet'
+            if (!token.mint_address) {
+                throw new Error('Missing mint address');
+            }
+            if (!token.name || !token.symbol) {
+                throw new Error('Missing required token information');
+            }
+            if (!token.metadata?.bondingCurveATA) {
+                throw new Error('Missing bonding curve ATA');
+            }
+            if (!token.bondingCurveConfig) {
+                throw new Error('Missing bonding curve configuration');
             }
 
-            console.log('TokenService: Sending to backend:', backendToken)
-            const response = await fetch(`${this.API_URL}/tokens`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(backendToken)
-            })
-
-            const responseText = await response.text()
-            console.log('Raw response from backend:', responseText)
-
-            if (!response.ok) {
-                throw new Error(`Backend error: ${responseText}`)
-            }
-
-            const savedBackendToken: BackendToken = JSON.parse(responseText)
-            const savedToken = this.convertBackendToken(savedBackendToken)
-            console.log('TokenService: Saved to backend successfully:', savedToken)
-            return savedToken
-        } catch (error) {
-            console.error('TokenService: Backend save failed:', error)
-            return newToken
-        }
-    }
-
-    private async fetchWithRetry(url: string, options: RequestInit = {}, retries = 0): Promise<any> {
-        try {
-            const response = await fetch(url, {
-                ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers,
-                },
-                credentials: 'include',
-            });
-
-            if (response.status === 429 && retries < this.maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, this.retryDelay * (retries + 1)));
-                return this.fetchWithRetry(url, options, retries + 1);
-            }
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            if (retries < this.maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, this.retryDelay * (retries + 1)));
-                return this.fetchWithRetry(url, options, retries + 1);
-            }
-            throw error;
-        }
-    }
-
-    async getTokens(walletAddress?: string): Promise<TokenData[]> {
-        // Check cache first
-        if (this.cache && Date.now() - this.cache.timestamp < this.cacheTimeout) {
-            return this.cache.tokens;
-        }
-
-        try {
-            console.log('Fetching tokens for wallet address:', walletAddress);
-            const url = `${this.API_URL}/tokens${walletAddress ? `?creator=${walletAddress}` : ''}`;
-
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Backend error: ${response.statusText}`);
-            }
-
-            const backendTokens: BackendToken[] = await response.json();
-            console.log('Backend tokens:', backendTokens); // Debug log
-
-            const tokens = (backendTokens || []).map(token => this.convertBackendToken(token));
-
-            // Merge with local storage and in-memory tokens
-            const localTokens = this.getFromStorage();
-            const allTokens = [...tokens, ...localTokens, ...this.tokens];
-
-            // Remove duplicates based on mint_address
-            const uniqueTokens = allTokens.filter((token, index, self) =>
-                index === self.findIndex((t) => t.mint_address === token.mint_address)
-            );
-
-            console.log('Final merged tokens:', uniqueTokens); // Debug log
-
-            // Update cache
-            this.cache = {
-                tokens: uniqueTokens,
-                timestamp: Date.now()
+            const payload = {
+                mint_address: token.mint_address,
+                name: token.name,
+                symbol: token.symbol,
+                description: token.description,
+                creator: token.creator,
+                total_supply: token.total_supply,
+                network: token.network,
+                metadata: token.metadata,
+                bondingCurveConfig: token.bondingCurveConfig
             };
 
-            return uniqueTokens;
+            console.log('Creating token with payload:', JSON.stringify(payload, null, 2));
+
+            const response = await this.api.post('/api/tokens', payload);
+            return response.data;
         } catch (error) {
-            console.error('Error fetching tokens:', error);
-            // Return cached data if available, even if expired
-            if (this.cache) {
-                return this.cache.tokens;
+            if (axios.isAxiosError(error)) {
+                console.error('Token creation failed:', {
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    message: error.message
+                });
+                throw new Error(error.response?.data?.message || error.message);
             }
-            // Fallback to local storage and in-memory tokens if API fails
-            const localTokens = this.getFromStorage();
-            return [...localTokens, ...this.tokens];
+            console.error('Error creating token:', error);
+            throw error;
         }
-    }
-
-    async verifyToken(mintAddress: string): Promise<boolean> {
-        try {
-            const response = await fetch(`${this.API_URL}/tokens/verify`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ mintAddress })
-            })
-            return response.ok
-        } catch (error) {
-            console.error('Error verifying token:', error)
-            return false
-        }
-    }
-
-    clearLocalStorage() {
-        localStorage.removeItem(this.STORAGE_KEY)
     }
 
     async getAllTokens(): Promise<TokenData[]> {
         try {
-            const response = await this.api.get('/tokens');
-            return response.data.map((token: any) => ({
-                ...token,
-                metadata: typeof token.metadata === 'string' ?
-                    JSON.parse(token.metadata) : token.metadata,
-                bondingCurveConfig: token.bondingCurveConfig || {
-                    initialPrice: 0.1,
-                    slope: 0.1,
-                    reserveRatio: 0.5
-                }
-            }));
+            const response = await this.api.get('/api/tokens');
+            return response.data;
         } catch (error) {
             console.error('Error fetching tokens:', error);
-            return [];
+            throw error;
         }
     }
 
-    async saveToken(token: TokenData): Promise<void> {
+    async updateTokenReserves(mintAddress: string, solReserves: number): Promise<{ success: boolean; localOnly?: boolean }> {
         try {
-            const tokenToSave = {
-                mint_address: token.mint_address,
-                name: token.name || 'Unnamed Token',
-                symbol: token.symbol || 'UNKNOWN',
-                description: token.description || '',
-                total_supply: token.total_supply || 0,
-                image_url: token.image_url || '',
-                creator: token.creator || '',
-                network: 'devnet' as const,
-                metadata: {
-                    bondingCurveATA: token.metadata?.bondingCurveATA || '',
-                    initialSupply: token.total_supply || 0,
-                    currentSupply: token.total_supply || 0
-                },
-                created_at: token.created_at || new Date().toISOString()
-            };
-
-            // Save to in-memory array
-            this.tokens.unshift(tokenToSave);
-
-            // Save to local storage
-            const localTokens = this.getFromStorage();
-            localTokens.unshift(tokenToSave);
-            this.saveToStorage(localTokens);
-
-            // Save to backend
-            const backendToken = {
-                ...tokenToSave,
-                metadata: JSON.stringify(tokenToSave.metadata)
-            };
-
-            const response = await fetch(`${this.API_URL}/tokens`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(backendToken)
-            });
+            const response = await this.api.put(`/api/tokens/${mintAddress}/reserves`, { solReserves });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`Backend error: ${JSON.stringify(errorData)}`);
+                console.warn('Failed to update token reserves on server');
+                return { success: true, localOnly: true };
             }
+
+            return { success: true };
         } catch (error) {
-            console.error('Error saving token:', error);
-            throw error;
+            console.warn('Error updating token reserves:', error);
+            return { success: true, localOnly: true };
         }
     }
 }
 
-export const tokenService = new TokenService() 
+export const tokenService = new TokenService(import.meta.env.VITE_API_URL || 'http://localhost:3001');

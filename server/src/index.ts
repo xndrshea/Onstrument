@@ -1,20 +1,16 @@
-import { app } from './app'
-import { initializeDatabase } from './config/database'
+import express from 'express'
+import cors from 'cors'
 import { logger } from './utils/logger'
+import { pool } from './config/database'
+import { app } from './app'  // Import the configured app
 
 const port = process.env.PORT || 3001
 
-async function startServer() {
-    try {
-        await initializeDatabase()
+// Add a simple database connection check without initialization
+pool.on('connect', () => {
+    logger.info('Connected to existing database')
+})
 
-        app.listen(port, () => {
-            logger.info(`Server running at http://localhost:${port}`)
-        })
-    } catch (error) {
-        logger.error('Failed to start server:', error)
-        process.exit(1)
-    }
-}
-
-startServer() 
+app.listen(port, () => {
+    logger.info(`Server running on port ${port}`)
+}) 

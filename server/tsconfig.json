@@ -1,39 +1,16 @@
 {
     "compilerOptions": {
-        "target": "es2017",
+        "target": "es6",
         "module": "commonjs",
-        "lib": [
-            "es2017",
-            "esnext.asynciterable"
-        ],
-        "skipLibCheck": true,
-        "sourceMap": true,
-        "outDir": "../dist/server",
-        "moduleResolution": "node",
-        "removeComments": true,
-        "noImplicitAny": true,
-        "strictNullChecks": true,
-        "strictFunctionTypes": true,
-        "noImplicitThis": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "noImplicitReturns": true,
-        "noFallthroughCasesInSwitch": true,
-        "allowSyntheticDefaultImports": true,
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "strict": true,
         "esModuleInterop": true,
-        "emitDecoratorMetadata": true,
-        "experimentalDecorators": true,
-        "resolveJsonModule": true,
-        "baseUrl": ".",
-        "paths": {
-            "*": [
-                "src/*",
-                "node_modules/*"
-            ]
-        }
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
     },
     "include": [
-        "src/**/*.ts"
+        "src/**/*"
     ],
     "exclude": [
         "node_modules"

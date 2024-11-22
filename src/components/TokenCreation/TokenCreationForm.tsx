@@ -12,6 +12,7 @@ import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { getMint, getAccount } from '@solana/spl-token'
 import { Connection, PublicKey } from '@solana/web3.js'
 import bs58 from 'bs58';
+import { CurveType } from '../../services/bondingCurve';
 
 interface TokenFormData {
     name: string
@@ -19,6 +20,11 @@ interface TokenFormData {
     description: string
     image: File | null
     supply: number
+    curveType: CurveType
+    basePrice: number
+    slope?: number
+    exponent?: number
+    logBase?: number
 }
 
 interface TokenCreationFormProps {
@@ -34,7 +40,12 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         symbol: '',
         description: '',
         image: null,
-        supply: 1000000
+        supply: 1000000,
+        curveType: CurveType.LINEAR,
+        basePrice: 0.0001,
+        slope: 0.1,
+        exponent: 2,
+        logBase: Math.E
     })
     const [isCreating, setIsCreating] = useState(false)
     const [transactionStatus, setTransactionStatus] = useState<string>('')
@@ -47,51 +58,67 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         setTransactionStatus('Creating token...')
 
         try {
+            const network = connection.rpcEndpoint.includes('devnet') ? 'devnet' : 'mainnet'
+
+            // Create token on-chain first
             const result = await createToken({
                 connection,
-                wallet: { publicKey, sendTransaction },
+                wallet: {
+                    publicKey,
+                    sendTransaction: async (transaction: Transaction) => {
+                        const signature = await sendTransaction(transaction, connection)
+                        setTransactionStatus('Confirming transaction...')
+
+                        // Wait for confirmation
+                        const latestBlockhash = await connection.getLatestBlockhash()
+                        await connection.confirmTransaction({
+                            signature,
+                            ...latestBlockhash
+                        })
+                        return signature
+                    }
+                },
                 name: formData.name,
                 symbol: formData.symbol,
                 description: formData.description,
-                totalSupply: formData.supply
-            })
-
-            setTransactionStatus('Sending transaction...')
-
-            const signature = await sendTransaction(result.transaction, connection)
-            setTransactionStatus('Confirming transaction...')
-
-            const confirmation = await connection.confirmTransaction({
-                signature,
-                lastValidBlockHeight: result.lastValidBlockHeight,
-                blockhash: result.transaction.recentBlockhash!
-            })
-
-            if (confirmation.value.err) {
-                throw new Error('Transaction failed to confirm')
-            }
-
-            setTransactionStatus('Saving token data...')
-
-            await tokenService.saveToken({
-                mint_address: result.mintKeypair.publicKey.toBase58(),
-                name: formData.name,
-                symbol: formData.symbol,
-                description: formData.description,
-                creator: publicKey.toBase58(),
-                total_supply: formData.supply,
-                metadata: {
-                    bondingCurveATA: result.bondingCurveATA,
-                    initialSupply: formData.supply,
+                totalSupply: formData.supply,
+                bondingCurve: {
+                    curveType: formData.curveType,
+                    basePrice: formData.basePrice,
+                    slope: formData.slope,
+                    exponent: formData.exponent,
+                    logBase: formData.logBase
                 }
             })
+
+            // Create database entry after on-chain creation is confirmed
+            const payload = {
+                mint_address: result.mintKeypair.publicKey.toString(),
+                name: formData.name,
+                symbol: formData.symbol,
+                total_supply: formData.supply,
+                metadata: {
+                    description: formData.description,
+                    bondingCurveATA: result.bondingCurveATA
+                },
+                bondingCurveConfig: {
+                    curveType: formData.curveType,
+                    basePrice: Number(formData.basePrice),
+                    slope: formData.curveType === CurveType.LINEAR ? Number(formData.slope) : undefined,
+                    exponent: formData.curveType === CurveType.EXPONENTIAL ? Number(formData.exponent) : undefined,
+                    logBase: formData.curveType === CurveType.LOGARITHMIC ? Number(formData.logBase) : undefined
+                }
+            }
+
+            console.log('Submitting token creation with payload:', payload)
+            await tokenService.create(payload)
 
             setTransactionStatus('Token created successfully!')
             if (onSuccess) onSuccess()
             if (onTokenCreated) onTokenCreated()
         } catch (error) {
             console.error('Error creating token:', error)
-            setTransactionStatus(`Error: ${error.message}`)
+            setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`)
         } finally {
             setIsCreating(false)
         }
@@ -103,7 +130,12 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             symbol: '',
             description: '',
             image: null,
-            supply: 0
+            supply: 0,
+            curveType: CurveType.LINEAR,
+            basePrice: 0.0001,
+            slope: 0.1,
+            exponent: 2,
+            logBase: Math.E
         })
         setIsCreating(false)
     }
@@ -117,7 +149,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 marginBottom: '1rem',
                 borderRadius: '4px'
             }}>
-                ⚠️ You are creating a token on Devnet. Make sure your wallet is connected to Devnet network.
+                ⚠️ You are creating a token on {connection.rpcEndpoint.includes('devnet') ? 'Devnet' : 'Mainnet'}. Make sure your wallet is connected to the correct network.
             </div>
             <h2>Create Your Token</h2>
             <form onSubmit={handleSubmit}>
@@ -183,6 +215,68 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                     />
                     <small className="help-text">The total number of tokens to create. Initial price will be based on 1 SOL liquidity already being provided.</small>
                 </div>
+
+                <div className="form-group">
+                    <label>Curve Type</label>
+                    <select
+                        value={formData.curveType}
+                        onChange={e => setFormData({ ...formData, curveType: e.target.value as CurveType })}
+                    >
+                        <option value={CurveType.LINEAR}>Linear</option>
+                        <option value={CurveType.EXPONENTIAL}>Exponential</option>
+                        <option value={CurveType.LOGARITHMIC}>Logarithmic</option>
+                    </select>
+                </div>
+
+                <div className="form-group">
+                    <label>Base Price (SOL)</label>
+                    <input
+                        type="number"
+                        step="0.0001"
+                        value={formData.basePrice}
+                        onChange={e => setFormData({ ...formData, basePrice: Number(e.target.value) })}
+                        required
+                    />
+                </div>
+
+                {formData.curveType === CurveType.LINEAR && (
+                    <div className="form-group">
+                        <label>Slope</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            value={formData.slope}
+                            onChange={e => setFormData({ ...formData, slope: Number(e.target.value) })}
+                            required
+                        />
+                    </div>
+                )}
+
+                {formData.curveType === CurveType.EXPONENTIAL && (
+                    <div className="form-group">
+                        <label>Exponent</label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            value={formData.exponent}
+                            onChange={e => setFormData({ ...formData, exponent: Number(e.target.value) })}
+                            required
+                        />
+                    </div>
+                )}
+
+                {formData.curveType === CurveType.LOGARITHMIC && (
+                    <div className="form-group">
+                        <label>Log Base</label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            value={formData.logBase}
+                            onChange={e => setFormData({ ...formData, logBase: Number(e.target.value) })}
+                            required
+                        />
+                    </div>
+                )}
 
                 <button type="submit" disabled={!connected || isCreating}>
                     {isCreating ? 'Creating Token...' : 'Create Token'}

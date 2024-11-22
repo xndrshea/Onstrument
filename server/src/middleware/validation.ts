@@ -60,31 +60,51 @@ export const validateToken = (req: Request, _res: Response, next: NextFunction) 
     if (bondingCurveConfig) {
         try {
             const parsedConfig = typeof bondingCurveConfig === 'string' ?
-                JSON.parse(bondingCurveConfig) : bondingCurveConfig
+                JSON.parse(bondingCurveConfig) : bondingCurveConfig;
 
-            if (parsedConfig && typeof parsedConfig === 'object') {
-                const { initialPrice, slope, reserveRatio } = parsedConfig
+            if (!parsedConfig || typeof parsedConfig !== 'object') {
+                return next(new AppError('Invalid bonding curve configuration format', 400));
+            }
 
-                // Validate required fields exist
-                if (initialPrice === undefined || slope === undefined || reserveRatio === undefined) {
-                    return next(new AppError('Missing required bonding curve parameters', 400))
-                }
+            const { curveType, basePrice } = parsedConfig;
 
-                // Validate field types and ranges
-                if (typeof initialPrice !== 'number' || initialPrice <= 0) {
-                    return next(new AppError('Initial price must be a positive number', 400))
-                }
-                if (typeof slope !== 'number' || slope <= 0) {
-                    return next(new AppError('Slope must be a positive number', 400))
-                }
-                if (typeof reserveRatio !== 'number' || reserveRatio <= 0 || reserveRatio > 1) {
-                    return next(new AppError('Reserve ratio must be between 0 and 1', 400))
-                }
+            // Validate required fields exist
+            if (!curveType || !basePrice) {
+                logger.error('Missing bonding curve parameters:', parsedConfig);
+                return next(new AppError('Missing required bonding curve parameters', 400));
+            }
+
+            // Validate field types
+            if (typeof basePrice !== 'number' || basePrice <= 0 || !Number.isFinite(basePrice)) {
+                return next(new AppError('Base price must be a positive finite number', 400));
+            }
+
+            // Validate curve-specific parameters
+            switch (curveType) {
+                case 'linear':
+                    if (typeof parsedConfig.slope !== 'number' || !Number.isFinite(parsedConfig.slope)) {
+                        return next(new AppError('Linear curve requires valid slope parameter', 400));
+                    }
+                    break;
+                case 'exponential':
+                    if (typeof parsedConfig.exponent !== 'number' || !Number.isFinite(parsedConfig.exponent)) {
+                        return next(new AppError('Exponential curve requires valid exponent parameter', 400));
+                    }
+                    break;
+                case 'logarithmic':
+                    if (typeof parsedConfig.logBase !== 'number' || parsedConfig.logBase <= 1 || !Number.isFinite(parsedConfig.logBase)) {
+                        return next(new AppError('Logarithmic curve requires valid logBase parameter greater than 1', 400));
+                    }
+                    break;
+                default:
+                    return next(new AppError('Invalid curve type', 400));
             }
         } catch (error) {
-            logger.error('BondingCurveConfig validation error:', error, bondingCurveConfig)
-            return next(new AppError('Invalid bondingCurveConfig JSON', 400))
+            logger.error('Bonding curve config parsing error:', error);
+            return next(new AppError('Invalid bondingCurveConfig format', 400));
         }
+    } else {
+        return next(new AppError('Missing bonding curve configuration', 400));
     }
 
     next()

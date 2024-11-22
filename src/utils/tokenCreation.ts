@@ -14,10 +14,12 @@ import {
     createMintToInstruction,
     createSetAuthorityInstruction,
     AuthorityType,
-    getAccount
+    getAccount,
+    getMint
 } from '@solana/spl-token'
 import bs58 from 'bs58'
 import { BONDING_CURVE_KEYPAIR } from '../config/constants';
+import { CurveType } from '../services/bondingCurve';
 
 interface TokenCreationConfig {
     connection: Connection;
@@ -29,6 +31,13 @@ interface TokenCreationConfig {
     symbol: string;
     description: string;
     totalSupply: number;
+    bondingCurve: {
+        curveType: CurveType;
+        basePrice: number;
+        slope?: number;
+        exponent?: number;
+        logBase?: number;
+    };
 }
 
 function serializeKeypair(keypair: Keypair): string {
@@ -41,7 +50,8 @@ export async function createToken({
     name,
     symbol,
     description,
-    totalSupply
+    totalSupply,
+    bondingCurve
 }: TokenCreationConfig) {
     try {
         const mintKeypair = Keypair.generate();
@@ -104,30 +114,28 @@ export async function createToken({
         // Sign with mint keypair
         transaction.partialSign(mintKeypair);
 
-        console.log('Transaction created with instructions:', {
-            createMint: true,
-            initializeMint: true,
-            createATA: true,
-            mintTo: true,
-            totalSupply,
-            bondingCurveATA: bondingCurveATA.toBase58()
-        });
-
-        const metadata = {
-            name,
-            symbol,
-            description,
-            initialSupply: totalSupply,
-            bondingCurveATA: bondingCurveATA.toString(),
-            reserveAccount: bondingCurveKeypair.publicKey.toString()
-        };
+        // Send and confirm transaction
+        const signature = await wallet.sendTransaction(transaction);
 
         return {
             transaction,
+            signature,
             mintKeypair,
             bondingCurveATA: bondingCurveATA.toBase58(),
-            metadata,
-            lastValidBlockHeight
+            metadata: {
+                name,
+                symbol,
+                description,
+                initialSupply: totalSupply,
+                bondingCurveATA: bondingCurveATA.toString(),
+                bondingCurveConfig: {
+                    curveType: bondingCurve.curveType,
+                    basePrice: bondingCurve.basePrice,
+                    slope: bondingCurve.slope,
+                    exponent: bondingCurve.exponent,
+                    logBase: bondingCurve.logBase
+                }
+            }
         };
     } catch (error) {
         console.error('Error in createToken:', error);
@@ -136,32 +144,79 @@ export async function createToken({
 }
 
 export async function addTokenToWallet(
-    mintAddress: string,
-    wallet: any // Phantom wallet
-) {
+    connection: Connection,
+    publicKey: PublicKey,
+    mintAddress: string
+): Promise<boolean> {
     try {
-        const tokenPublicKey = new PublicKey(mintAddress)
+        console.log('Adding token to wallet:', mintAddress);
 
-        const response = await wallet.request({
-            method: "wallet_watchAsset",
-            params: {
-                type: "SPL",
-                options: {
-                    address: mintAddress,
-                    decimals: 9,
+        // Ensure we're working with a valid PublicKey for the mint
+        const mintPubkey = new PublicKey(mintAddress);
+
+        // Get the token's metadata
+        const tokenMint = await getMint(connection, mintPubkey);
+        console.log('Token mint data:', tokenMint);
+
+        // Check if window.solana exists and is Phantom
+        if (!window.solana?.isPhantom) {
+            console.log('Phantom wallet not detected, showing manual instructions');
+            alert(getManualTokenAddInstructions(mintAddress));
+            return false;
+        }
+
+        try {
+            // Use Phantom's specific method for adding tokens
+            await window.solana.request({
+                method: 'wallet_watchAsset',
+                params: {
+                    type: 'spl-token',  // Changed from 'SPL' to 'spl-token'
+                    options: {
+                        address: mintAddress,  // Use the string address directly
+                        decimals: tokenMint.decimals,
+                        // These fields are optional but recommended
+                        symbol: 'TOKEN',
+                        name: 'Custom Token',
+                        image: ''
+                    }
                 }
-            }
-        })
+            });
 
-        if (response.success) {
-            console.log('Token added to wallet successfully')
-            return true
-        } else {
-            console.error('Failed to add token to wallet')
-            return false
+            console.log('Token successfully added to wallet');
+            return true;
+        } catch (phantomError) {
+            console.warn('Phantom-specific method failed:', phantomError);
+
+            // Alternative approach: Create ATA if it doesn't exist
+            try {
+                const ata = await getAssociatedTokenAddress(
+                    mintPubkey,
+                    publicKey
+                );
+
+                const account = await getAccount(connection, ata);
+                console.log('Token account already exists:', account.address.toString());
+
+                // Even if ATA exists, show manual instructions as fallback
+                alert(getManualTokenAddInstructions(mintAddress));
+                return true;
+            } catch (error) {
+                console.log('Token account does not exist, showing manual instructions');
+                alert(getManualTokenAddInstructions(mintAddress));
+                return false;
+            }
         }
     } catch (error) {
-        console.error('Error adding token to wallet:', error)
-        throw error
+        console.error('Error adding token to wallet:', error);
+        alert(getManualTokenAddInstructions(mintAddress));
+        return false;
     }
+}
+
+export function getManualTokenAddInstructions(mintAddress: string): string {
+    return `To add this token manually:
+1. Open your wallet
+2. Find "Add Token" or "Import Token"
+3. Enter this mint address: ${mintAddress}
+4. Make sure you're on the correct network (Devnet)`;
 } 

@@ -1,11 +1,11 @@
-import { Router } from 'express'
-import { tokenController } from '../controllers/tokenController'
-import { validateToken } from '../middleware/validation'
+import express from 'express';
+import { tokenController } from '../controllers/tokenController';
+import { validateToken } from '../middleware/validation';
 
-const router = Router()
+const router = express.Router();
 
-router.post('/', validateToken, tokenController.createToken)
-router.get('/', tokenController.getTokens)
-router.get('/:mint', tokenController.getToken)
+router.post('/tokens', validateToken, tokenController.createToken);
+router.get('/tokens', tokenController.getTokens);
+router.get('/tokens/:mint', tokenController.getToken);
 
-export const tokenRoutes = router 
+export { router as tokenRoutes }; 

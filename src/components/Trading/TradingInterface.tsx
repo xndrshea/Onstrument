@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { BondingCurve } from '../../services/bondingCurve'
+import { BondingCurve, CurveType } from '../../services/bondingCurve'
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, clusterApiUrl, Connection, Keypair } from '@solana/web3.js'
 import {
     getAssociatedTokenAddress,
@@ -23,12 +23,26 @@ import { tokenService } from '../../services/tokenService'
 import { verifyDevnetConnection } from '../../utils/network'
 import bs58 from 'bs58'
 import { BONDING_CURVE_KEYPAIR } from '../../config/constants'
+import { formatSupply, convertBigIntToNumber } from '../../utils/formatting'
 
 interface TradingInterfaceProps {
     token: TokenData
+    onTradeComplete: () => void
 }
 
-export function TradingInterface({ token }: TradingInterfaceProps) {
+interface TokenState {
+    currentSupply: bigint
+    solReserves: number
+    price: number
+}
+
+interface PriceCalculationResult {
+    spotPrice: number
+    totalCost: number
+    priceImpact: number
+}
+
+export function TradingInterface({ token, onTradeComplete }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const { publicKey, sendTransaction, connected } = useWallet()
     const [amount, setAmount] = useState('')
@@ -39,8 +53,27 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
     const [isSelling, setIsSelling] = useState(false)
     const [transactionStatus, setTransactionStatus] = useState<string>('')
     const [solBalance, setSolBalance] = useState<number>(0)
-    const [reserveBalance, setReserveBalance] = useState<number>(0)
     const [bondingCurveBalance, setBondingCurveBalance] = useState<bigint>(BigInt(0))
+    const [actualSolReserves, setActualSolReserves] = useState<number>(0)
+    const [totalCost, setTotalCost] = useState<number>(0)
+    const [priceData, setPriceData] = useState<PriceCalculationResult>({
+        spotPrice: 0,
+        totalCost: 0,
+        priceImpact: 0
+    });
+
+    // Token-specific state
+    const [tokenState, setTokenState] = useState<TokenState>({
+        currentSupply: BigInt(0),
+        solReserves: token.metadata?.solReserves || 0,
+        price: 0
+    });
+
+    // User-specific state
+    const [userState, setUserState] = useState({
+        solBalance: 0,
+        tokenBalance: BigInt(0)
+    });
 
     // Add this near the top of the component
     console.log("Full token data:", {
@@ -49,111 +82,114 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         rawMetadata: token.metadata ? JSON.stringify(token.metadata) : null
     });
 
-    // Update bondingCurve initialization to not use config
+    // Initialize bonding curve from token config
     const bondingCurve = useMemo(() => {
-        return BondingCurve.getInstance();
-    }, []); // Empty dependency array since we don't use any config
+        try {
+            if (!token.bonding_curve_config) {
+                console.error('Token is missing bonding curve configuration:', token.mint_address);
+                return null;
+            }
 
-    // Calculate total cost in SOL using the same bondingCurve instance
-    const totalCost = useMemo(() => {
-        if (!amount || !bondingCurve) return 0;
+            console.log('Detailed Bonding Curve Config:', {
+                curveType: token.bonding_curve_config.curveType,
+                basePrice: token.bonding_curve_config.basePrice,
+                slope: token.bonding_curve_config.slope,
+                exponent: token.bonding_curve_config.exponent,
+                logBase: token.bonding_curve_config.logBase,
+                totalSupply: token.metadata?.totalSupply,
+                currentSupply: token.metadata?.currentSupply,
+                solReserves: token.metadata?.solReserves
+            });
 
-        const amountNum = parseFloat(amount);
-        if (isNaN(amountNum)) return 0;
+            const curve = BondingCurve.fromToken(token);
 
-        const currentSupply = Number(bondingCurveBalance) / Math.pow(10, 9);
-        const currentReserve = reserveBalance / LAMPORTS_PER_SOL;
+            const testPrice = curve.calculatePrice({
+                currentSupply: 0,
+                solReserves: 0,
+                amount: 1,
+                isSelling: false
+            });
+            console.log('Test price calculation:', testPrice);
 
-        if (isSelling) {
-            return bondingCurve.getReturn(amountNum, currentSupply, currentReserve);
-        } else {
-            return bondingCurve.getCost(amountNum, currentSupply, currentReserve);
+            return curve;
+        } catch (error) {
+            console.error('Bonding Curve Initialization Error:', error);
+            console.error('Full token data at error:', token);
+            return null;
         }
-    }, [amount, bondingCurve, isSelling, bondingCurveBalance, reserveBalance]);
+    }, [token]);
 
-    // Update price calculation useEffect
-    useEffect(() => {
-        if (!bondingCurve) {
-            setCurrentPrice(0);
-            return;
-        }
-
-        const currentSupply = Number(bondingCurveBalance) / Math.pow(10, 9);
-        const currentReserve = reserveBalance / LAMPORTS_PER_SOL;
-        const price = bondingCurve.getPrice(currentSupply, currentReserve);
-        setCurrentPrice(price);
-    }, [bondingCurve, bondingCurveBalance, reserveBalance]);
-
-    // Update the formatSupply function to handle BigInt
-    const formatSupply = (supply: bigint | number | undefined): string => {
-        if (supply === undefined) return '0.00';
-
-        // Convert BigInt to number safely
-        const numericSupply = typeof supply === 'bigint' ?
-            Number(supply) : supply;
-
-        // Convert to human readable format (divide by 10^9)
-        const humanReadable = numericSupply / Math.pow(10, 9);
-
-        // Format with 2 decimal places
-        return humanReadable.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
-    };
-
-    // Convert BigInt to number safely
-    const convertBigIntToNumber = (value: bigint | number): number => {
-        if (typeof value === 'bigint') {
-            return Number(value)
-        }
-        return value
-    }
-
-    // Move updateBalances outside useEffect and make it a function declaration
-    const updateBalances = async () => {
-        if (!publicKey || !token.mint_address || !token.metadata?.bondingCurveATA) {
-            return;
-        }
+    // Simplify updateBalances to only track what we need
+    const updateBalances = useCallback(async () => {
+        if (!publicKey || !token.metadata?.bondingCurveATA) return;
 
         try {
-            // Get user's SOL balance
-            const solBalance = await connection.getBalance(publicKey) / LAMPORTS_PER_SOL;
-            setSolBalance(solBalance);
+            console.log('Updating Balances - Starting with:', {
+                bondingCurveATA: token.metadata.bondingCurveATA,
+                publicKey: publicKey.toString()
+            });
 
-            // Get bonding curve ATA balance (available supply)
-            const bondingCurveATA = new PublicKey(token.metadata.bondingCurveATA);
-            const bondingCurveAccount = await getAccount(connection, bondingCurveATA);
-            const availableSupplyBigInt = bondingCurveAccount.amount;
-            setAvailableSupply(availableSupplyBigInt);
-            setBondingCurveBalance(availableSupplyBigInt);
-
-            // Get user's token balance
-            try {
-                const userATA = await getAssociatedTokenAddress(
+            const [
+                userSolBalance,
+                bondingCurveAccount,
+                userTokenAccount,
+                bondingCurveSolBalance
+            ] = await Promise.all([
+                connection.getBalance(publicKey),
+                getAccount(connection, new PublicKey(token.metadata.bondingCurveATA)),
+                getAccount(connection, await getAssociatedTokenAddress(
                     new PublicKey(token.mint_address),
                     publicKey
-                );
-                const userAccount = await getAccount(connection, userATA);
-                setUserBalance(userAccount.amount);
-            } catch (e) {
-                if (e instanceof TokenAccountNotFoundError) {
-                    setUserBalance(BigInt(0));
-                } else {
-                    throw e;
-                }
-            }
-        } catch (error) {
-            console.error('Error updating balances:', error);
-        }
-    };
+                )).catch(() => null),
+                connection.getBalance(BONDING_CURVE_KEYPAIR.publicKey)
+            ]);
 
-    // Use updateBalances in useEffect
+            console.log('Balance Update Results:', {
+                userSolBalance: userSolBalance / LAMPORTS_PER_SOL,
+                bondingCurveAmount: bondingCurveAccount.amount.toString(),
+                userTokenAmount: userTokenAccount?.amount.toString() || '0',
+                bondingCurveSolBalance: bondingCurveSolBalance / LAMPORTS_PER_SOL
+            });
+
+            // Use bondingCurveAccount.amount as the single source of truth
+            const currentSupply = bondingCurveAccount.amount;
+
+            // Update all states that depend on supply with the same value
+            setSolBalance(userSolBalance / LAMPORTS_PER_SOL);
+            setUserBalance(userTokenAccount?.amount || BigInt(0));
+            setBondingCurveBalance(currentSupply);
+            setAvailableSupply(currentSupply);
+
+            setTokenState(prev => ({
+                ...prev,
+                currentSupply: currentSupply, // Use the same value here
+                solReserves: bondingCurveSolBalance / LAMPORTS_PER_SOL
+            }));
+        } catch (error) {
+            console.error('Balance Update Error:', error);
+            console.error('Error Stack:', error instanceof Error ? error.stack : 'No stack trace');
+        }
+    }, [publicKey, connection, token.metadata?.bondingCurveATA, token.mint_address]);
+
+    // Add initial load effect
     useEffect(() => {
         updateBalances();
-        const interval = setInterval(updateBalances, 5000);
-        return () => clearInterval(interval);
-    }, [publicKey, connection, token.mint_address, token.metadata?.bondingCurveATA]);
+    }, [updateBalances]); // Run once when component mounts
+
+    // Modify the polling interval effect to prevent race conditions
+    useEffect(() => {
+        let mounted = true;
+        const interval = setInterval(async () => {
+            if (mounted) {
+                await updateBalances();
+            }
+        }, 5000);
+
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
+    }, [updateBalances]);
 
     // Update button disabled logic
     const isButtonDisabled = useMemo(() => {
@@ -163,28 +199,88 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         if (isNaN(amountNum) || amountNum <= 0) return true;
 
         if (isSelling) {
-            // Selling checks
+            // Check user's token balance for selling
             if (userBalance < BigInt(Math.floor(amountNum * Math.pow(10, 9)))) return true;
-            const bondingCurveSOLBalance = solBalance;
-            if (totalCost > bondingCurveSOLBalance) return true;
         } else {
-            // Buying checks
-            if (amountNum > Number(availableSupply) / Math.pow(10, 9)) return true;
+            // Check bonding curve's token balance for buying
+            if (amountNum > Number(bondingCurveBalance) / Math.pow(10, 9)) return true;
             if (totalCost > solBalance) return true;
         }
 
         return false;
-    }, [publicKey, amount, isLoading, isSelling, userBalance, availableSupply, totalCost, solBalance]);
+    }, [publicKey, amount, isLoading, isSelling, userBalance, bondingCurveBalance, totalCost, solBalance]);
+
+    // Modify the price calculation effect for better debugging
+    useEffect(() => {
+        if (!bondingCurve) {
+            console.error('Price calculation failed: No bonding curve initialized');
+            return;
+        }
+
+        try {
+            const parsedAmount = amount ? parseFloat(amount) : 0;
+
+            // Log all inputs to price calculation
+            console.log('Price Calculation Inputs:', {
+                currentSupply: Number(tokenState.currentSupply) / Math.pow(10, 9),
+                solReserves: tokenState.solReserves,
+                amount: parsedAmount,
+                isSelling,
+                bondingCurveConfig: token.bonding_curve_config,
+                tokenState
+            });
+
+            const priceResult = bondingCurve.calculatePrice({
+                currentSupply: Number(tokenState.currentSupply) / Math.pow(10, 9),
+                solReserves: tokenState.solReserves,
+                amount: parsedAmount,
+                isSelling
+            });
+
+            console.log('Price Calculation Result:', priceResult);
+
+            setCurrentPrice(priceResult.spotPrice);
+            setTotalCost(priceResult.totalCost);
+            setPriceData(priceResult);
+        } catch (error) {
+            console.error('Price Calculation Error:', error);
+            console.error('Error Stack:', error instanceof Error ? error.stack : 'No stack trace');
+            console.error('Current State:', {
+                token,
+                tokenState,
+                amount,
+                bondingCurve: !!bondingCurve
+            });
+        }
+    }, [amount, bondingCurve, isSelling, tokenState.currentSupply, tokenState.solReserves, token]);
 
     const handlePurchase = async () => {
-        if (!publicKey || !amount || !token.metadata?.bondingCurveATA) {
+        if (!publicKey || !amount || !token.metadata?.bondingCurveATA || !bondingCurve) {
             return;
+        }
+
+        const purchaseAmount = parseFloat(amount);
+
+        // Validate the user has enough SOL
+        if (priceData.totalCost > solBalance) {
+            alert(`Insufficient SOL balance. Required: ${priceData.totalCost.toFixed(4)} SOL`);
+            return;
+        }
+
+        // Add price impact warning
+        if (priceData.priceImpact > 0.05) { // 5% impact
+            const proceed = window.confirm(
+                `Warning: This trade will impact the price by ${(priceData.priceImpact * 100).toFixed(2)}%. Do you want to proceed?`
+            );
+            if (!proceed) return;
         }
 
         setIsLoading(true);
         setTransactionStatus('Preparing transaction...');
 
         try {
+            const costInLamports = Math.floor(priceData.totalCost * LAMPORTS_PER_SOL);
+
             const transaction = new Transaction();
             const bondingCurveKeypair = BONDING_CURVE_KEYPAIR;
             const mintPubkey = new PublicKey(token.mint_address);
@@ -195,7 +291,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             try {
                 await getAccount(connection, userATA);
             } catch (error) {
-                // If ATA doesn't exist, add creation instruction to the same transaction
                 transaction.add(
                     createAssociatedTokenAccountInstruction(
                         publicKey,
@@ -208,10 +303,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                 );
             }
 
-            // Calculate the cost in lamports
-            const costInLamports = Math.floor(totalCost * LAMPORTS_PER_SOL);
-
-            // Add transfer instructions
+            // Transfer SOL to bonding curve
             transaction.add(
                 SystemProgram.transfer({
                     fromPubkey: publicKey,
@@ -220,12 +312,13 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                 })
             );
 
+            // Transfer tokens to user
             transaction.add(
                 createTransferInstruction(
                     bondingCurveATA,
                     userATA,
                     bondingCurveKeypair.publicKey,
-                    Math.floor(parseFloat(amount) * Math.pow(10, 9))
+                    Math.floor(purchaseAmount * Math.pow(10, 9))
                 )
             );
 
@@ -243,21 +336,54 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             setTransactionStatus('Confirming transaction...');
             await connection.confirmTransaction(signature, 'confirmed');
 
+            // Update local state immediately
+            const newSolReserves = (token.metadata?.solReserves || 0) + (costInLamports / LAMPORTS_PER_SOL);
+            setTokenState(prev => ({
+                ...prev,
+                solReserves: newSolReserves,
+                currentSupply: prev.currentSupply + BigInt(Math.floor(purchaseAmount * Math.pow(10, 9)))
+            }));
+
+            // Try to update backend, but don't fail if it doesn't work
+            try {
+                const updateResult = await tokenService.updateTokenReserves(token.mint_address, newSolReserves);
+                if (updateResult.localOnly) {
+                    console.warn('Token reserves updated locally only');
+                }
+            } catch (error) {
+                console.warn('Failed to update token reserves on server:', error);
+                // Don't fail the transaction, just log the warning
+            }
+
             setTransactionStatus('Purchase successful!');
             await updateBalances();
             setAmount('');
+            onTradeComplete();
+
         } catch (error) {
             console.error('Purchase error:', error);
-            setTransactionStatus('Transaction failed');
-            alert(error instanceof Error ? error.message : 'Transaction failed');
+            setTransactionStatus('Purchase failed');
+            if (!(error instanceof Error && error.message.includes('updateTokenReserves'))) {
+                alert(error instanceof Error ? error.message : 'Transaction failed');
+            }
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleSell = async () => {
-        if (!publicKey || !token.mint_address || !token.metadata?.bondingCurveATA) {
-            alert('Missing required token data');
+        if (!publicKey || !amount || !token.metadata?.bondingCurveATA || !bondingCurve) {
+            return;
+        }
+
+        const sellAmount = parseFloat(amount);
+
+        // Use priceData that's already calculated from our bonding curve
+        const requiredSOL = Math.floor(priceData.totalCost * LAMPORTS_PER_SOL) + 5000; // Add buffer for fees
+
+        // Check if bonding curve has enough SOL
+        if (tokenState.solReserves * LAMPORTS_PER_SOL < requiredSOL) {
+            setTransactionStatus('Bonding curve has insufficient SOL for this sale');
             return;
         }
 
@@ -265,77 +391,106 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             setIsLoading(true);
             setTransactionStatus('Processing sale...');
 
-            const sellAmount = parseFloat(amount);
-            const currentSupply = Number(bondingCurveBalance) / Math.pow(10, 9);
-            const currentReserve = reserveBalance / LAMPORTS_PER_SOL;
-            const returnAmount = Math.floor(bondingCurve.getReturn(sellAmount, currentSupply, currentReserve) * LAMPORTS_PER_SOL);
-
-            // Create transaction
             const transaction = new Transaction();
             const bondingCurveKeypair = BONDING_CURVE_KEYPAIR;
 
-            // Get user's ATA
+            // First, add the bonding curve as a signer if there's a SOL transfer
+            if (tokenState.solReserves > 0) {
+                transaction.add(
+                    SystemProgram.transfer({
+                        fromPubkey: bondingCurveKeypair.publicKey,
+                        toPubkey: publicKey,
+                        lamports: Math.floor(priceData.totalCost * LAMPORTS_PER_SOL)
+                    })
+                );
+            }
+
+            // Then add the token transfer instruction
             const userATA = await getAssociatedTokenAddress(
                 new PublicKey(token.mint_address),
                 publicKey
             );
 
-            // Transfer tokens back to bonding curve ATA
+            const bondingCurveATA = new PublicKey(token.metadata.bondingCurveATA);
+            const tokenAmount = BigInt(Math.floor(sellAmount * Math.pow(10, 9)));
+
             transaction.add(
                 createTransferInstruction(
-                    userATA,                                          // from: user's ATA
-                    new PublicKey(token.metadata.bondingCurveATA),   // to: bonding curve ATA
-                    publicKey,                                        // owner
-                    BigInt(Math.floor(sellAmount * Math.pow(10, 9))) // amount (convert to BigInt)
+                    userATA,
+                    bondingCurveATA,
+                    publicKey,
+                    tokenAmount
                 )
             );
 
-            // Transfer SOL from bonding curve to user
-            transaction.add(
-                SystemProgram.transfer({
-                    fromPubkey: bondingCurveKeypair.publicKey,  // Changed from reserveAccount
-                    toPubkey: publicKey,
-                    lamports: returnAmount
-                })
-            );
-
-            // Get recent blockhash and sign
+            // Get latest blockhash
             const { blockhash } = await connection.getLatestBlockhash();
             transaction.recentBlockhash = blockhash;
             transaction.feePayer = publicKey;
 
-            // Sign with bonding curve keypair since it's transferring SOL
-            transaction.partialSign(bondingCurveKeypair);
+            // Add bonding curve as signer if there's a SOL transfer
+            if (tokenState.solReserves > 0) {
+                transaction.signatures = [];  // Clear existing signatures
+                transaction.sign(bondingCurveKeypair);  // Sign with bonding curve first
+            }
 
-            // Send and confirm
+            // Send transaction for user to sign
+            setTransactionStatus('Please approve the transaction...');
             const signature = await sendTransaction(transaction, connection);
+
+            setTransactionStatus('Confirming transaction...');
             await connection.confirmTransaction(signature, 'confirmed');
 
-            // Update UI state
+            // Update local state
+            const newSolReserves = Math.max(0, tokenState.solReserves - (priceData.totalCost || 0));
+            setTokenState(prev => ({
+                ...prev,
+                solReserves: newSolReserves,
+                currentSupply: prev.currentSupply - tokenAmount
+            }));
+
+            // Update backend
+            await tokenService.updateTokenReserves(token.mint_address, newSolReserves);
+
             setTransactionStatus('Sale successful!');
             await updateBalances();
             setAmount('');
+            onTradeComplete();
 
         } catch (error) {
             console.error('Sale error:', error);
-            setTransactionStatus('Sale failed');
-            alert(error instanceof Error ? error.message : 'Transaction failed');
+            setTransactionStatus(error instanceof Error ? error.message : 'Transaction failed');
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Add this near the top of the component
+    // Add state to track network check
+    const [networkChecked, setNetworkChecked] = useState(false);
+
+    // Replace the existing network check useEffect
     useEffect(() => {
         const checkNetwork = async () => {
-            if (!connected) return;
-            const isDevnet = await verifyDevnetConnection(connection);
-            if (!isDevnet) {
-                alert('Please switch to Devnet network to trade this token');
+            if (!connected || !publicKey || networkChecked) return;
+
+            try {
+                const isDevnet = await verifyDevnetConnection(connection);
+                if (!isDevnet) {
+                    console.warn('Not connected to Devnet network:', connection.rpcEndpoint);
+                    // Only show alert once
+                    if (!networkChecked) {
+                        alert('Please switch to Devnet network in your wallet to trade this token');
+                    }
+                }
+            } catch (error) {
+                console.error('Network check failed:', error);
+            } finally {
+                setNetworkChecked(true);
             }
         };
+
         checkNetwork();
-    }, [connected, connection]);
+    }, [connected, connection, publicKey, networkChecked]);
 
     // Add this near the top of the component
     useEffect(() => {
@@ -347,7 +502,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         });
     }, [token]);
 
-    // Add near the top of the component, after the state declarations
+    // Update the debug logging useEffect to remove reserveBalance reference
     useEffect(() => {
         if (publicKey && token.mint_address) {
             console.debug('Trading Interface State:', {
@@ -356,13 +511,14 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                 tokenMint: token.mint_address,
                 bondingCurveATA: token.metadata?.bondingCurveATA,
                 currentPrice,
-                availableSupply,
+                availableSupply: Number(bondingCurveBalance) / Math.pow(10, 9),
                 userBalance,
                 solBalance,
-                reserveBalance
+                solReserves: tokenState.solReserves,
+                bondingCurveBalance: Number(bondingCurveBalance) / Math.pow(10, 9)
             });
         }
-    }, [publicKey, token, connection, currentPrice, availableSupply, userBalance, solBalance, reserveBalance]);
+    }, [publicKey, token, connection, currentPrice, bondingCurveBalance, userBalance, solBalance, tokenState.solReserves]);
 
     useEffect(() => {
         if (amount) {
@@ -382,12 +538,12 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                         parseFloat(amount) > convertBigIntToNumber(availableSupply) / Math.pow(10, 9)
                     ) ||
                     (isSelling ?
-                        totalCost > (convertBigIntToNumber(reserveBalance) / LAMPORTS_PER_SOL) :
+                        totalCost > (tokenState.solReserves) :
                         totalCost > solBalance
                     )
             });
         }
-    }, [amount, isLoading, userBalance, availableSupply, totalCost, solBalance, reserveBalance, isSelling]);
+    }, [amount, isLoading, userBalance, availableSupply, totalCost, solBalance, tokenState.solReserves, isSelling, connected]);
 
     useEffect(() => {
         console.log("Token metadata in TradingInterface:", {
@@ -395,6 +551,47 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             bondingCurveATA: token.metadata?.bondingCurveATA
         });
     }, [token]);
+
+    // Update the initial state setup
+    useEffect(() => {
+        if (!bondingCurve || !token.metadata) {
+            console.log('Skipping initial state setup:', {
+                hasBondingCurve: !!bondingCurve,
+                hasMetadata: !!token.metadata
+            });
+            return;
+        }
+
+        console.log('Setting initial token state:', {
+            currentSupply: token.metadata.currentSupply || 0,
+            solReserves: token.metadata.solReserves || 0
+        });
+
+        setTokenState({
+            currentSupply: BigInt(token.metadata.currentSupply || 0),
+            solReserves: token.metadata.solReserves || 0,
+            price: 0
+        });
+    }, [token.metadata, bondingCurve]);
+
+    // Add validation to token state updates
+    useEffect(() => {
+        if (!token.metadata) {
+            console.log('Token metadata missing');
+            return;
+        }
+
+        console.log('Setting token state with:', {
+            currentSupply: token.metadata.currentSupply,
+            solReserves: token.metadata.solReserves
+        });
+
+        setTokenState({
+            currentSupply: BigInt(token.metadata.currentSupply || 0),
+            solReserves: token.metadata.solReserves || 0,
+            price: 0
+        });
+    }, [token.metadata]);
 
     if (!connected) {
         return (
@@ -426,7 +623,11 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             </div>
 
             <div className="price-info">
-                <h3>Current Price: {currentPrice.toFixed(6)} SOL</h3>
+                <h3>Current Price: {isFinite(currentPrice) ? currentPrice.toFixed(6) : '0.000000'} SOL</h3>
+                {amount && (
+                    <p>Trade Price: {(totalCost / parseFloat(amount)).toFixed(6)} SOL</p>
+                )}
+                <p>Total Cost: {totalCost.toFixed(6)} SOL</p>
                 <p>Available Supply: {formatSupply(availableSupply)} {token.symbol}</p>
                 <p>Your Balance: {formatSupply(userBalance)} {token.symbol}</p>
                 <p>Your SOL Balance: {solBalance.toFixed(4)} SOL</p>
@@ -472,7 +673,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                         {!isSelling && parseFloat(amount) > availableSupply &&
                             <p className="warning">Amount exceeds available supply</p>
                         }
-                        {isSelling && totalCost > (reserveBalance / LAMPORTS_PER_SOL) &&
+                        {isSelling && totalCost > (tokenState.solReserves) &&
                             <p className="warning">Insufficient liquidity in reserve</p>
                         }
                         {!isSelling && totalCost > solBalance &&

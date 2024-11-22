@@ -41,8 +41,8 @@ if (process.env.NODE_ENV === 'development') {
 
 app.use(express.json())
 
-// Routes
-app.use('/api/tokens', tokenRoutes)
+// Routes - mount at root level since routes include full paths
+app.use('/api', tokenRoutes)
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

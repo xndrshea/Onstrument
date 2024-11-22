@@ -1,19 +1,26 @@
-import React, { useEffect, useState } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
+import React, { useEffect, useState, useMemo } from 'react'
+import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { tokenService, TokenData } from '../../services/tokenService'
-import { addTokenToWallet } from '../../utils/tokenCreation'
+import { addTokenToWallet, getManualTokenAddInstructions } from '../../utils/tokenCreation'
 import { TradingInterface } from '../Trading/TradingInterface'
+import { getMint } from '@solana/spl-token'
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { BondingCurve, CurveType } from '../../services/bondingCurve';
+import { formatMarketCap } from '../../utils/formatting';
 
 interface TokenListProps {
     onCreateClick: () => void
 }
 
 export function TokenList({ onCreateClick }: TokenListProps) {
+    const { connection } = useConnection()
     const { publicKey, connected } = useWallet()
     const [tokens, setTokens] = useState<TokenData[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    const [solanaPrice, setSolanaPrice] = useState<number>(63.25)
+    const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
 
     // Function to refresh the token list
     const refreshTokens = () => {
@@ -59,9 +66,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 }).map(token => ({
                     ...token,
                     metadata: typeof token.metadata === 'string' ?
-                        JSON.parse(token.metadata) : token.metadata,
-                    bondingCurveConfig: typeof token.bonding_curve_config === 'string' ?
-                        JSON.parse(token.bonding_curve_config) : token.bonding_curve_config
+                        JSON.parse(token.metadata) : token.metadata
                 }));
 
                 console.log('Processed tokens:', validTokens);
@@ -93,6 +98,71 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         })
     }
 
+    const handleAddToWallet = async (mintAddress: string) => {
+        if (!publicKey) {
+            alert('Please connect your wallet first');
+            return;
+        }
+
+        try {
+            const success = await addTokenToWallet(connection, publicKey, mintAddress);
+            if (!success) {
+                alert(getManualTokenAddInstructions(mintAddress));
+            }
+        } catch (error) {
+            console.error('Error adding token to wallet:', error);
+            alert(getManualTokenAddInstructions(mintAddress));
+        }
+    };
+
+    // Add this useEffect to fetch Solana price
+    useEffect(() => {
+        const fetchSolanaPrice = async () => {
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/solana-price`);
+
+                if (!response.ok) {
+                    console.warn('Using default SOL price due to API error:', response.status);
+                    return; // Keep using default price
+                }
+
+                const data = await response.json();
+                setSolanaPrice(data.solana.usd);
+                console.log('Fetched SOL price:', data.solana.usd);
+            } catch (error) {
+                console.warn('Using default SOL price due to error:', error);
+                // Keep using default price
+            }
+        };
+
+        fetchSolanaPrice();
+        const interval = setInterval(fetchSolanaPrice, 60000); // Update every minute
+        return () => clearInterval(interval);
+    }, []);
+
+    const calculateMarketCap = (token: TokenData): string => {
+        try {
+            const bondingCurve = BondingCurve.fromToken(token);
+            const marketCap = bondingCurve.calculateMarketCap(token);
+            return formatMarketCap(marketCap);
+        } catch (error) {
+            console.error('Error calculating market cap:', error);
+            return 'N/A';
+        }
+    };
+
+    // Add this function to sort tokens
+    const sortedTokens = useMemo(() => {
+        if (!tokens.length) return [];
+
+        return [...tokens].sort((a, b) => {
+            const dateA = new Date(a.created_at || 0).getTime();
+            const dateB = new Date(b.created_at || 0).getTime();
+
+            return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+        });
+    }, [tokens, sortOrder]);
+
     if (isLoading) {
         return <div className="loading">Loading tokens...</div>
     }
@@ -110,7 +180,15 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         <div className="token-list">
             <div className="token-list-header">
                 <h2>All Tokens</h2>
-                <div>
+                <div className="token-list-controls">
+                    <select
+                        value={sortOrder}
+                        onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
+                        className="sort-selector"
+                    >
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                    </select>
                     <button onClick={refreshTokens} className="refresh-button">
                         🔄 Refresh
                     </button>
@@ -121,7 +199,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             </div>
             {tokens.length > 0 ? (
                 <div className="token-grid">
-                    {tokens.map((token) => (
+                    {sortedTokens.map((token) => (
                         <div key={token.mint_address} className="token-card">
                             <h3>{token.name || 'Unnamed Token'}</h3>
                             <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
@@ -136,10 +214,8 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                                     new Date(token.created_at).toLocaleDateString() :
                                     'N/A'}
                             </p>
-                            <p className="token-supply">
-                                Supply: {token.total_supply ?
-                                    formatSupply(token.total_supply) :
-                                    'N/A'}
+                            <p className="token-market-cap">
+                                Market Cap: {calculateMarketCap(token)}
                             </p>
                             <div className="trading-section">
                                 <h4>Trade Token</h4>
@@ -150,13 +226,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                             </div>
                             <div className="token-actions">
                                 <button
-                                    onClick={async () => {
-                                        if ((window as any).solana && token.mint_address) {
-                                            await addTokenToWallet(token.mint_address, (window as any).solana)
-                                        } else {
-                                            alert('Phantom wallet not found')
-                                        }
-                                    }}
+                                    onClick={() => handleAddToWallet(token.mint_address)}
                                     className="add-to-wallet-btn"
                                 >
                                     Add to Wallet

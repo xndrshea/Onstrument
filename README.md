@@ -1,64 +1,41 @@
-# Solana Token Creator with Bonding Curve
+# Solana Token Trading Platform
 
-A web application for creating and managing tokens on the Solana blockchain with an integrated bonding curve mechanism.
+A decentralized trading platform for Solana tokens using customizable bonding curves. This platform enables the creation and trading of tokens with automated market making functionality through bonding curves.
 
 ## Architecture
 
-### Token Creation
-- Creates SPL tokens with customizable parameters
-- Implements an automated market maker using a bonding curve
-- Single account (bonding curve) manages both token and SOL reserves
-- Configurable parameters include:
-  - Initial supply
-  - Initial price
-  - Price slope
-  - Reserve ratio
+### Core Components
 
-### Bonding Curve Mechanism
-The bonding curve acts as an automated market maker (AMM) that:
-- Holds the token supply in its Associated Token Account (ATA)
-- Manages SOL reserves in the same account
-- Automatically calculates token prices based on:
-  - Reserve ratio
-  - Slope parameter
+1. **Token Trading Interface**
+   - Handles buying and selling of tokens
+   - Real-time price calculations based on bonding curve formula
+   - Token-specific state management
+   - Transaction handling and wallet integration
 
-### Key Components
-1. **Token Mint**: The SPL token mint account
-2. **Bonding Curve Account**: 
-   - Holds token supply (via ATA)
-   - Manages SOL reserves
-   - Controls mint authority
-   - Executes buy/sell operations
+2. **Bonding Curve Implementation**
+   - Custom pricing algorithm
+   - Per-token SOL reserves tracking
+   - Price impact calculations
+   - Minimum reserve requirements
+   - Automated market making functionality
 
-### Transaction Flow
-1. **Token Purchase**:
-   - User sends SOL to bonding curve account
-   - Bonding curve transfers tokens from its ATA to user's ATA
-   - Price calculated based on bonding curve formula
+3. **Token Management**
+   - Token metadata storage
+   - SOL reserves tracking per token
+   - Supply management
+   - Associated Token Account (ATA) handling
 
-2. **Token Sale**:
-   - User sends tokens to bonding curve's ATA
-   - Bonding curve transfers SOL to user
-   - Return amount calculated based on bonding curve formula
+### Key Features
 
-## Technical Details
+- **Independent Token Pricing**: Each token maintains its own bonding curve and SOL reserves
+- **Real-time Price Updates**: Prices update automatically based on supply and reserves
+- **Price Impact Protection**: Warnings for high-impact trades
+- **Automated Market Making**: Liquidity provided through bonding curve mechanics
+- **Token-Specific Reserves**: Each token tracks its own SOL reserves independently
+- **Devnet Support**: Full testing environment on Solana Devnet
 
-### Smart Contract Interactions
-- Uses Solana Web3.js for blockchain interactions
-- Implements SPL Token program for token operations
-- Manages Associated Token Accounts (ATAs) for token holdings
+## Technical Implementation
 
-### Configuration Parameters
-- `initialSupply`: Initial token supply minted to bonding curve
-- `initialPrice`: Starting price per token in SOL
-- `slope`: Rate of price increase
-- `reserveRatio`: Ratio between token supply and SOL reserves
+### Bonding Curve Mechanics
 
-## Development
-
-### Prerequisites
-- Node.js
-- Solana CLI tools
-- Phantom Wallet or other Solana wallet
-
-### Setup
+</file>

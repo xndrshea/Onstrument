@@ -1,0 +1,124 @@
+.roadmap-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 4rem 2rem;
+    color: #1a1a1a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.roadmap-header {
+    text-align: center;
+    margin-bottom: 6rem;
+}
+
+.roadmap-header h1 {
+    font-size: 4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 1rem;
+}
+
+.roadmap-header p {
+    font-size: 1.25rem;
+    color: #666;
+    font-weight: 300;
+}
+
+.stages-container {
+    display: grid;
+    gap: 3rem;
+}
+
+.roadmap-stage {
+    background: #fff;
+    border-radius: 1rem;
+    padding: 2.5rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 1px solid #eaeaea;
+}
+
+.roadmap-stage:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+}
+
+.stage-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.stage-header h2 {
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.stage-number {
+    font-size: 1.5rem;
+    color: #999;
+    font-weight: 300;
+}
+
+.stage-description {
+    color: #666;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.features-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background: #f8f8f8;
+    transition: all 0.2s ease;
+}
+
+.feature-item:hover {
+    background: #f0f0f0;
+}
+
+.feature-text {
+    font-size: 1rem;
+}
+
+.priority-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #007AFF;
+}
+
+.status-legend {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.legend-item {
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: #666;
+}
+
+.legend-item.completed {
+    color: #4CAF50;
+}
+
+.legend-item.in-progress {
+    color: #FFA500;
+}
+
+.legend-item.planned {
+    color: #909090;
+}

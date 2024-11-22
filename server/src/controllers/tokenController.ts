@@ -10,8 +10,7 @@ export const tokenController = {
         try {
             await client.query('BEGIN')
 
-            logger.info('Creating token with data:', JSON.stringify(req.body, null, 2))
-
+            // Validate required fields
             const {
                 mint_address,
                 name,
@@ -22,6 +21,57 @@ export const tokenController = {
                 metadata,
                 bondingCurveConfig
             } = req.body
+
+            // Add detailed validation
+            if (!mint_address) {
+                throw new AppError('Missing mint address', 400);
+            }
+            if (!name || !symbol) {
+                throw new AppError('Missing required token information (name or symbol)', 400);
+            }
+            if (!metadata?.bondingCurveATA) {
+                throw new AppError('Missing bonding curve ATA in metadata', 400);
+            }
+            if (!bondingCurveConfig) {
+                throw new AppError('Missing bonding curve configuration', 400);
+            }
+
+            // Add validation for required bonding curve parameters
+            if (!bondingCurveConfig.curveType || !bondingCurveConfig.basePrice) {
+                throw new AppError('Missing required bonding curve parameters', 400);
+            }
+
+            // Validate curve-specific parameters
+            switch (bondingCurveConfig.curveType) {
+                case 'linear':
+                    if (typeof bondingCurveConfig.slope !== 'number') {
+                        throw new AppError('Linear curve requires slope parameter', 400);
+                    }
+                    break;
+                case 'exponential':
+                    if (typeof bondingCurveConfig.exponent !== 'number') {
+                        throw new AppError('Exponential curve requires exponent parameter', 400);
+                    }
+                    break;
+                case 'logarithmic':
+                    if (typeof bondingCurveConfig.logBase !== 'number') {
+                        throw new AppError('Logarithmic curve requires logBase parameter', 400);
+                    }
+                    break;
+                default:
+                    throw new AppError('Invalid curve type', 400);
+            }
+
+            logger.info('Creating token with data:', JSON.stringify({
+                mint_address,
+                name,
+                symbol,
+                description,
+                total_supply,
+                creator,
+                metadata,
+                bondingCurveConfig
+            }, null, 2));
 
             // Check if token exists
             const existingToken = await client.query(
@@ -51,8 +101,8 @@ export const tokenController = {
             // Insert the token
             const result = await client.query(
                 `INSERT INTO token_platform.tokens 
-                (mint_address, name, symbol, description, total_supply, creator_id, metadata, bonding_curve_config, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+                (mint_address, name, symbol, description, total_supply, creator_id, metadata, bonding_curve_config)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING *`,
                 [
                     mint_address,
