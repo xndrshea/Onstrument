@@ -1,24 +1,18 @@
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { TokenData } from './tokenService';
+import { CurveType, TokenBondingCurveConfig } from '../../shared/types/token';
+import { PublicKey, Connection, SystemProgram, LAMPORTS_PER_SOL, TransactionInstruction } from '@solana/web3.js';
+import { createTransferInstruction, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { bondingCurveManager } from './bondingCurveManager';
 
-export enum CurveType {
-    LINEAR = 'linear',
-    EXPONENTIAL = 'exponential',
-    LOGARITHMIC = 'logarithmic'
-}
-
-interface BondingCurveConfig {
-    curveType: CurveType;
-    basePrice: number;
-    slope?: number;        // For linear curve
-    exponent?: number;     // For exponential curve
-    logBase?: number;      // For logarithmic curve
+interface BondingCurveConfig extends TokenBondingCurveConfig {
     totalSupply: number;
+    bondingCurveAddress: string;
+    bondingCurveATA: string;
+    mintAddress: string;
 }
 
 interface PriceCalculationParams {
-    currentSupply: number;    // Current circulating supply
-    solReserves: number;      // Current SOL reserves
+    connection: Connection;
     amount: number;           // Amount being traded
     isSelling?: boolean;      // Trade direction
 }
@@ -29,12 +23,24 @@ interface PriceCalculationResult {
     priceImpact: number;
 }
 
+interface BuyInstructionsParams {
+    buyer: PublicKey;
+    amount: number;
+    userATA: PublicKey;
+    connection: Connection;
+}
+
+interface SellInstructionsParams {
+    seller: PublicKey;
+    amount: number;
+    userATA: PublicKey;
+    connection: Connection;
+}
+
 export class BondingCurve {
     private config: BondingCurveConfig;
 
     constructor(config: BondingCurveConfig) {
-        console.log('Initializing bonding curve with config:', config);
-
         // Validate required fields
         if (!config.curveType) {
             throw new Error('Curve type is required');
@@ -44,23 +50,27 @@ export class BondingCurve {
             throw new Error('Base price must be a positive number');
         }
 
+        if (!config.bondingCurveAddress) {
+            throw new Error('Bonding curve address is required');
+        }
+
         // Set defaults for optional parameters based on curve type
         switch (config.curveType) {
             case CurveType.LINEAR:
                 if (typeof config.slope !== 'number') {
-                    config.slope = 0.0000001; // Much smaller default slope
+                    config.slope = 0.0000001;
                 }
                 break;
 
             case CurveType.EXPONENTIAL:
                 if (typeof config.exponent !== 'number') {
-                    config.exponent = 2; // Default exponent
+                    config.exponent = 2;
                 }
                 break;
 
             case CurveType.LOGARITHMIC:
                 if (typeof config.logBase !== 'number') {
-                    config.logBase = Math.E; // Default to natural log
+                    config.logBase = Math.E;
                 }
                 break;
         }
@@ -68,108 +78,79 @@ export class BondingCurve {
         this.config = config;
     }
 
-    calculatePrice({ currentSupply, solReserves, amount, isSelling = false }: PriceCalculationParams): PriceCalculationResult {
+    async calculatePrice({
+        connection,
+        amount,
+        isSelling = false
+    }: PriceCalculationParams): Promise<PriceCalculationResult> {
         try {
-            // Normalize inputs with safety bounds
-            currentSupply = Math.max(0, Math.min(currentSupply, this.config.totalSupply || 1e9));
-            // Use amount = 1 as default for spot price calculation when amount is 0/undefined
             const calculationAmount = (!amount || amount <= 0) ? 1 : amount;
-            solReserves = Math.max(0, Math.min(solReserves, 1e9));
 
-            // Calculate base price from curve with error handling
-            const basePriceAtCurrentSupply = this.calculateBaseCurvePrice(currentSupply);
-            if (!isFinite(basePriceAtCurrentSupply)) {
-                console.error('Invalid base price calculation result');
-                return {
-                    spotPrice: this.config.basePrice,
-                    totalCost: !amount || amount <= 0 ? 0 : this.config.basePrice * amount,
-                    priceImpact: 0
-                };
-            }
+            // Get current token supply and SOL price
+            const tokenBalance = await connection.getTokenAccountBalance(
+                new PublicKey(this.config.bondingCurveATA)
+            );
+            const currentSupply = Number(tokenBalance.value.amount) / Math.pow(10, 9);
+            const totalSupply = this.config.totalSupply;
 
-            // Calculate reserve multiplier with safety bounds
-            const reserveRatio = currentSupply > 0 ? solReserves / currentSupply : 0;
-            const reserveMultiplier = currentSupply > 0 ?
-                Math.min(1 + Math.log(1 + Math.min(reserveRatio, 1e6)), 10) : 1;
+            // Calculate supply ratio based on remaining supply for buys, total supply for sells
+            const supplyRatio = isSelling ?
+                (currentSupply + calculationAmount) / totalSupply :
+                currentSupply / totalSupply;
 
-            const spotPrice = Math.min(basePriceAtCurrentSupply * reserveMultiplier, 1e9);
-
-            // Calculate total cost and price impact
-            const direction = isSelling ? -1 : 1;
-            const totalCost = !amount || amount <= 0 ? 0 :
-                Math.min(calculationAmount * spotPrice * direction, 1e9);
-            const priceImpact = calculationAmount / (this.config.totalSupply || 1e9);
-
-            return {
-                spotPrice: Math.max(spotPrice, this.config.basePrice),
-                totalCost: !amount || amount <= 0 ? 0 : Math.abs(totalCost),
-                priceImpact: Math.min(priceImpact, 1)
-            };
-        } catch (error) {
-            console.error('Error in price calculation:', error);
-            return {
-                spotPrice: this.config.basePrice,
-                totalCost: !amount || amount <= 0 ? 0 : this.config.basePrice * amount,
-                priceImpact: 0
-            };
-        }
-    }
-
-    private calculateBaseCurvePrice(currentSupply: number): number {
-        if (currentSupply === 0) {
-            return this.config.basePrice;
-        }
-
-        // Add safety check for totalSupply
-        if (!this.config.totalSupply || this.config.totalSupply <= 0) {
-            return this.config.basePrice;
-        }
-
-        // Ensure currentSupply doesn't exceed totalSupply
-        currentSupply = Math.min(currentSupply, this.config.totalSupply);
-
-        const remainingSupplyPercentage = (this.config.totalSupply - currentSupply) / this.config.totalSupply;
-
-        try {
+            // Calculate base spot price based on curve type
+            let spotPrice: number;
             switch (this.config.curveType) {
                 case CurveType.LINEAR:
-                    if (!this.config.slope) throw new Error('Slope required for linear curve');
-                    return this.config.basePrice * (1 + (this.config.slope * remainingSupplyPercentage));
+                    // P = P0 + (k * x)
+                    spotPrice = this.config.basePrice + (this.config.slope! * supplyRatio);
+                    break;
 
                 case CurveType.EXPONENTIAL:
-                    if (!this.config.exponent) throw new Error('Exponent required for exponential curve');
-                    // Add safety bounds for exponential calculation
-                    const base = Math.min(1 + remainingSupplyPercentage, 100); // Prevent excessive growth
-                    const exponent = Math.min(this.config.exponent, 10); // Limit maximum exponent
-                    return this.config.basePrice * Math.pow(base, exponent);
+                    // P = P0 * e^(k*x)
+                    spotPrice = this.config.basePrice * Math.exp(this.config.exponent! * supplyRatio);
+                    break;
 
                 case CurveType.LOGARITHMIC:
-                    if (!this.config.logBase) throw new Error('Log base required for logarithmic curve');
-                    return this.config.basePrice * (1 + Math.log(1 + remainingSupplyPercentage) / Math.log(this.config.logBase));
+                    // P = P0 * ln(1 + k*x)
+                    spotPrice = this.config.basePrice * Math.log1p(this.config.logBase! * supplyRatio);
+                    break;
 
                 default:
-                    throw new Error('Invalid curve type');
+                    throw new Error('Unsupported curve type');
             }
-        } catch (error) {
-            console.error('Error in price calculation:', error);
-            return this.config.basePrice; // Fallback to base price on error
-        }
-    }
 
-    // Helper method to get price at different supply levels (useful for UI visualization)
-    getPricePoints(maxSupply: number, points: number = 10): Array<{ supply: number; price: number }> {
-        const result = [];
-        for (let i = 0; i <= points; i++) {
-            const supply = (maxSupply * i) / points;
-            const price = this.calculateBaseCurvePrice(supply);
-            result.push({ supply, price });
+            // Calculate price impact - more sophisticated based on curve type
+            const priceImpact = calculatePriceImpact(
+                calculationAmount,
+                currentSupply,
+                totalSupply,
+                this.config.curveType,
+                isSelling
+            );
+
+            // Apply slippage protection
+            const slippageMultiplier = isSelling ? 0.98 : 1.02; // 2% slippage
+            const adjustedSpotPrice = spotPrice * slippageMultiplier;
+
+            // Calculate total cost with price impact
+            const impactMultiplier = 1 + (priceImpact / 100);
+            const totalCost = adjustedSpotPrice * calculationAmount * impactMultiplier;
+
+            return {
+                spotPrice: adjustedSpotPrice,
+                totalCost,
+                priceImpact
+            };
+        } catch (error) {
+            console.error('Error calculating price:', error);
+            throw error;
         }
-        return result;
     }
 
     static fromToken(token: TokenData): BondingCurve {
-        if (!token.bonding_curve_config) {
-            throw new Error('Token missing bonding curve configuration');
+        if (!token.bonding_curve_config || !token.metadata?.bondingCurveAddress) {
+            throw new Error('Token missing bonding curve configuration or address');
         }
 
         return new BondingCurve({
@@ -178,31 +159,122 @@ export class BondingCurve {
             slope: token.bonding_curve_config.slope,
             exponent: token.bonding_curve_config.exponent,
             logBase: token.bonding_curve_config.logBase,
-            totalSupply: token.metadata.totalSupply || 0
+            totalSupply: token.metadata.totalSupply || 0,
+            bondingCurveAddress: token.metadata.bondingCurveAddress,
+            bondingCurveATA: token.metadata.bondingCurveATA,
+            mintAddress: token.mint_address
         });
     }
 
-    calculateSpotPrice(token: TokenData): number {
-        return this.calculatePrice({
-            currentSupply: token.metadata.currentSupply / 1e9,
-            solReserves: token.metadata.solReserves,
-            amount: 1,
-            isSelling: false
-        }).spotPrice;
+    getBondingCurveAddress(): string {
+        return this.config.bondingCurveAddress;
     }
 
-    calculateMarketCap(token: TokenData): number {
-        const spotPrice = this.calculateSpotPrice(token);
-        return spotPrice * (token.metadata.totalSupply / 1e9);
+    async getBuyInstructions({
+        buyer,
+        amount,
+        userATA,
+        connection
+    }: BuyInstructionsParams): Promise<TransactionInstruction[]> {
+        const bondingCurvePDA = await bondingCurveManager.getBondingCurvePDA(
+            this.config.mintAddress
+        );
+
+        const bondingCurveATA = await getAssociatedTokenAddress(
+            new PublicKey(this.config.mintAddress),
+            bondingCurvePDA,
+            true
+        );
+
+        const { totalCost: price } = await this.calculatePrice({
+            connection,
+            amount,
+            isSelling: false
+        });
+
+        const lamports = BigInt(Math.round(price * LAMPORTS_PER_SOL));
+        const tokenAmount = BigInt(Math.round(amount * Math.pow(10, 9)));
+
+        // Create instructions array with proper token transfer metadata
+        return [
+            SystemProgram.transfer({
+                fromPubkey: buyer,
+                toPubkey: bondingCurvePDA,
+                lamports
+            }),
+            createTransferInstruction(
+                bondingCurveATA,  // from
+                userATA,          // to
+                bondingCurvePDA,  // authority
+                tokenAmount,      // amount
+                [],              // multiSigners
+                TOKEN_PROGRAM_ID  // programId
+            )
+        ];
     }
 
-    // Add a method to get current spot price without a trade
-    getCurrentPrice(currentSupply: number, solReserves: number): number {
-        return this.calculatePrice({
-            currentSupply,
-            solReserves,
-            amount: 1,
-            isSelling: false
-        }).spotPrice;
+    async getSellInstructions({
+        seller,
+        amount,
+        userATA,
+        connection
+    }: SellInstructionsParams): Promise<TransactionInstruction[]> {
+        const masterKeypair = bondingCurveManager.getMasterKeypair();
+        const bondingCurvePDA = await bondingCurveManager.getBondingCurvePDA(
+            this.config.mintAddress
+        );
+
+        const bondingCurveATA = await getAssociatedTokenAddress(
+            new PublicKey(this.config.mintAddress),
+            bondingCurvePDA,
+            true
+        );
+
+        const { totalCost: price } = await this.calculatePrice({
+            connection,
+            amount,
+            isSelling: true
+        });
+
+        const instructions: TransactionInstruction[] = [
+            // Transfer tokens from seller to bonding curve ATA
+            createTransferInstruction(
+                userATA,
+                bondingCurveATA,
+                seller,
+                BigInt(Math.floor(amount * Math.pow(10, 9)))
+            ),
+
+            // Transfer SOL from bonding curve PDA to seller
+            SystemProgram.transfer({
+                fromPubkey: bondingCurvePDA,
+                toPubkey: seller,
+                lamports: price
+            })
+        ];
+
+        return instructions;
+    }
+}
+
+// Helper function for price impact calculation
+function calculatePriceImpact(
+    amount: number,
+    currentSupply: number,
+    totalSupply: number,
+    curveType: CurveType,
+    isSelling: boolean
+): number {
+    const baseImpact = (amount / totalSupply) * 100;
+
+    switch (curveType) {
+        case CurveType.LINEAR:
+            return baseImpact;
+        case CurveType.EXPONENTIAL:
+            return baseImpact * 1.5; // Higher impact for exponential curves
+        case CurveType.LOGARITHMIC:
+            return baseImpact * 0.75; // Lower impact for logarithmic curves
+        default:
+            return baseImpact;
     }
 }

@@ -12,7 +12,7 @@
         "db:migrate": "ts-node -P server/tsconfig.json server/src/utils/dbMigration.ts",
         "db:clear": "ts-node -P server/tsconfig.json server/src/scripts/clearDatabase.ts",
         "reinit-db": "ts-node src/scripts/reinitializeDb.ts",
-        "db:init": "ts-node server/src/scripts/initializeDb.ts",
+        "db:init": "ts-node -P server/tsconfig.json server/src/scripts/initDatabase.ts",
         "cleanup-schema": "ts-node -P server/tsconfig.json server/src/scripts/cleanupSchema.ts"
     },
     "dependencies": {

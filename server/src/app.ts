@@ -6,6 +6,7 @@ import { tokenRoutes } from './routes/tokenRoutes'
 import { logger } from './utils/logger'
 import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
+import apiRouter from './routes/api';
 
 dotenv.config()
 
@@ -43,6 +44,7 @@ app.use(express.json())
 
 // Routes - mount at root level since routes include full paths
 app.use('/api', tokenRoutes)
+app.use('/api', apiRouter)
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

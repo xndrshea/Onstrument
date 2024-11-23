@@ -25,17 +25,13 @@ CREATE TABLE token_platform.tokens (
     total_supply BIGINT NOT NULL,
     creator_id INTEGER REFERENCES token_platform.users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    metadata JSONB DEFAULT '{
-        "currentSupply": 0,
-        "solReserves": 0,
-        "bondingCurveATA": null,
-        "image_url": ""
-    }'::jsonb NOT NULL,
-    bonding_curve_config JSONB DEFAULT '{
-        "curveType": "linear",
-        "basePrice": 0.0001,
-        "slope": 0.1
-    }'::jsonb NOT NULL
+    metadata JSONB NOT NULL,
+    bonding_curve_config JSONB NOT NULL,
+    CONSTRAINT valid_metadata CHECK (
+        metadata ? 'bondingCurveATA' AND
+        metadata ? 'currentSupply' AND
+        metadata ? 'solReserves'
+    )
 );
 
 -- Add any necessary indexes

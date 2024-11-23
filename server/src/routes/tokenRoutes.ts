@@ -1,6 +1,6 @@
 import express from 'express';
-import { tokenController } from '../controllers/tokenController';
 import { validateToken } from '../middleware/validation';
+import { tokenController } from '../controllers/tokenController';
 
 const router = express.Router();
 

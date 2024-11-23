@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { AppError } from './errorHandler'
 import { logger } from '../utils/logger'
+import { validateBondingCurveConfig, BondingCurveValidationError } from '../../../shared/utils/bondingCurveValidator'
 
 export const validateToken = (req: Request, _res: Response, next: NextFunction) => {
     const { mint_address, name, symbol, total_supply, metadata, bondingCurveConfig } = req.body
@@ -59,53 +60,15 @@ export const validateToken = (req: Request, _res: Response, next: NextFunction) 
     // Bonding curve config validation
     if (bondingCurveConfig) {
         try {
-            const parsedConfig = typeof bondingCurveConfig === 'string' ?
-                JSON.parse(bondingCurveConfig) : bondingCurveConfig;
-
-            if (!parsedConfig || typeof parsedConfig !== 'object') {
-                return next(new AppError('Invalid bonding curve configuration format', 400));
-            }
-
-            const { curveType, basePrice } = parsedConfig;
-
-            // Validate required fields exist
-            if (!curveType || !basePrice) {
-                logger.error('Missing bonding curve parameters:', parsedConfig);
-                return next(new AppError('Missing required bonding curve parameters', 400));
-            }
-
-            // Validate field types
-            if (typeof basePrice !== 'number' || basePrice <= 0 || !Number.isFinite(basePrice)) {
-                return next(new AppError('Base price must be a positive finite number', 400));
-            }
-
-            // Validate curve-specific parameters
-            switch (curveType) {
-                case 'linear':
-                    if (typeof parsedConfig.slope !== 'number' || !Number.isFinite(parsedConfig.slope)) {
-                        return next(new AppError('Linear curve requires valid slope parameter', 400));
-                    }
-                    break;
-                case 'exponential':
-                    if (typeof parsedConfig.exponent !== 'number' || !Number.isFinite(parsedConfig.exponent)) {
-                        return next(new AppError('Exponential curve requires valid exponent parameter', 400));
-                    }
-                    break;
-                case 'logarithmic':
-                    if (typeof parsedConfig.logBase !== 'number' || parsedConfig.logBase <= 1 || !Number.isFinite(parsedConfig.logBase)) {
-                        return next(new AppError('Logarithmic curve requires valid logBase parameter greater than 1', 400));
-                    }
-                    break;
-                default:
-                    return next(new AppError('Invalid curve type', 400));
-            }
+            validateBondingCurveConfig(bondingCurveConfig);
+            next();
         } catch (error) {
-            logger.error('Bonding curve config parsing error:', error);
-            return next(new AppError('Invalid bondingCurveConfig format', 400));
+            if (error instanceof BondingCurveValidationError) {
+                return next(new AppError(error.message, 400));
+            }
+            next(error);
         }
     } else {
         return next(new AppError('Missing bonding curve configuration', 400));
     }
-
-    next()
 } 

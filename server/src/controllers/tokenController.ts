@@ -1,172 +1,65 @@
 import { Request, Response, NextFunction } from 'express'
-import { TokenModel } from '../models/Token'
-import { AppError } from '../middleware/errorHandler'
-import { logger } from '../utils/logger'
 import { pool } from '../config/database'
+import { getTokens as getTokensModel, createToken as createTokenModel, getToken as getTokenModel } from '../models/tokenModel'
 
-export const tokenController = {
-    async createToken(req: Request, res: Response, next: NextFunction) {
-        const client = await pool.connect()
+class TokenController {
+    getTokens = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            await client.query('BEGIN')
-
-            // Validate required fields
-            const {
-                mint_address,
-                name,
-                symbol,
-                description,
-                total_supply,
-                creator,
-                metadata,
-                bondingCurveConfig
-            } = req.body
-
-            // Add detailed validation
-            if (!mint_address) {
-                throw new AppError('Missing mint address', 400);
-            }
-            if (!name || !symbol) {
-                throw new AppError('Missing required token information (name or symbol)', 400);
-            }
-            if (!metadata?.bondingCurveATA) {
-                throw new AppError('Missing bonding curve ATA in metadata', 400);
-            }
-            if (!bondingCurveConfig) {
-                throw new AppError('Missing bonding curve configuration', 400);
-            }
-
-            // Add validation for required bonding curve parameters
-            if (!bondingCurveConfig.curveType || !bondingCurveConfig.basePrice) {
-                throw new AppError('Missing required bonding curve parameters', 400);
-            }
-
-            // Validate curve-specific parameters
-            switch (bondingCurveConfig.curveType) {
-                case 'linear':
-                    if (typeof bondingCurveConfig.slope !== 'number') {
-                        throw new AppError('Linear curve requires slope parameter', 400);
-                    }
-                    break;
-                case 'exponential':
-                    if (typeof bondingCurveConfig.exponent !== 'number') {
-                        throw new AppError('Exponential curve requires exponent parameter', 400);
-                    }
-                    break;
-                case 'logarithmic':
-                    if (typeof bondingCurveConfig.logBase !== 'number') {
-                        throw new AppError('Logarithmic curve requires logBase parameter', 400);
-                    }
-                    break;
-                default:
-                    throw new AppError('Invalid curve type', 400);
-            }
-
-            logger.info('Creating token with data:', JSON.stringify({
-                mint_address,
-                name,
-                symbol,
-                description,
-                total_supply,
-                creator,
-                metadata,
-                bondingCurveConfig
-            }, null, 2));
-
-            // Check if token exists
-            const existingToken = await client.query(
-                'SELECT * FROM token_platform.tokens WHERE mint_address = $1',
-                [mint_address]
-            )
-
-            if (existingToken.rows[0]) {
-                await client.query('COMMIT')
-                logger.info(`Token ${mint_address} already exists, returning existing token`)
-                return res.status(200).json(existingToken.rows[0])
-            }
-
-            // Create or get creator_id
-            let creator_id = null
-            if (creator) {
-                const userResult = await client.query(
-                    `INSERT INTO token_platform.users (wallet_address)
-                     VALUES ($1)
-                     ON CONFLICT (wallet_address) DO UPDATE SET last_login = CURRENT_TIMESTAMP
-                     RETURNING id`,
-                    [creator]
-                )
-                creator_id = userResult.rows[0].id
-            }
-
-            // Insert the token
-            const result = await client.query(
-                `INSERT INTO token_platform.tokens 
-                (mint_address, name, symbol, description, total_supply, creator_id, metadata, bonding_curve_config)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                RETURNING *`,
-                [
-                    mint_address,
-                    name,
-                    symbol,
-                    description || '',
-                    total_supply,
-                    creator_id,
-                    JSON.stringify(metadata),
-                    JSON.stringify(bondingCurveConfig)
-                ]
-            )
-
-            await client.query('COMMIT')
-
-            // Format the response
-            const createdToken = {
-                ...result.rows[0],
-                metadata: typeof result.rows[0].metadata === 'string' ?
-                    JSON.parse(result.rows[0].metadata) : result.rows[0].metadata,
-                bondingCurveConfig: typeof result.rows[0].bonding_curve_config === 'string' ?
-                    JSON.parse(result.rows[0].bonding_curve_config) : result.rows[0].bonding_curve_config
-            }
-
-            logger.info('Token created successfully:', createdToken)
-            res.status(201).json(createdToken)
-
-        } catch (error: any) {
-            await client.query('ROLLBACK')
-            logger.error('Error creating token:', error)
-
-            if (error instanceof AppError) {
-                next(error)
-            } else if (error instanceof SyntaxError) {
-                next(new AppError('Invalid JSON in metadata or bondingCurveConfig', 400))
-            } else if (error.code === '23505') {
-                next(new AppError('Token already exists', 409))
-            } else {
-                next(new AppError(`Failed to create token: ${error.message}`, 400))
-            }
-        } finally {
-            client.release()
-        }
-    },
-
-    async getTokens(_req: Request, res: Response, next: NextFunction) {
-        try {
-            const tokens = await TokenModel.findAll()
+            const tokens = await getTokensModel()
             res.json(tokens)
         } catch (error) {
-            logger.error('Error fetching tokens:', error)
-            next(new AppError('Failed to fetch tokens', 400))
+            next(error)
         }
-    },
+    }
 
-    async getToken(req: Request, res: Response, next: NextFunction) {
+    getToken = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const token = await TokenModel.findOne(req.params.mint)
+            const { mint } = req.params
+            const token = await getTokenModel(mint)
             if (!token) {
-                throw new AppError('Token not found', 404)
+                res.status(404).json({ message: 'Token not found' })
+                return
             }
             res.json(token)
         } catch (error) {
             next(error)
         }
     }
-} 
+
+    createToken = async (req: Request, res: Response, next: NextFunction) => {
+        const client = await pool.connect()
+        try {
+            await client.query('BEGIN')
+
+            const {
+                mint_address,
+                name,
+                symbol,
+                description,
+                total_supply,
+                metadata,
+                bondingCurveConfig
+            } = req.body
+
+            const token = await createTokenModel({
+                mint_address,
+                name,
+                symbol,
+                description,
+                total_supply,
+                metadata,
+                bonding_curve_config: bondingCurveConfig
+            })
+
+            await client.query('COMMIT')
+            res.status(201).json(token)
+        } catch (error) {
+            await client.query('ROLLBACK')
+            next(error)
+        } finally {
+            client.release()
+        }
+    }
+}
+
+export const tokenController = new TokenController() 

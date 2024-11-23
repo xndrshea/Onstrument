@@ -39,3 +39,29 @@ A decentralized trading platform for Solana tokens using customizable bonding cu
 ### Bonding Curve Mechanics
 
 </file>
+
+
+
+
+
+First, the token creation:
+tokenCreation.ts
+}
+And here's the trading functionality:
+bondingCurve.ts
+}
+And finally, the transaction execution in your UI component:
+TradingInterface.tsx
+}
+Key changes made:
+Using PDAs instead of generated keypairs
+Master keypair signs all transactions
+PDAs own the token accounts and SOL
+Proper authority delegation through PDAs
+Simplified transaction signing flow
+This structure ensures:
+One master authority controlling all bonding curves
+Deterministic addresses for all bonding curve accounts
+Proper separation of funds between different tokens
+Secure authority delegation through PDAs
+Let me know if you need any clarification or have questions about specific parts of the implementation!

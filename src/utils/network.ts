@@ -1,5 +1,4 @@
-import { Connection, clusterApiUrl } from '@solana/web3.js'
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
+import { Connection } from '@solana/web3.js'
 
 export async function verifyDevnetConnection(connection: Connection): Promise<boolean> {
     try {
@@ -9,14 +8,7 @@ export async function verifyDevnetConnection(connection: Connection): Promise<bo
         // Get cluster info to verify we're on devnet
         const genesisHash = await connection.getGenesisHash();
         const clusterNodes = await connection.getClusterNodes();
-        const cluster = clusterNodes[0]?.rpcEndpoint || '';
-
-        console.log('Network verification details:', {
-            genesisHash,
-            cluster,
-            endpoint: connection.rpcEndpoint,
-            version
-        });
+        const cluster = clusterNodes[0]?.rpcUrl || '';
 
         // Check if we're on devnet by checking the cluster info
         const isDevnet = cluster?.includes('devnet') ||

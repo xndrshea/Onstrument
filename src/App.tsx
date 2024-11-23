@@ -36,9 +36,18 @@ function App() {
                     alignItems: 'center',
                     backgroundColor: '#232427'
                 }}>
-                    <Link to="/" style={{ textDecoration: 'none' }}>
-                        <h1 style={{ color: 'white', cursor: 'pointer' }}>Solana Token Launchpad</h1>
-                    </Link>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+                        <Link to="/" style={{ textDecoration: 'none' }}>
+                            <h1 style={{ color: 'white', cursor: 'pointer' }}>Solana Token Launchpad</h1>
+                        </Link>
+                        <Link to="/roadmap" style={{
+                            textDecoration: 'none',
+                            color: 'white',
+                            fontSize: '1rem'
+                        }}>
+                            Roadmap
+                        </Link>
+                    </div>
                     <WalletMultiButton />
                 </nav>
 

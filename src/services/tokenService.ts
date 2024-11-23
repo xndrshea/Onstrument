@@ -1,31 +1,7 @@
-import { PublicKey } from '@solana/web3.js'
 import axios, { AxiosInstance } from 'axios'
+import { Token, TokenMetadata, TokenBondingCurveConfig } from '../../shared/types/token';
 
-export interface TokenBondingCurveConfig {
-    curveType: 'linear' | 'exponential' | 'logarithmic';
-    basePrice: number;
-    slope?: number;
-    exponent?: number;
-    logBase?: number;
-}
-
-export interface TokenMetadata {
-    currentSupply: number;
-    solReserves: number;
-    bondingCurveATA: string;
-    [key: string]: any; // Allow for additional metadata fields
-}
-
-export interface TokenData {
-    id?: number;
-    mint_address: string;
-    name: string;
-    symbol: string;
-    description?: string;
-    metadata: TokenMetadata;
-    bonding_curve_config: TokenBondingCurveConfig;
-    created_at?: string;
-}
+export interface TokenData extends Token { }
 
 export interface TokenCreationData {
     mint_address: string;
@@ -35,16 +11,8 @@ export interface TokenCreationData {
     creator?: string;
     total_supply: number;
     network?: string;
-    metadata: {
-        bondingCurveATA: string;
-    };
-    bondingCurveConfig: {
-        curveType: string;
-        basePrice: number;
-        slope?: number;
-        exponent?: number;
-        logBase?: number;
-    };
+    metadata: TokenMetadata;
+    bondingCurveConfig: TokenBondingCurveConfig;
 }
 
 export class TokenService {
@@ -111,22 +79,6 @@ export class TokenService {
         } catch (error) {
             console.error('Error fetching tokens:', error);
             throw error;
-        }
-    }
-
-    async updateTokenReserves(mintAddress: string, solReserves: number): Promise<{ success: boolean; localOnly?: boolean }> {
-        try {
-            const response = await this.api.put(`/api/tokens/${mintAddress}/reserves`, { solReserves });
-
-            if (!response.ok) {
-                console.warn('Failed to update token reserves on server');
-                return { success: true, localOnly: true };
-            }
-
-            return { success: true };
-        } catch (error) {
-            console.warn('Error updating token reserves:', error);
-            return { success: true, localOnly: true };
         }
     }
 }

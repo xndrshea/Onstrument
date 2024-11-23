@@ -3,14 +3,16 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { tokenService, TokenData } from '../../services/tokenService'
 import { addTokenToWallet, getManualTokenAddInstructions } from '../../utils/tokenCreation'
 import { TradingInterface } from '../Trading/TradingInterface'
-import { getMint } from '@solana/spl-token'
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { BondingCurve, CurveType } from '../../services/bondingCurve';
-import { formatMarketCap } from '../../utils/formatting';
+import { PublicKey } from '@solana/web3.js';
 
 interface TokenListProps {
     onCreateClick: () => void
 }
+
+// Add these constants at the top of the file, outside the component
+const RAYDIUM_SOL_USDC_POOL = new PublicKey('58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2');
+const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+const SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 
 export function TokenList({ onCreateClick }: TokenListProps) {
     const { connection } = useConnection()
@@ -19,7 +21,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
-    const [solanaPrice, setSolanaPrice] = useState<number>(63.25)
+    const [solanaPrice, setSolanaPrice] = useState<number>(0)
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
 
     // Function to refresh the token list
@@ -42,7 +44,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             setIsLoading(true);
             try {
                 const tokens = await tokenService.getAllTokens();
-                console.log('Raw fetched tokens:', tokens);
+
 
                 if (!Array.isArray(tokens)) {
                     console.error('Invalid tokens data received:', tokens);
@@ -69,7 +71,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                         JSON.parse(token.metadata) : token.metadata
                 }));
 
-                console.log('Processed tokens:', validTokens);
                 setTokens(deduplicateTokens(validTokens));
                 setError(null);
             } catch (error) {
@@ -88,15 +89,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     useEffect(() => {
         const interval = setInterval(refreshTokens, 10000) // Change to 10 seconds
         return () => clearInterval(interval)
-    }, [])
-
-    const formatSupply = (supply: number): string => {
-        // Convert from raw units (with 9 decimals) to actual token amount
-        const actualSupply = supply / Math.pow(10, 9)
-        return actualSupply.toLocaleString(undefined, {
-            maximumFractionDigits: 2
-        })
-    }
+    }, []);
 
     const handleAddToWallet = async (mintAddress: string) => {
         if (!publicKey) {
@@ -115,40 +108,37 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         }
     };
 
-    // Add this useEffect to fetch Solana price
+    // Replace the existing SOL price fetching logic
     useEffect(() => {
         const fetchSolanaPrice = async () => {
             try {
-                const response = await fetch(`${import.meta.env.VITE_API_URL}/solana-price`);
 
-                if (!response.ok) {
-                    console.warn('Using default SOL price due to API error:', response.status);
-                    return; // Keep using default price
-                }
+                const response = await fetch('http://localhost:3001/api/solana-price', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
 
+                // Even if we hit rate limit, we'll get the last known price
                 const data = await response.json();
-                setSolanaPrice(data.solana.usd);
-                console.log('Fetched SOL price:', data.solana.usd);
+
+                setSolanaPrice(data.price);
             } catch (error) {
-                console.warn('Using default SOL price due to error:', error);
-                // Keep using default price
+                console.warn('Error fetching SOL price:', error);
+                // Keep the last known price instead of using fallback
             }
         };
 
         fetchSolanaPrice();
-        const interval = setInterval(fetchSolanaPrice, 60000); // Update every minute
+        const interval = setInterval(fetchSolanaPrice, 60_000); // Update every minute instead of 30 seconds
+
         return () => clearInterval(interval);
     }, []);
 
-    const calculateMarketCap = (token: TokenData): string => {
-        try {
-            const bondingCurve = BondingCurve.fromToken(token);
-            const marketCap = bondingCurve.calculateMarketCap(token);
-            return formatMarketCap(marketCap);
-        } catch (error) {
-            console.error('Error calculating market cap:', error);
-            return 'N/A';
-        }
+    const calculateMarketCap = (token: TokenData) => {
+
+        return 'N/A';
     };
 
     // Add this function to sort tokens

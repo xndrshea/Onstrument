@@ -1,18 +1,9 @@
 import React, { useState } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { createToken } from '../../utils/tokenCreation'
-import { tokenService } from '../../services/tokenService'
-import { ConfirmOptions } from '@solana/web3.js'
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
-import { clusterApiUrl } from '@solana/web3.js'
-import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Transaction } from '@solana/web3.js'
-import { Keypair } from '@solana/web3.js'
-import { getAssociatedTokenAddress } from '@solana/spl-token'
-import { getMint, getAccount } from '@solana/spl-token'
-import { Connection, PublicKey } from '@solana/web3.js'
-import bs58 from 'bs58';
-import { CurveType } from '../../services/bondingCurve';
+import { CurveType } from '../../../shared/types/token'
+import { TokenTransactionService } from '../../services/TokenTransactionService'
+import { validateBondingCurveConfig } from '../../../shared/utils/bondingCurveValidator'
 
 interface TokenFormData {
     name: string
@@ -34,7 +25,7 @@ interface TokenCreationFormProps {
 
 export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFormProps) {
     const { connection } = useConnection()
-    const { connected, publicKey, sendTransaction } = useWallet()
+    const { connected, publicKey, sendTransaction, signTransaction } = useWallet()
     const [formData, setFormData] = useState<TokenFormData>({
         name: '',
         symbol: '',
@@ -51,94 +42,59 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
     const [transactionStatus, setTransactionStatus] = useState<string>('')
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!publicKey) return
-
-        setIsCreating(true)
-        setTransactionStatus('Creating token...')
+        e.preventDefault();
+        if (!publicKey) return;
 
         try {
-            const network = connection.rpcEndpoint.includes('devnet') ? 'devnet' : 'mainnet'
+            // Validate bonding curve config before proceeding
+            validateBondingCurveConfig({
+                curveType: formData.curveType,
+                basePrice: Number(formData.basePrice),
+                slope: formData.curveType === CurveType.LINEAR ? Number(formData.slope) : undefined,
+                exponent: formData.curveType === CurveType.EXPONENTIAL ? Number(formData.exponent) : undefined,
+                logBase: formData.curveType === CurveType.LOGARITHMIC ? Number(formData.logBase) : undefined
+            });
 
-            // Create token on-chain first
-            const result = await createToken({
+            setIsCreating(true);
+            setTransactionStatus('Creating token...');
+
+            const tokenTransactionService = new TokenTransactionService(
                 connection,
-                wallet: {
+                {
                     publicKey,
                     sendTransaction: async (transaction: Transaction) => {
-                        const signature = await sendTransaction(transaction, connection)
-                        setTransactionStatus('Confirming transaction...')
+                        const signature = await sendTransaction(transaction, connection);
+                        setTransactionStatus('Confirming transaction...');
+                        return signature;
+                    },
+                    signTransaction: signTransaction!
+                }
+            );
 
-                        // Wait for confirmation
-                        const latestBlockhash = await connection.getLatestBlockhash()
-                        await connection.confirmTransaction({
-                            signature,
-                            ...latestBlockhash
-                        })
-                        return signature
-                    }
-                },
+            const result = await tokenTransactionService.createToken({
                 name: formData.name,
                 symbol: formData.symbol,
                 description: formData.description,
                 totalSupply: formData.supply,
                 bondingCurve: {
                     curveType: formData.curveType,
-                    basePrice: formData.basePrice,
-                    slope: formData.slope,
-                    exponent: formData.exponent,
-                    logBase: formData.logBase
-                }
-            })
-
-            // Create database entry after on-chain creation is confirmed
-            const payload = {
-                mint_address: result.mintKeypair.publicKey.toString(),
-                name: formData.name,
-                symbol: formData.symbol,
-                total_supply: formData.supply,
-                metadata: {
-                    description: formData.description,
-                    bondingCurveATA: result.bondingCurveATA
-                },
-                bondingCurveConfig: {
-                    curveType: formData.curveType,
                     basePrice: Number(formData.basePrice),
                     slope: formData.curveType === CurveType.LINEAR ? Number(formData.slope) : undefined,
                     exponent: formData.curveType === CurveType.EXPONENTIAL ? Number(formData.exponent) : undefined,
                     logBase: formData.curveType === CurveType.LOGARITHMIC ? Number(formData.logBase) : undefined
                 }
-            }
+            });
 
-            console.log('Submitting token creation with payload:', payload)
-            await tokenService.create(payload)
-
-            setTransactionStatus('Token created successfully!')
-            if (onSuccess) onSuccess()
-            if (onTokenCreated) onTokenCreated()
+            setTransactionStatus('Token created successfully!');
+            if (onSuccess) onSuccess();
+            if (onTokenCreated) onTokenCreated();
         } catch (error) {
-            console.error('Error creating token:', error)
-            setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`)
+            console.error('Error creating token:', error);
+            setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
         } finally {
-            setIsCreating(false)
+            setIsCreating(false);
         }
-    }
-
-    const resetForm = () => {
-        setFormData({
-            name: '',
-            symbol: '',
-            description: '',
-            image: null,
-            supply: 0,
-            curveType: CurveType.LINEAR,
-            basePrice: 0.0001,
-            slope: 0.1,
-            exponent: 2,
-            logBase: Math.E
-        })
-        setIsCreating(false)
-    }
+    };
 
     return (
         <div className="token-creation-form">

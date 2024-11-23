@@ -4,7 +4,6 @@ import {
     Transaction,
     SystemProgram,
     Keypair,
-    LAMPORTS_PER_SOL
 } from '@solana/web3.js'
 import {
     createInitializeMintInstruction,
@@ -12,20 +11,24 @@ import {
     createAssociatedTokenAccountInstruction,
     getAssociatedTokenAddress,
     createMintToInstruction,
-    createSetAuthorityInstruction,
-    AuthorityType,
     getAccount,
     getMint
 } from '@solana/spl-token'
-import bs58 from 'bs58'
-import { BONDING_CURVE_KEYPAIR } from '../config/constants';
-import { CurveType } from '../services/bondingCurve';
+import { CurveType, TokenMetadata, TokenBondingCurveConfig } from '../../shared/types/token';
+import { bondingCurveManager } from '../services/bondingCurveManager';
+
+// Add import for Window type definition
+/// <reference path="../types/global.d.ts" />
+
+// Add this constant
+const MINT_SIZE = 82;
 
 interface TokenCreationConfig {
     connection: Connection;
     wallet: {
         publicKey: PublicKey;
         sendTransaction: (transaction: Transaction) => Promise<string>;
+        signTransaction: (transaction: Transaction) => Promise<Transaction>;
     };
     name: string;
     symbol: string;
@@ -38,11 +41,7 @@ interface TokenCreationConfig {
         exponent?: number;
         logBase?: number;
     };
-}
-
-function serializeKeypair(keypair: Keypair): string {
-    return bs58.encode(keypair.secretKey);
-}
+};
 
 export async function createToken({
     connection,
@@ -52,91 +51,111 @@ export async function createToken({
     description,
     totalSupply,
     bondingCurve
-}: TokenCreationConfig) {
+}: TokenCreationConfig): Promise<{
+    transaction: Transaction;
+    signature: string;
+    mintKeypair: Keypair;
+    bondingCurveATA: string;
+    metadata: TokenMetadata;
+    bonding_curve_config: TokenBondingCurveConfig;
+}> {
     try {
         const mintKeypair = Keypair.generate();
-        const bondingCurveKeypair = BONDING_CURVE_KEYPAIR;
+        const masterKeypair = bondingCurveManager.getMasterKeypair();
 
-        // Get the bonding curve ATA
+        // Get the PDA for this token's bonding curve
+        const bondingCurvePDA = await bondingCurveManager.getBondingCurvePDA(
+            mintKeypair.publicKey.toString()
+        );
+
+        // Create the bonding curve ATA
         const bondingCurveATA = await getAssociatedTokenAddress(
             mintKeypair.publicKey,
-            bondingCurveKeypair.publicKey
+            bondingCurvePDA,
+            true // allowOwnerOffCurve = true for PDAs
         );
+
+        const lamports = await connection.getMinimumBalanceForRentExemption(
+            MINT_SIZE
+        );
+
+        const instructions = [
+            // Create mint account
+            SystemProgram.createAccount({
+                fromPubkey: wallet.publicKey,
+                newAccountPubkey: mintKeypair.publicKey,
+                space: MINT_SIZE,
+                lamports,
+                programId: TOKEN_PROGRAM_ID
+            }),
+
+            // Initialize mint
+            createInitializeMintInstruction(
+                mintKeypair.publicKey,
+                9,
+                masterKeypair.publicKey, // Master keypair is mint authority
+                masterKeypair.publicKey  // Master keypair is freeze authority
+            ),
+
+            // Create ATA for bonding curve PDA
+            createAssociatedTokenAccountInstruction(
+                wallet.publicKey,      // payer
+                bondingCurveATA,       // ata
+                bondingCurvePDA,       // owner (PDA)
+                mintKeypair.publicKey  // mint
+            ),
+
+            // Mint initial supply to bonding curve ATA
+            createMintToInstruction(
+                mintKeypair.publicKey,  // mint
+                bondingCurveATA,        // destination
+                masterKeypair.publicKey, // authority
+                BigInt(totalSupply * Math.pow(10, 9))
+            )
+        ];
 
         const transaction = new Transaction();
+        transaction.add(...instructions);
 
-        // Create mint account
-        const createMintAccountIx = SystemProgram.createAccount({
-            fromPubkey: wallet.publicKey,
-            newAccountPubkey: mintKeypair.publicKey,
-            space: 82,
-            lamports: await connection.getMinimumBalanceForRentExemption(82),
-            programId: TOKEN_PROGRAM_ID
-        });
+        try {
+            // Sign with both wallet and mint keypair
+            transaction.feePayer = wallet.publicKey;
+            transaction.recentBlockhash = (
+                await connection.getLatestBlockhash()
+            ).blockhash;
 
-        // Initialize mint
-        const initializeMintIx = createInitializeMintInstruction(
-            mintKeypair.publicKey,
-            9, // decimals
-            wallet.publicKey,
-            wallet.publicKey
-        );
+            // First, have the bonding curve manager sign
+            await bondingCurveManager.signTransaction(transaction);
 
-        // Create ATA for bonding curve
-        const createATAIx = createAssociatedTokenAccountInstruction(
-            wallet.publicKey,
-            bondingCurveATA,
-            bondingCurveKeypair.publicKey,
-            mintKeypair.publicKey
-        );
+            // Then sign with the mint keypair
+            transaction.partialSign(mintKeypair);
 
-        // Mint tokens to bonding curve ATA
-        const mintToIx = createMintToInstruction(
-            mintKeypair.publicKey,
-            bondingCurveATA,
-            wallet.publicKey,
-            BigInt(totalSupply * Math.pow(10, 9))  // Convert to smallest units
-        );
+            // Finally send the transaction through the wallet
+            const signature = await wallet.sendTransaction(transaction);
+            await connection.confirmTransaction(signature);
 
-        // Add all instructions in correct order
-        transaction.add(
-            createMintAccountIx,
-            initializeMintIx,
-            createATAIx,
-            mintToIx
-        );
-
-        // Get latest blockhash
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = wallet.publicKey;
-
-        // Sign with mint keypair
-        transaction.partialSign(mintKeypair);
-
-        // Send and confirm transaction
-        const signature = await wallet.sendTransaction(transaction);
-
-        return {
-            transaction,
-            signature,
-            mintKeypair,
-            bondingCurveATA: bondingCurveATA.toBase58(),
-            metadata: {
-                name,
-                symbol,
-                description,
-                initialSupply: totalSupply,
-                bondingCurveATA: bondingCurveATA.toString(),
-                bondingCurveConfig: {
+            return {
+                transaction,
+                signature,
+                mintKeypair,
+                bondingCurveATA: bondingCurveATA.toBase58(),
+                metadata: {
+                    bondingCurveATA: bondingCurveATA.toString(),
+                    bondingCurveAddress: bondingCurvePDA.toString(),
+                    totalSupply: totalSupply,
+                },
+                bonding_curve_config: {
                     curveType: bondingCurve.curveType,
                     basePrice: bondingCurve.basePrice,
                     slope: bondingCurve.slope,
                     exponent: bondingCurve.exponent,
                     logBase: bondingCurve.logBase
                 }
-            }
-        };
+            };
+        } catch (error) {
+            console.error('Error creating token:', error);
+            throw error;
+        }
     } catch (error) {
         console.error('Error in createToken:', error);
         throw error;
@@ -150,15 +169,10 @@ export async function addTokenToWallet(
 ): Promise<boolean> {
     try {
         console.log('Adding token to wallet:', mintAddress);
-
-        // Ensure we're working with a valid PublicKey for the mint
         const mintPubkey = new PublicKey(mintAddress);
-
-        // Get the token's metadata
         const tokenMint = await getMint(connection, mintPubkey);
-        console.log('Token mint data:', tokenMint);
 
-        // Check if window.solana exists and is Phantom
+        // TypeScript now knows about window.solana
         if (!window.solana?.isPhantom) {
             console.log('Phantom wallet not detected, showing manual instructions');
             alert(getManualTokenAddInstructions(mintAddress));
@@ -166,15 +180,13 @@ export async function addTokenToWallet(
         }
 
         try {
-            // Use Phantom's specific method for adding tokens
             await window.solana.request({
                 method: 'wallet_watchAsset',
                 params: {
-                    type: 'spl-token',  // Changed from 'SPL' to 'spl-token'
+                    type: 'spl-token',
                     options: {
-                        address: mintAddress,  // Use the string address directly
+                        address: mintAddress,
                         decimals: tokenMint.decimals,
-                        // These fields are optional but recommended
                         symbol: 'TOKEN',
                         name: 'Custom Token',
                         image: ''
@@ -182,11 +194,9 @@ export async function addTokenToWallet(
                 }
             });
 
-            console.log('Token successfully added to wallet');
             return true;
         } catch (phantomError) {
             console.warn('Phantom-specific method failed:', phantomError);
-
             // Alternative approach: Create ATA if it doesn't exist
             try {
                 const ata = await getAssociatedTokenAddress(
