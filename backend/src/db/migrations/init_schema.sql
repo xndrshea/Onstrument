@@ -15,6 +15,9 @@ CREATE TABLE token_platform.users (
     last_login TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create curve type enum
+CREATE TYPE token_platform.curve_type AS ENUM ('LINEAR', 'EXPONENTIAL', 'LOGARITHMIC');
+
 -- Create tokens table
 CREATE TABLE token_platform.tokens (
     id SERIAL PRIMARY KEY,
@@ -27,6 +30,11 @@ CREATE TABLE token_platform.tokens (
     decimals INTEGER NOT NULL DEFAULT 9,
     creator_id INTEGER REFERENCES token_platform.users(id),
     network VARCHAR(10) NOT NULL DEFAULT 'devnet',
+    curve_type token_platform.curve_type NOT NULL,
+    base_price NUMERIC(20,9) NOT NULL,
+    slope NUMERIC(20,9),
+    exponent NUMERIC(20,9),
+    log_base NUMERIC(20,9),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     CONSTRAINT valid_network CHECK (network IN ('mainnet', 'devnet'))

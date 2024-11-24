@@ -1,18 +1,22 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { tokenService, TokenData } from '../../services/tokenService'
-import { addTokenToWallet, getManualTokenAddInstructions } from '../../utils/tokenCreation'
+import { tokenService } from '../../services/tokenService'
 import { TradingInterface } from '../Trading/TradingInterface'
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js'
+import { TokenData } from '../../../shared/types/token'
+import { BondingCurve } from '../../services/bondingCurve'
 
 interface TokenListProps {
     onCreateClick: () => void
 }
 
-// Add these constants at the top of the file, outside the component
-const RAYDIUM_SOL_USDC_POOL = new PublicKey('58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2');
-const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-const SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+const RAYDIUM_SOL_USDC_POOL = new PublicKey('58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2')
+const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
+const SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
+
+const deduplicateTokens = (tokens: TokenData[]): TokenData[] => {
+    return Array.from(new Map(tokens.map(token => [token.mint_address, token])).values());
+};
 
 export function TokenList({ onCreateClick }: TokenListProps) {
     const { connection } = useConnection()
@@ -29,14 +33,25 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         setRefreshTrigger(prev => prev + 1)
     }
 
-    // Add a function to deduplicate tokens
-    const deduplicateTokens = (tokens: TokenData[]) => {
-        const seen = new Set();
-        return tokens.filter(token => {
-            const duplicate = seen.has(token.mint_address);
-            seen.add(token.mint_address);
-            return !duplicate;
-        });
+    const fetchOnChainData = async (token: TokenData) => {
+        try {
+            if (!token.mint_address || !token.curve_address) return token;
+
+            const curve = new BondingCurve(connection, null);
+            const curveData = await curve.getCurveData(new PublicKey(token.curve_address));
+
+            return {
+                ...token,
+                onChainData: {
+                    totalSupply: curveData.totalSupply.toString(),
+                    currentPrice: curveData.spotPrice,
+                    reserveBalance: curveData.reserveBalance.toString()
+                }
+            };
+        } catch (error) {
+            console.warn(`Failed to fetch on-chain data for token ${token.mint_address}:`, error);
+            return token;
+        }
     };
 
     useEffect(() => {
@@ -45,15 +60,13 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             try {
                 const tokens = await tokenService.getAllTokens();
 
-
                 if (!Array.isArray(tokens)) {
-                    console.error('Invalid tokens data received:', tokens);
                     setError('Invalid data received from server');
                     setTokens([]);
                     return;
                 }
 
-                // Filter out any invalid tokens and ensure all required fields
+                // Filter and validate tokens
                 const validTokens = tokens.filter(token => {
                     const isValid = token &&
                         typeof token === 'object' &&
@@ -65,13 +78,14 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                         console.warn('Invalid token data:', token);
                     }
                     return isValid;
-                }).map(token => ({
-                    ...token,
-                    metadata: typeof token.metadata === 'string' ?
-                        JSON.parse(token.metadata) : token.metadata
-                }));
+                });
 
-                setTokens(deduplicateTokens(validTokens));
+                // Fetch on-chain data for each token
+                const tokensWithOnChainData = await Promise.all(
+                    validTokens.map(token => fetchOnChainData(token))
+                );
+
+                setTokens(deduplicateTokens(tokensWithOnChainData));
                 setError(null);
             } catch (error) {
                 console.error('Error fetching tokens:', error);
@@ -83,7 +97,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         };
 
         fetchTokens();
-    }, [refreshTrigger]);
+    }, [refreshTrigger, connection]);
 
     // Reduce refresh frequency to avoid rate limiting
     useEffect(() => {
@@ -91,64 +105,39 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         return () => clearInterval(interval)
     }, []);
 
-    const handleAddToWallet = async (mintAddress: string) => {
-        if (!publicKey) {
-            alert('Please connect your wallet first');
-            return;
-        }
-
-        try {
-            const success = await addTokenToWallet(connection, publicKey, mintAddress);
-            if (!success) {
-                alert(getManualTokenAddInstructions(mintAddress));
-            }
-        } catch (error) {
-            console.error('Error adding token to wallet:', error);
-            alert(getManualTokenAddInstructions(mintAddress));
-        }
-    };
-
     // Replace the existing SOL price fetching logic
     useEffect(() => {
         const fetchSolanaPrice = async () => {
             try {
-
                 const response = await fetch('http://localhost:3001/api/solana-price', {
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
                     }
                 });
-
                 // Even if we hit rate limit, we'll get the last known price
                 const data = await response.json();
-
                 setSolanaPrice(data.price);
             } catch (error) {
                 console.warn('Error fetching SOL price:', error);
                 // Keep the last known price instead of using fallback
             }
         };
-
         fetchSolanaPrice();
         const interval = setInterval(fetchSolanaPrice, 60_000); // Update every minute instead of 30 seconds
-
         return () => clearInterval(interval);
     }, []);
 
     const calculateMarketCap = (token: TokenData) => {
-
         return 'N/A';
     };
 
     // Add this function to sort tokens
     const sortedTokens = useMemo(() => {
         if (!tokens.length) return [];
-
         return [...tokens].sort((a, b) => {
             const dateA = new Date(a.created_at || 0).getTime();
             const dateB = new Date(b.created_at || 0).getTime();
-
             return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
         });
     }, [tokens, sortOrder]);
@@ -156,7 +145,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     if (isLoading) {
         return <div className="loading">Loading tokens...</div>
     }
-
     if (error) {
         return (
             <div className="error">
@@ -165,7 +153,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             </div>
         )
     }
-
     return (
         <div className="token-list">
             <div className="token-list-header">

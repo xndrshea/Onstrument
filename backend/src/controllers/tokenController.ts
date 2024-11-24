@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { pool } from '../config/database'
 import { getTokens as getTokensModel, createToken as createTokenModel, getToken as getTokenModel } from '../models/tokenModel'
+import { CurveConfig } from '../../../shared/types/token'
 
 class TokenController {
     getTokens = async (req: Request, res: Response, next: NextFunction) => {
@@ -37,18 +38,34 @@ class TokenController {
                 symbol,
                 description,
                 total_supply,
-                metadata,
-                bondingCurveConfig
+                curve_type,
+                base_price,
+                slope,
+                exponent,
+                log_base,
+                curve_address,
             } = req.body
+
+            const curve_config: CurveConfig = {
+                curve_type,
+                base_price,
+                slope: slope || null,
+                exponent: exponent || null,
+                log_base: log_base || null
+            }
 
             const token = await createTokenModel({
                 mint_address,
+                curve_address,
                 name,
                 symbol,
                 description,
                 total_supply,
-                metadata,
-                bonding_curve_config: bondingCurveConfig
+                curve_type,
+                base_price,
+                slope,
+                exponent,
+                log_base
             })
 
             await client.query('COMMIT')

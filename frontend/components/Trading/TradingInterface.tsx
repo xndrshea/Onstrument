@@ -1,31 +1,22 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { BondingCurve } from '../../services/bondingCurve'
-import { PublicKey, Transaction, LAMPORTS_PER_SOL, SystemProgram } from '@solana/web3.js'
-import {
-    getAssociatedTokenAddress,
-    createAssociatedTokenAccountInstruction,
-    getAccount,
-    TokenAccountNotFoundError,
-    createTransferInstruction
-} from '@solana/spl-token'
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { verifyDevnetConnection } from '../../utils/network'
-import { bondingCurveManager } from '../../services/bondingCurveManager'
-import { Token } from '../../../shared/types/token'
 import { formatSupply } from '../../utils/formatting'
 import { getProgramErrorMessage, BondingCurveError } from '../../types/errors'
-import { Alert, AlertIcon, AlertTitle, AlertDescription } from '@chakra-ui/react'
+import { TokenRecord } from '../../../shared/types/token'
+import { BondingCurve } from '../../services/bondingCurve'
 
 interface TradingInterfaceProps {
-    token: Token
+    token: TokenRecord
     onTradeComplete: () => void
 }
 
 export function TradingInterface({ token, onTradeComplete }: TradingInterfaceProps) {
     const { connection } = useConnection()
-    const { publicKey, sendTransaction, connected, signTransaction } = useWallet()
-    const [amount, setAmount] = useState('')
+    const wallet = useWallet()
+    const { publicKey, sendTransaction, connected, signTransaction } = wallet
+    const [amount, setAmount] = useState<string>('')
     const [isLoading, setIsLoading] = useState(false)
     const [currentPrice, setCurrentPrice] = useState<number>(0)
     const [userBalance, setUserBalance] = useState<bigint>(BigInt(0))
@@ -35,67 +26,54 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
     const [bondingCurveBalance, setBondingCurveBalance] = useState<bigint>(BigInt(0))
     const [actualSolReserves, setActualSolReserves] = useState<number>(0)
     const [totalCost, setTotalCost] = useState<number>(0)
-    const [availableSupply, setAvailableSupply] = useState<number>(0)
-    const [expectedTokens, setExpectedTokens] = useState<number>(0)
     const [error, setError] = useState<string | null>(null)
     const [slippageWarning, setSlippageWarning] = useState<boolean>(false)
-    const [priceImpact, setPriceImpact] = useState<number>(0)
     const [maxSlippage, setMaxSlippage] = useState<number>(0.5)
 
-    // Initialize bonding curve from token config
+    // Simplify bondingCurve initialization to use the new constructor
     const bondingCurve = useMemo(() => {
-        try {
-            if (!token.bonding_curve_config) {
-                return null;
-            }
-
-            const curve = BondingCurve.fromToken(token);
-            return curve;
-        } catch (error) {
+        if (!connection || !wallet || !wallet.publicKey || !wallet.signTransaction ||
+            !token.mint_address || !token.curve_address) {
             return null;
         }
-    }, [token]);
+
+        try {
+            return new BondingCurve(
+                connection,
+                wallet,
+                new PublicKey(token.mint_address),
+                new PublicKey(token.curve_address)
+            );
+        } catch (error) {
+            console.error('Error initializing bonding curve:', error);
+            setError('Failed to initialize trading interface');
+            return null;
+        }
+    }, [connection, wallet, token.mint_address, token.curve_address]);
 
     // Simplify updateBalances to only track what we need
     const updateBalances = useCallback(async () => {
-        if (!publicKey || !token.mint_address) return;
+        if (!publicKey || !bondingCurve) return;
 
         try {
-            const [curve] = PublicKey.findProgramAddressSync(
-                [Buffer.from("bonding_curve"), new PublicKey(token.mint_address).toBuffer()],
-                PROGRAM_ID
-            );
-
-            const userATA = await getAssociatedTokenAddress(
-                new PublicKey(token.mint_address),
-                publicKey
-            );
-
-            const [solBalance, curveData] = await Promise.all([
+            const [
+                solBalance,
+                userTokenBalance,
+                curveData
+            ] = await Promise.all([
                 connection.getBalance(publicKey),
-                bondingCurve.program.account.curve.fetch(curve)
-            ]);
-
-            const [userTokenATA] = await Promise.all([
-                getAccount(connection, userATA).catch(error => {
-                    if (error instanceof TokenAccountNotFoundError) {
-                        return { amount: BigInt(0) };
-                    }
-                    throw error;
-                })
+                bondingCurve.getUserBalance(publicKey),
+                bondingCurve.getCurveData()
             ]);
 
             setSolBalance(solBalance / LAMPORTS_PER_SOL);
-            setUserBalance(userTokenATA.amount);
-            setTotalSupply(curveData.totalSupply);
-
+            setUserBalance(userTokenBalance);
+            setBondingCurveBalance(curveData.totalSupply);
         } catch (error) {
             console.error('Error updating balances:', error);
-            setSolBalance(0);
-            setUserBalance(BigInt(0));
-            setTotalSupply(0);
+            setError('Failed to fetch current balances');
         }
-    }, [publicKey, token.mint_address, connection, bondingCurve]);
+    }, [publicKey, bondingCurve, connection]);
 
     // Simplified polling logic with proper cleanup
     useEffect(() => {
@@ -141,43 +119,53 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
         }
     }, [publicKey, amount, isLoading, isSelling, userBalance, bondingCurveBalance, totalCost, solBalance]);
 
-    // Modify the price calculation effect
+    // Fix price quote handling
     useEffect(() => {
-        if (!bondingCurve || !amount) return;
+        if (!bondingCurve || !amount || isNaN(parseFloat(amount))) return;
 
-        const fetchPrice = async () => {
+        const timer = setTimeout(async () => {
             try {
-                setError(null);
-                setSlippageWarning(false);
+                const parsedAmount = parseFloat(amount) * 1e9;
+                if (parsedAmount <= 0) return;
 
-                const parsedAmount = parseFloat(amount);
-                const priceResult = await bondingCurve.program.account.curve.fetch(
-                    bondingCurve.curveAddress
+                const quote = await bondingCurve.getPriceQuote(
+                    parsedAmount,
+                    !isSelling
                 );
 
-                // Check for high price impact
-                if (priceResult.priceImpact > 5) { // 5% threshold
-                    setSlippageWarning(true);
+                // Handle zero or invalid prices
+                if (!isFinite(quote.totalPrice) || quote.totalPrice <= 0) {
+                    throw new Error('Invalid price quote received');
                 }
 
-                setCurrentPrice(priceResult.spotPrice);
-                setTotalCost(priceResult.totalCost);
-                setExpectedTokens(parsedAmount);
+                setTotalCost(quote.totalPrice);
+                setCurrentPrice(quote.spotPrice);
+
+                // Price impact is already in percentage from BondingCurve
+                if (quote.priceImpact > maxSlippage) {
+                    setSlippageWarning(true);
+                } else {
+                    setSlippageWarning(false);
+                }
             } catch (error) {
-                console.error('Error fetching price:', error);
+                console.error('Error fetching price quote:', error);
                 setError(getProgramErrorMessage(error));
             }
-        };
+        }, 500);
 
-        fetchPrice();
-    }, [amount, bondingCurve]);
+        return () => clearTimeout(timer);
+    }, [amount, bondingCurve, isSelling, maxSlippage]);
 
-    const handleTransaction = async (
-        operation: 'buy' | 'sell',
-        amount: string
-    ) => {
-        if (!publicKey || !amount || !bondingCurve || !signTransaction) {
+    // Simplify handleTransaction to use BondingCurve methods directly
+    const handleTransaction = async (operation: 'buy' | 'sell', amount: string) => {
+        if (!publicKey || !amount || !bondingCurve) {
             setError('Please connect your wallet and enter an amount');
+            return;
+        }
+
+        // Add check for required addresses
+        if (!bondingCurve.mintAddress || !bondingCurve.curveAddress) {
+            setError('Token addresses not properly initialized');
             return;
         }
 
@@ -186,66 +174,33 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             setIsLoading(true);
             setTransactionStatus(`Preparing ${operation}...`);
 
-            // Validate amount
-            const parsedAmount = parseFloat(amount);
+            const parsedAmount = parseFloat(amount) * 1e9;
             if (isNaN(parsedAmount) || parsedAmount <= 0) {
                 throw new Error('Invalid amount');
             }
 
-            // Get user's ATA
-            const userATA = await getAssociatedTokenAddress(
-                new PublicKey(token.mint_address),
-                publicKey
-            );
+            // Get price quote using bondingCurve method
+            const quote = await bondingCurve.getPriceQuote(parsedAmount, operation === 'buy');
 
-            // Create transaction
-            const transaction = new Transaction();
+            // Calculate max cost/min return with slippage
+            const solAmount = operation === 'buy'
+                ? quote.totalPrice * (1 + maxSlippage)
+                : quote.totalPrice * (1 - maxSlippage);
 
-            // Check if ATA exists and create if needed
-            try {
-                await getAccount(connection, userATA);
-            } catch (error) {
-                if (error instanceof TokenAccountNotFoundError) {
-                    transaction.add(
-                        createAssociatedTokenAccountInstruction(
-                            publicKey,
-                            userATA,
-                            publicKey,
-                            new PublicKey(token.mint_address)
-                        )
-                    );
-                }
-            }
-
-            // Get operation instructions
-            const instructions = operation === 'buy'
-                ? await bondingCurve.getBuyInstructions({
-                    buyer: publicKey,
+            // Execute transaction using bondingCurve methods
+            const signature = await (operation === 'buy'
+                ? bondingCurve.buy({
                     amount: parsedAmount,
-                    userATA,
-                    connection
+                    maxSolCost: solAmount
                 })
-                : await bondingCurve.getSellInstructions({
-                    seller: publicKey,
+                : bondingCurve.sell({
                     amount: parsedAmount,
-                    userATA,
-                    connection
-                });
+                    minSolReturn: solAmount
+                }));
 
-            transaction.add(...instructions);
-
-            // Send transaction
-            setTransactionStatus('Confirming transaction...');
-            const signature = await sendTransaction(transaction, connection, {
-                skipPreflight: false,
-                preflightCommitment: 'confirmed'
-            });
-
-            // Wait for confirmation
             setTransactionStatus('Finalizing transaction...');
             const confirmation = await connection.confirmTransaction(signature, 'confirmed');
 
-            // Check for transaction errors
             if (confirmation.value.err) {
                 throw new Error('Transaction failed to confirm');
             }
@@ -254,7 +209,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             await updateBalances();
             onTradeComplete();
 
-        } catch (error: any) {
+        } catch (error) {
             console.error(`${operation} failed:`, error);
 
             // Handle program-specific errors
@@ -274,29 +229,6 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
         }
     };
 
-    // Add state to track network check
-    const [networkChecked, setNetworkChecked] = useState(false);
-
-    // Replace the existing network check useEffect
-    useEffect(() => {
-        const checkNetwork = async () => {
-            if (!connected || !publicKey || networkChecked) return;
-
-            try {
-                const isDevnet = await verifyDevnetConnection(connection);
-                if (!isDevnet && !networkChecked) {
-                    alert('Please switch to Devnet network in your wallet to trade this token');
-                }
-            } catch (error) {
-                // Remove console.error
-            } finally {
-                setNetworkChecked(true);
-            }
-        };
-
-        checkNetwork();
-    }, [connected, connection, publicKey, networkChecked]);
-
     if (!connected) {
         return (
             <div className="trading-interface">
@@ -315,28 +247,6 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
 
     return (
         <div className="trading-interface">
-            {error && (
-                <div className="error-message">
-                    <Alert status="error">
-                        <AlertIcon />
-                        <AlertTitle>Error</AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                </div>
-            )}
-
-            {slippageWarning && (
-                <div className="slippage-warning">
-                    <Alert status="warning">
-                        <AlertIcon />
-                        <AlertTitle>High Price Impact</AlertTitle>
-                        <AlertDescription>
-                            This trade will significantly impact the price.
-                            Consider reducing the amount to get a better price.
-                        </AlertDescription>
-                    </Alert>
-                </div>
-            )}
 
             <div className="network-warning" style={{
                 backgroundColor: '#fff3cd',
@@ -386,7 +296,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                         min="0"
                         max={isSelling ?
                             Number(userBalance) / Math.pow(10, 9) :
-                            Number(availableSupply) / Math.pow(10, 9)}
+                            Number(bondingCurveBalance) / Math.pow(10, 9)}
                         step="1"
                     />
                 </div>
@@ -397,7 +307,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                         {isSelling && parseFloat(amount) > Number(userBalance) / Math.pow(10, 9) &&
                             <p className="warning">Insufficient token balance</p>
                         }
-                        {!isSelling && parseFloat(amount) > availableSupply &&
+                        {!isSelling && parseFloat(amount) > Number(bondingCurveBalance) / Math.pow(10, 9) &&
                             <p className="warning">Amount exceeds available supply</p>
                         }
                         {isSelling && totalCost > actualSolReserves &&
@@ -410,7 +320,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                 )}
 
                 <button
-                    onClick={isSelling ? handleTransaction.bind(null, 'sell') : handleTransaction.bind(null, 'buy')}
+                    onClick={() => handleTransaction(isSelling ? 'sell' : 'buy', amount)}
                     disabled={isButtonDisabled}
                     className="trading-button"
                 >
@@ -424,9 +334,8 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                 </div>
             )}
 
-            {amount && !isSelling && (
+            {amount && (
                 <div className="transaction-preview">
-                    <p>You will receive: {expectedTokens.toFixed(4)} tokens</p>
                     <p>Total cost: {totalCost.toFixed(4)} SOL</p>
                     <p>Price per token: {currentPrice.toFixed(6)} SOL</p>
                 </div>

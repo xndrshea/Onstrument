@@ -248,3 +248,21 @@ button[type="submit"]:disabled {
     color: #888;
     margin-top: 0.5rem;
 }
+
+.alert {
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+}
+
+.alert.error {
+    background-color: #fee2e2;
+    border: 1px solid #ef4444;
+    color: #991b1b;
+}
+
+.alert.success {
+    background-color: #dcfce7;
+    border: 1px solid #22c55e;
+    color: #166534;
+}

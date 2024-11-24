@@ -12,6 +12,24 @@ async function initDatabase() {
         // Create fresh schema
         await client.query('CREATE SCHEMA token_platform;');
 
+        // Create custom types
+        await client.query(`
+            DO $$ BEGIN
+                CREATE TYPE network_type AS ENUM ('mainnet', 'devnet');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
+        `);
+
+        // Create curve type enum
+        await client.query(`
+            DO $$ BEGIN
+                CREATE TYPE token_platform.curve_type AS ENUM ('LINEAR', 'EXPONENTIAL', 'LOGARITHMIC');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
+        `);
+
         // Create users table
         await client.query(`
             CREATE TABLE token_platform.users (
@@ -22,7 +40,7 @@ async function initDatabase() {
             );
         `);
 
-        // Create tokens table with simplified structure
+        // Create tokens table with strict typing
         await client.query(`
             CREATE TABLE token_platform.tokens (
                 id SERIAL PRIMARY KEY,
@@ -34,27 +52,39 @@ async function initDatabase() {
                 total_supply NUMERIC(20) NOT NULL,
                 decimals INTEGER NOT NULL DEFAULT 9,
                 creator_id INTEGER REFERENCES token_platform.users(id),
-                network VARCHAR(10) NOT NULL DEFAULT 'devnet',
+                network network_type NOT NULL DEFAULT 'devnet',
+                curve_type token_platform.curve_type NOT NULL,
+                base_price NUMERIC(20,9) NOT NULL,
+                slope NUMERIC(20,9),
+                exponent NUMERIC(20,9),
+                log_base NUMERIC(20,9),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-                CONSTRAINT valid_network CHECK (network IN ('mainnet', 'devnet'))
+                CONSTRAINT valid_symbol_length CHECK (length(symbol) <= 10),
+                CONSTRAINT valid_total_supply CHECK (total_supply > 0),
+                CONSTRAINT valid_decimals CHECK (decimals >= 0 AND decimals <= 9),
+                CONSTRAINT valid_base_price CHECK (base_price > 0)
             );
         `);
 
-        // Create token stats table
+        // Create token stats table with strict numeric constraints
         await client.query(`
             CREATE TABLE token_platform.token_stats (
                 token_id INTEGER PRIMARY KEY REFERENCES token_platform.tokens(id),
-                holder_count INTEGER DEFAULT 0,
-                transaction_count INTEGER DEFAULT 0,
+                holder_count INTEGER NOT NULL DEFAULT 0,
+                transaction_count INTEGER NOT NULL DEFAULT 0,
                 last_price NUMERIC(20,9),
                 market_cap NUMERIC(20,2),
                 volume_24h NUMERIC(20,2),
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT valid_counts CHECK (
+                    holder_count >= 0 
+                    AND transaction_count >= 0
+                )
             );
         `);
 
-        // Create trade history table
+        // Create trade history table with strict constraints
         await client.query(`
             CREATE TABLE token_platform.trade_history (
                 id SERIAL PRIMARY KEY,
@@ -65,11 +95,13 @@ async function initDatabase() {
                 price NUMERIC(20,9) NOT NULL,
                 is_buy BOOLEAN NOT NULL,
                 timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                CONSTRAINT unique_transaction UNIQUE (transaction_signature)
+                CONSTRAINT unique_transaction UNIQUE (transaction_signature),
+                CONSTRAINT valid_amount CHECK (amount > 0),
+                CONSTRAINT valid_price CHECK (price >= 0)
             );
         `);
 
-        // Create indexes
+        // Create indexes for performance
         await client.query(`
             CREATE INDEX idx_tokens_mint_address ON token_platform.tokens(mint_address);
             CREATE INDEX idx_tokens_curve_address ON token_platform.tokens(curve_address);
@@ -89,19 +121,6 @@ async function initDatabase() {
     } finally {
         client.release();
     }
-}
-
-// Only run if called directly
-if (require.main === module) {
-    initDatabase()
-        .then(() => {
-            logger.info('Database initialized successfully');
-            process.exit(0);
-        })
-        .catch(error => {
-            logger.error('Failed to initialize database:', error);
-            process.exit(1);
-        });
 }
 
 export { initDatabase };

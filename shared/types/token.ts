@@ -1,92 +1,59 @@
 import { PublicKey } from '@solana/web3.js';
+import BN from 'bn.js';
 
 export enum CurveType {
-    LINEAR = 'linear',
-    EXPONENTIAL = 'exponential',
-    LOGARITHMIC = 'logarithmic'
+    Linear = 'Linear',
+    Exponential = 'Exponential',
+    Logarithmic = 'Logarithmic'
 }
 
 export interface CurveConfig {
-    curveType: {
-        linear?: {};
-        exponential?: {};
-        logarithmic?: {};
-    };
-    basePrice: number;
-    slope?: number;
-    exponent?: number;
-    logBase?: number;
+    curve_type: CurveType;
+    base_price: BN;
+    slope: BN | null;
+    exponent: BN | null;
+    log_base: BN | null;
 }
 
-// On-chain token data
-export interface OnChainTokenData {
-    mint: PublicKey;
-    curve: PublicKey;
-    totalSupply: number;
+export interface BondingCurveAccount {
     authority: PublicKey;
+    mint: PublicKey;
+    total_supply: BN;
     config: CurveConfig;
+    bump: number;
 }
 
-// Base token data
-export interface TokenBase {
+export interface PriceQuote {
+    spot_price: BN;
+    total_price: BN;
+    price_impact: number;
+}
+
+export interface TokenRecord {
+    id: number;
+    mint_address: string;
+    curve_address: string;
     name: string;
     symbol: string;
     description?: string;
-    total_supply: number;
+    total_supply: BN;
     decimals: number;
-    network: Network;
-}
-
-// Database token record
-export interface TokenRecord extends TokenBase {
-    id: number;
-    mint_address: string;
-    curve_address: string;
-    creator_id: number | null;
+    curve_config: CurveConfig;
     created_at: Date;
-    metadata: Record<string, any>;
-}
-
-// Token statistics
-export interface TokenStats {
-    token_id: number;
-    holder_count: number;
-    transaction_count: number;
-    last_price: number | null;
-    market_cap: number | null;
-    volume_24h: number | null;
-    updated_at: Date;
-}
-
-// Trade history record
-export interface TradeHistory {
-    id: number;
-    token_id: number;
-    trader_address: string;
-    transaction_signature: string;
-    amount: number;
-    price: number;
-    is_buy: boolean;
-    timestamp: Date;
-}
-
-// Combined token data (for API responses)
-export interface TokenData extends TokenRecord {
-    stats?: TokenStats;
-    recent_trades?: TradeHistory[];
-}
-
-// Token creation parameters
-export interface CreateTokenParams {
-    mint_address: string;
-    curve_address: string;
-    name: string;
-    symbol: string;
-    description?: string;
-    total_supply: number;
-    creator_id?: number;
-    network?: Network;
-    metadata?: Record<string, any>;
 }
 
 export type Network = 'mainnet' | 'devnet';
+
+export interface CreateTokenParams {
+    name: string;
+    symbol: string;
+    description?: string;
+    total_supply: BN;
+    curve_type: CurveType;
+    base_price: BN;
+    slope?: BN;
+    exponent?: BN;
+    log_base?: BN;
+    mint_address?: string;
+    curve_address?: string;
+}
