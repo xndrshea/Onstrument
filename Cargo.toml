@@ -1,0 +1,21 @@
+[workspace]
+members = [
+    "programs/bonding_curve"
+]
+resolver = "2"
+rust-version = "1.82.0"
+
+[workspace.dependencies]
+solana-program = "~1.18.26" 
+anchor-lang = "=0.30.1"
+anchor-spl = "=0.30.1"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1

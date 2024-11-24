@@ -11,11 +11,11 @@
         "test:integration": "ts-node server/src/tests/integration.ts",
         "db:migrate": "ts-node -P server/tsconfig.json server/src/utils/dbMigration.ts",
         "db:clear": "ts-node -P server/tsconfig.json server/src/scripts/clearDatabase.ts",
-        "reinit-db": "ts-node src/scripts/reinitializeDb.ts",
         "db:init": "ts-node -P server/tsconfig.json server/src/scripts/initDatabase.ts",
         "cleanup-schema": "ts-node -P server/tsconfig.json server/src/scripts/cleanupSchema.ts"
     },
     "dependencies": {
+        "@coral-xyz/anchor": "^0.30.1",
         "@raydium-io/raydium-sdk": "^1.3.1-beta.58",
         "@solana/wallet-adapter-base": "^0.9.23",
         "@solana/wallet-adapter-react": "^0.15.35",
