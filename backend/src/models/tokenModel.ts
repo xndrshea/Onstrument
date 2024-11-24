@@ -7,13 +7,13 @@ import BN from 'bn.js';
 
 export class TokenModel {
     static async getTokens(): Promise<TokenRecord[]> {
-        const result = await pool.query('SELECT * FROM tokens ORDER BY created_at DESC');
+        const result = await pool.query('SELECT * FROM token_platform.tokens ORDER BY created_at DESC');
         return result.rows.map(row => this.mapDbToToken(row));
     }
 
     static async getToken(mint: string): Promise<TokenRecord | null> {
         const result = await pool.query(
-            'SELECT * FROM tokens WHERE mint_address = $1',
+            'SELECT * FROM token_platform.tokens WHERE mint_address = $1',
             [mint]
         );
         return result.rows.length ? this.mapDbToToken(result.rows[0]) : null;

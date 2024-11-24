@@ -1,7 +1,7 @@
 {
     "type": "commonjs",
     "scripts": {
-        "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:server\"",
+        "dev": "vite --open",
         "dev:frontend": "vite",
         "dev:server": "nodemon --watch backend/src -e ts --exec ts-node backend/src/index.ts",
         "build": "tsc && vite build",
