@@ -15,7 +15,7 @@ import {
     getAssociatedTokenAddress,
 } from '@solana/spl-token';
 import { BN } from 'bn.js';
-import { CurveType } from '../../shared/types/token';
+import { CurveType, CreateTokenParams } from '../../shared/types/token';
 import IDL from '../../target/idl/bonding_curve.json';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 
@@ -58,72 +58,68 @@ export class BondingCurve {
         this.program = new Program(IDL as unknown as Idl, PROGRAM_ID, provider);
     }
 
-    async createTokenWithCurve(params: {
-        name: string;
-        symbol: string;
-        initialSupply: number;
-        basePrice: number;
-        curveType: CurveType;
-        slope?: number;
-        exponent?: number;
-        log_base?: number;
-    }): Promise<{ mint: string; curve: string; tx: string }> {
+    async createTokenWithCurve(params: CreateTokenParams): Promise<{ mint: string, curve: string }> {
+        console.log('[BondingCurve] Raw params:', params);
+
         try {
-            const mint = Keypair.generate();
+            // Generate a new keypair for the mint if not provided
+            const mintKeypair = Keypair.generate();
 
-            const [curve] = PublicKey.findProgramAddressSync(
-                [Buffer.from("bonding_curve"), mint.publicKey.toBuffer()],
+            // Calculate PDAs
+            const [curveAddress] = PublicKey.findProgramAddressSync(
+                [Buffer.from("bonding_curve"), mintKeypair.publicKey.toBuffer()],
                 PROGRAM_ID
             );
+
             const [tokenVault] = PublicKey.findProgramAddressSync(
-                [Buffer.from("token_vault"), mint.publicKey.toBuffer()],
-                PROGRAM_ID
-            );
-            const [solVault] = PublicKey.findProgramAddressSync(
-                [Buffer.from("sol_vault"), mint.publicKey.toBuffer()],
+                [Buffer.from("token_vault"), mintKeypair.publicKey.toBuffer()],
                 PROGRAM_ID
             );
 
-            const creatorATA = await getAssociatedTokenAddress(
-                mint.publicKey,
+            const [solVault] = PublicKey.findProgramAddressSync(
+                [Buffer.from("sol_vault"), mintKeypair.publicKey.toBuffer()],
+                PROGRAM_ID
+            );
+
+            const creatorTokenAccount = await getAssociatedTokenAddress(
+                mintKeypair.publicKey,
                 this.wallet.publicKey!
             );
 
+            console.log('[BondingCurve] Calling program with params:', params);
+            console.log('[BondingCurve] Accounts:', {
+                creator: this.wallet.publicKey?.toString(),
+                mint: mintKeypair.publicKey.toString(),
+                curve: curveAddress.toString(),
+                tokenVault: tokenVault.toString(),
+                solVault: solVault.toString(),
+                creatorTokenAccount: creatorTokenAccount.toString()
+            });
+
             const tx = await this.program.methods
-                .createTokenWithCurve({
-                    name: params.name,
-                    symbol: params.symbol,
-                    initialSupply: new BN(params.initialSupply),
-                    curveConfig: {
-                        curveType: { [params.curveType.toLowerCase()]: {} },
-                        basePrice: new BN(params.basePrice * PRICE_SCALE),
-                        slope: params.slope ? new BN(params.slope * PRICE_SCALE) : null,
-                        exponent: params.exponent ? new BN(params.exponent * PARAM_SCALE) : null,
-                        logBase: params.log_base ? new BN(params.log_base * PARAM_SCALE) : null,
-                    },
-                })
+                .createTokenWithCurve(params)
                 .accounts({
                     creator: this.wallet.publicKey!,
-                    mint: mint.publicKey,
-                    curve,
-                    tokenVault,
-                    solVault,
-                    creatorTokenAccount: creatorATA,
+                    mint: mintKeypair.publicKey,
+                    curve: curveAddress,
+                    tokenVault: tokenVault,
+                    solVault: solVault,
+                    creatorTokenAccount: creatorTokenAccount,
                     systemProgram: SystemProgram.programId,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-                    rent: SYSVAR_RENT_PUBKEY,
+                    rent: SYSVAR_RENT_PUBKEY
                 })
-                .signers([mint])
+                .signers([mintKeypair])
                 .rpc();
 
+            console.log('[BondingCurve] Transaction successful:', tx);
             return {
-                mint: mint.publicKey.toString(),
-                curve: curve.toString(),
-                tx
+                mint: mintKeypair.publicKey.toString(),
+                curve: curveAddress.toString()
             };
-        } catch (error: any) {
-            console.error('[BondingCurve] Error creating token:', error);
+        } catch (error) {
+            console.error('[BondingCurve] Transaction failed:', error);
             throw error;
         }
     }

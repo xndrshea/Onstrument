@@ -1,10 +1,9 @@
 import React, { useState } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { TokenTransactionService } from '../../services/TokenTransactionService'
-import { CurveType, Network } from '../../../shared/types/token'
-import { getProgramErrorMessage } from '../../types/errors'
+import { CurveType, CreateTokenParams } from '../../../shared/types/token'
 import { BN } from 'bn.js'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { TokenTransactionService } from '../../services/TokenTransactionService'
 
 const PARAM_SCALE = 10_000; // Fixed-point scaling for curve parameters
 
@@ -29,6 +28,7 @@ interface TokenCreationFormProps {
 export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFormProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
+    const tokenTransactionService = new TokenTransactionService(connection, wallet)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
@@ -93,49 +93,38 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         return true
     }
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        console.log('[TokenCreationForm] Form submitted with data:', formData);
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
 
         if (!validateForm()) {
-            console.log('[TokenCreationForm] Form validation failed');
-            return;
-        }
-
-        if (!wallet.connected || !wallet.publicKey) {
-            console.error('[TokenCreationForm] Wallet not connected');
-            setError('Please connect your wallet first');
             return;
         }
 
         setIsLoading(true);
         setError(null);
-        setSuccess(false);
+
+        const params: CreateTokenParams = {
+            name: formData.name,
+            symbol: formData.symbol,
+            initial_supply: new BN(formData.supply),
+            curve_config: {
+                curve_type: formData.curveType as CurveType,
+                base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL), // Convert to lamports
+                slope: formData.slope ? new BN(formData.slope * PARAM_SCALE) : null,
+                exponent: formData.exponent ? new BN(formData.exponent * PARAM_SCALE) : null,
+                log_base: formData.log_base ? new BN(formData.log_base * PARAM_SCALE) : null
+            }
+        };
 
         try {
-            console.log('[TokenCreationForm] Creating TokenTransactionService...');
-            const service = new TokenTransactionService(connection, wallet);
-
-            console.log('[TokenCreationForm] Calling service.createToken...');
-            const result = await service.createToken({
-                name: formData.name,
-                symbol: formData.symbol,
-                description: formData.description,
-                total_supply: new BN(formData.supply),
-                base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                curve_type: formData.curveType,
-                slope: formData.slope ? new BN(formData.slope * LAMPORTS_PER_SOL) : undefined,
-                exponent: formData.curveType === CurveType.Exponential ? new BN(formData.exponent! * PARAM_SCALE) : undefined,
-                log_base: formData.curveType === CurveType.Logarithmic ? new BN(formData.log_base! * PARAM_SCALE) : undefined,
-            });
-
-            console.log('[TokenCreationForm] Token creation successful:', result);
+            const result = await tokenTransactionService.createToken(params);
+            console.log('Token created successfully:', result);
             setSuccess(true);
             onSuccess?.();
             onTokenCreated?.();
-        } catch (err: any) {
-            console.error('[TokenCreationForm] Token creation failed:', err);
-            setError(getProgramErrorMessage(err) || err.message || 'Failed to create token');
+        } catch (error) {
+            console.error('Token creation failed:', error);
+            setError(error instanceof Error ? error.message : 'Failed to create token');
         } finally {
             setIsLoading(false);
         }

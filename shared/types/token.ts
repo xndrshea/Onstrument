@@ -45,15 +45,8 @@ export interface TokenRecord {
 export type Network = 'mainnet' | 'devnet';
 
 export interface CreateTokenParams {
-    mint_address?: string;
-    curve_address?: string;
     name: string;
     symbol: string;
-    description?: string;
-    total_supply: BN;
-    curve_type: CurveType;
-    base_price: BN;
-    slope?: BN;
-    exponent?: BN;
-    log_base?: BN;
+    initial_supply: BN;
+    curve_config: CurveConfig;
 }
