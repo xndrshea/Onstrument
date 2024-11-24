@@ -1,9 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token::{Token, TokenAccount, Transfer, Mint},
+    associated_token::AssociatedToken,
 };
 
-declare_id!("HWy5j9JEBQedpxgvtYHY2BbvcJE774NaKSGfSUpR6GEM");
+declare_id!("AHEvJgq7txtTdF1UKfG8FmPEk145wKBV1FdbuNtwpk1F");
 
 #[program]
 pub mod bonding_curve {
@@ -16,20 +17,25 @@ pub mod bonding_curve {
         amount: u64,
         max_sol_cost: u64,
     ) -> Result<()> {
-        let curve = &mut ctx.accounts.curve;
-        let price = curve.calculate_price(amount, false)?;
+        let bump = ctx.accounts.curve.bump;
+        let mint_key = ctx.accounts.mint.key();
+        
+        // Calculate price first
+        let price = ctx.accounts.curve.calculate_price(amount, false)?;
         require!(price <= max_sol_cost, ErrorCode::SlippageExceeded);
 
         // Transfer SOL from buyer to vault
-        anchor_lang::system_program::transfer(
-            CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.buyer.to_account_info(),
-                    to: ctx.accounts.vault.to_account_info(),
-                },
+        anchor_lang::solana_program::program::invoke(
+            &anchor_lang::solana_program::system_instruction::transfer(
+                &ctx.accounts.buyer.key(),
+                &ctx.accounts.vault.key(),
+                price,
             ),
-            price,
+            &[
+                ctx.accounts.buyer.to_account_info(),
+                ctx.accounts.vault.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
         )?;
 
         // Transfer tokens from vault to buyer
@@ -43,8 +49,8 @@ pub mod bonding_curve {
                 },
                 &[&[
                     b"bonding_curve",
-                    ctx.accounts.mint.key().as_ref(),
-                    &[curve.bump],
+                    mint_key.as_ref(),
+                    &[bump],
                 ]],
             ),
             amount,
@@ -148,8 +154,6 @@ pub mod bonding_curve {
             total_cost: price.checked_mul(amount).ok_or(ErrorCode::MathOverflow)?,
         })
     }
-
-    #[view]
     pub fn get_price_quote(
         ctx: Context<GetPriceQuote>,
         amount: u64,
@@ -196,7 +200,7 @@ pub mod bonding_curve {
         curve.mint = ctx.accounts.mint.key();
         curve.config = params.curve_config;
         curve.total_supply = params.initial_supply;
-        curve.bump = *ctx.bumps.get("curve").unwrap();
+        curve.bump = ctx.bumps.curve;
 
         // 4. Transfer initial supply to token vault
         anchor_spl::token::transfer(
@@ -262,60 +266,61 @@ pub struct BondingCurve {
 
 impl BondingCurve {
     pub fn calculate_price(&self, amount: u64, is_selling: bool) -> Result<u64> {
-        // Just use the curve config directly
+        let base_price = match is_selling {
+            true => self.config.base_price,
+            false => self.config.base_price.checked_mul(101).ok_or(ErrorCode::MathOverflow)?.checked_div(100).ok_or(ErrorCode::MathOverflow)?,
+        };
+
         match self.config.curve_type {
             CurveType::Linear => {
                 let slope = self.config.slope
                     .ok_or(ErrorCode::InvalidCurveConfig)?;
                 
-                // price = base_price + (slope * supply)
                 let price_component = slope
                     .checked_mul(self.total_supply)
                     .ok_or(ErrorCode::MathOverflow)?
-                    .checked_add(self.config.base_price)
+                    .checked_add(base_price)
                     .ok_or(ErrorCode::MathOverflow)?;
 
-                price_component
+                Ok(price_component
                     .checked_mul(amount)
-                    .ok_or(ErrorCode::MathOverflow)?
+                    .ok_or(ErrorCode::MathOverflow)?)
             },
-            
             CurveType::Exponential => {
                 let exponent = self.config.exponent
                     .ok_or(ErrorCode::InvalidCurveConfig)?;
                 
-                // For exponential: price = base_price * (1 + exponent)^supply
-                // We use fixed point math since we can't use floating point
                 let exp_factor = exponent
                     .checked_mul(self.total_supply)
                     .ok_or(ErrorCode::MathOverflow)?
-                    .checked_div(10000) // Assuming exponent is scaled by 10000
+                    .checked_div(10000)
                     .ok_or(ErrorCode::MathOverflow)?;
 
-                self.config.base_price
+                let price = self.config.base_price
                     .checked_mul(exp_factor)
                     .ok_or(ErrorCode::MathOverflow)?
                     .checked_mul(amount)
-                    .ok_or(ErrorCode::MathOverflow)?
+                    .ok_or(ErrorCode::MathOverflow)?;
+                
+                Ok(price)
             },
-            
             CurveType::Logarithmic => {
                 let log_base = self.config.log_base
                     .ok_or(ErrorCode::InvalidCurveConfig)?;
                 
-                // For logarithmic: price = base_price * log(1 + log_base * supply)
-                // We use fixed point math approximation
                 let log_factor = log_base
                     .checked_mul(self.total_supply)
                     .ok_or(ErrorCode::MathOverflow)?
-                    .checked_div(10000) // Assuming log_base is scaled by 10000
+                    .checked_div(10000)
                     .ok_or(ErrorCode::MathOverflow)?;
 
-                self.config.base_price
+                let price = self.config.base_price
                     .checked_mul(log_factor)
                     .ok_or(ErrorCode::MathOverflow)?
                     .checked_mul(amount)
-                    .ok_or(ErrorCode::MathOverflow)?
+                    .ok_or(ErrorCode::MathOverflow)?;
+                
+                Ok(price)
             },
         }
     }
@@ -335,6 +340,31 @@ impl BondingCurve {
             .ok_or(ErrorCode::MathOverflow)?;
         
         Ok(impact)
+    }
+
+    pub fn verify_balances(&self, token_vault: &Account<TokenAccount>, _sol_vault: &AccountInfo) -> Result<()> {
+        // Verify token vault balance matches expected
+        require!(
+            token_vault.amount == self.total_supply,
+            ErrorCode::BalanceMismatch
+        );
+
+        Ok(())
+    }
+
+    pub fn update_balances(&mut self, token_delta: i64, _sol_delta: i64) -> Result<()> {
+        // Update total supply based on token delta
+        if token_delta > 0 {
+            self.total_supply = self.total_supply
+                .checked_add(token_delta as u64)
+                .ok_or(ErrorCode::MathOverflow)?;
+        } else {
+            self.total_supply = self.total_supply
+                .checked_sub(token_delta.abs() as u64)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -388,6 +418,7 @@ pub struct InitializeCurve<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(amount: u64, max_sol_cost: u64)]
 pub struct Buy<'info> {
     #[account(mut)]
     pub buyer: Signer<'info>,
@@ -405,7 +436,7 @@ pub struct Buy<'info> {
         mut,
         constraint = token_vault.mint == mint.key(),
         constraint = token_vault.owner == curve.key(),
-        constraint = token_vault.amount >= amount,
+        constraint = token_vault.amount >= amount @ ErrorCode::InsufficientLiquidity,
     )]
     pub token_vault: Account<'info, TokenAccount>,
 
@@ -438,15 +469,16 @@ pub struct CreateToken<'info> {
         payer = authority,
         mint::decimals = 9,
         mint::authority = authority,
-        mint::supply = 0,
     )]
     pub mint: Account<'info, Mint>,
 
+    pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
+#[instruction(amount: u64, min_sol_return: u64)]
 pub struct Sell<'info> {
     #[account(mut)]
     pub seller: Signer<'info>,
@@ -464,7 +496,7 @@ pub struct Sell<'info> {
         mut,
         constraint = seller_token_account.mint == mint.key(),
         constraint =  seller_token_account.owner == seller.key(),
-        constraint = seller_token_account.amount >= amount, // Ensure seller has enough tokens
+        constraint = seller_token_account.amount >= amount @ ErrorCode::InsufficientBalance,
     )]
     pub seller_token_account: Account<'info, TokenAccount>,
 
@@ -479,7 +511,7 @@ pub struct Sell<'info> {
         mut,
         seeds = [b"sol_vault", mint.key().as_ref()],
         bump,
-        constraint = vault.lamports() >= min_sol_return, // Ensure vault has enough SOL
+        constraint = vault.lamports() >= min_sol_return @ ErrorCode::InsufficientLiquidity
     )]
     /// CHECK: This is safe as it's just for SOL transfers
     pub vault: AccountInfo<'info>,
@@ -556,10 +588,6 @@ pub enum ErrorCode {
     #[msg("Balance mismatch")]
     BalanceMismatch,
     #[msg("Insufficient balance")]
-    InsufficientBalance,
-    #[msg("Balance mismatch between account and stored value")]
-    BalanceMismatch,
-    #[msg("Insufficient balance for operation")]
     InsufficientBalance,
 }
 

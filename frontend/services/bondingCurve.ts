@@ -19,7 +19,7 @@ import { CurveType } from '../../shared/types/token';
 import IDL from '../../target/idl/bonding_curve.json';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 
-const PROGRAM_ID = new PublicKey('HWy5j9JEBQedpxgvtYHY2BbvcJE774NaKSGfSUpR6GEM');
+const PROGRAM_ID = new PublicKey('AHEvJgq7txtTdF1UKfG8FmPEk145wKBV1FdbuNtwpk1F');
 
 const PRICE_SCALE = LAMPORTS_PER_SOL; // 1e9 (1 SOL = 1,000,000,000 lamports)
 const PARAM_SCALE = 10_000; // Fixed-point scaling for curve parameters
