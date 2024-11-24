@@ -41,7 +41,7 @@ async function initDatabase() {
             );
         `);
 
-        // Create token stats table for analytics
+        // Create token stats table
         await client.query(`
             CREATE TABLE token_platform.token_stats (
                 token_id INTEGER PRIMARY KEY REFERENCES token_platform.tokens(id),
@@ -88,11 +88,20 @@ async function initDatabase() {
         throw error;
     } finally {
         client.release();
-        process.exit(0);
     }
 }
 
-initDatabase().catch(error => {
-    logger.error('Failed to initialize database:', error);
-    process.exit(1);
-});
+// Only run if called directly
+if (require.main === module) {
+    initDatabase()
+        .then(() => {
+            logger.info('Database initialized successfully');
+            process.exit(0);
+        })
+        .catch(error => {
+            logger.error('Failed to initialize database:', error);
+            process.exit(1);
+        });
+}
+
+export { initDatabase };

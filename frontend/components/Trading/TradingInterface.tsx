@@ -39,6 +39,8 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
     const [expectedTokens, setExpectedTokens] = useState<number>(0)
     const [error, setError] = useState<string | null>(null)
     const [slippageWarning, setSlippageWarning] = useState<boolean>(false)
+    const [priceImpact, setPriceImpact] = useState<number>(0)
+    const [maxSlippage, setMaxSlippage] = useState<number>(0.5)
 
     // Initialize bonding curve from token config
     const bondingCurve = useMemo(() => {
@@ -56,47 +58,44 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
 
     // Simplify updateBalances to only track what we need
     const updateBalances = useCallback(async () => {
-        if (!publicKey || !token.metadata?.bondingCurveATA) return;
+        if (!publicKey || !token.mint_address) return;
 
         try {
-            const bondingCurvePDA = await bondingCurveManager.getBondingCurvePDA(token.mint_address);
-            if (!bondingCurvePDA) return;
+            const [curve] = PublicKey.findProgramAddressSync(
+                [Buffer.from("bonding_curve"), new PublicKey(token.mint_address).toBuffer()],
+                PROGRAM_ID
+            );
 
             const userATA = await getAssociatedTokenAddress(
                 new PublicKey(token.mint_address),
                 publicKey
             );
 
-            const [solBalance, bondingCurveATA] = await Promise.all([
+            const [solBalance, curveData] = await Promise.all([
                 connection.getBalance(publicKey),
-                getAccount(connection, new PublicKey(token.metadata.bondingCurveATA))
+                bondingCurve.program.account.curve.fetch(curve)
             ]);
 
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            const [userTokenATA, bondingCurveSol] = await Promise.all([
+            const [userTokenATA] = await Promise.all([
                 getAccount(connection, userATA).catch(error => {
                     if (error instanceof TokenAccountNotFoundError) {
                         return { amount: BigInt(0) };
                     }
                     throw error;
-                }),
-                connection.getBalance(bondingCurvePDA)
+                })
             ]);
 
             setSolBalance(solBalance / LAMPORTS_PER_SOL);
-            setBondingCurveBalance(bondingCurveATA.amount);
             setUserBalance(userTokenATA.amount);
-            setActualSolReserves(bondingCurveSol / LAMPORTS_PER_SOL);
+            setTotalSupply(curveData.totalSupply);
 
         } catch (error) {
             console.error('Error updating balances:', error);
             setSolBalance(0);
-            setBondingCurveBalance(BigInt(0));
             setUserBalance(BigInt(0));
-            setActualSolReserves(0);
+            setTotalSupply(0);
         }
-    }, [publicKey, token.metadata?.bondingCurveATA, token.mint_address, connection]);
+    }, [publicKey, token.mint_address, connection, bondingCurve]);
 
     // Simplified polling logic with proper cleanup
     useEffect(() => {

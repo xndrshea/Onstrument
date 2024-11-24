@@ -1,17 +1,15 @@
 export enum BondingCurveError {
     InvalidCurveConfig = 'Invalid curve configuration',
     InvalidAmount = 'Invalid amount',
-    SlippageExceeded = 'Price impact too high',
-    MathOverflow = 'Math overflow occurred',
+    SlippageExceeded = 'Slippage tolerance exceeded',
+    MathOverflow = 'Math overflow',
     InsufficientBalance = 'Insufficient balance',
     InsufficientLiquidity = 'Insufficient liquidity',
 }
 
 export function getProgramErrorMessage(error: any): string {
-    // Extract anchor error code
-    const errorCode = error?.error?.errorCode?.number ||
-        error?.error?.errorCode ||
-        error?.code;
+    const errorCode = error?.error?.errorCode?.number;
+    if (!errorCode) return error.message || 'Unknown error occurred';
 
     switch (errorCode) {
         case 6000:

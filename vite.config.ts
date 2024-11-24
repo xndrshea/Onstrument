@@ -3,10 +3,8 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
 export default defineConfig(({ mode }) => {
-    // Load env file based on mode
     const env = loadEnv(mode, process.cwd(), 'VITE_')
 
-    // Create env object with all env variables
     const envWithProcessPrefix = {
         'process.env': Object.entries(env).reduce((prev, [key, val]) => {
             return {
@@ -17,10 +15,14 @@ export default defineConfig(({ mode }) => {
     }
 
     return {
+        root: './frontend',
         plugins: [react()],
         server: {
             port: 3000,
             open: true
+        },
+        build: {
+            outDir: '../dist/frontend',
         },
         resolve: {
             alias: {

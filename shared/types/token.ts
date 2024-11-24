@@ -6,13 +6,25 @@ export enum CurveType {
     LOGARITHMIC = 'logarithmic'
 }
 
+export interface CurveConfig {
+    curveType: {
+        linear?: {};
+        exponential?: {};
+        logarithmic?: {};
+    };
+    basePrice: number;
+    slope?: number;
+    exponent?: number;
+    logBase?: number;
+}
+
 // On-chain token data
 export interface OnChainTokenData {
     mint: PublicKey;
     curve: PublicKey;
     totalSupply: number;
-    decimals: number;
     authority: PublicKey;
+    config: CurveConfig;
 }
 
 // Base token data

@@ -1,97 +1,135 @@
-import { TokenData } from './tokenService';
-import { CurveType, TokenBondingCurveConfig } from '../../shared/types/token';
-import { PublicKey, Connection, SystemProgram, LAMPORTS_PER_SOL, TransactionInstruction } from '@solana/web3.js';
-import { createTransferInstruction, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { bondingCurveManager } from './bondingCurveManager';
+import { Program, AnchorProvider } from '@project-serum/anchor';
+import {
+    Connection,
+    PublicKey,
+    SystemProgram,
+    Keypair
+} from '@solana/web3.js';
+import {
+    TOKEN_PROGRAM_ID,
+    getAssociatedTokenAddress,
+} from '@solana/spl-token';
 import { BN } from 'bn.js';
-import { Program } from '@project-serum/anchor';
+import { IDL } from '../idl/bonding_curve';
+import { validateBondingCurveConfig } from '../utils/bondingCurveValidator';
 
-interface BondingCurveConfig extends TokenBondingCurveConfig {
-    totalSupply: number;
-    bondingCurveAddress: string;
-}
-
-interface PriceCalculationParams {
-    connection: Connection;
-    amount: number;           // Amount being traded
-    isSelling?: boolean;      // Trade direction
-}
-
-interface PriceCalculationResult {
-    spotPrice: number;
-    totalCost: number;
-    priceImpact: number;
-}
-
-interface BuyInstructionsParams {
-    buyer: PublicKey;
-    amount: number;
-    userATA: PublicKey;
-    connection: Connection;
-}
-
-interface SellInstructionsParams {
-    seller: PublicKey;
-    amount: number;
-    userATA: PublicKey;
-    connection: Connection;
-}
+const PROGRAM_ID = new PublicKey('HWy5j9JEBQedpxgvtYHY2BbvcJE774NaKSGfSUpR6GEM');
 
 export class BondingCurve {
-    private program: Program<BondingCurveProgram>;
-    private curveAddress: PublicKey;
+    private program: Program;
 
-    constructor(program: Program<BondingCurveProgram>, curveAddress: PublicKey) {
-        this.program = program;
-        this.curveAddress = curveAddress;
-    }
-
-    static fromToken(token: Token): BondingCurve {
-        return new BondingCurve(
-            getProgram(),
-            new PublicKey(token.metadata.curveAddress)
+    constructor(connection: Connection, wallet: any) {
+        const provider = new AnchorProvider(
+            connection,
+            wallet,
+            AnchorProvider.defaultOptions()
         );
+        this.program = new Program(IDL, PROGRAM_ID, provider);
     }
 
-    async getBuyInstructions({
-        buyer,
-        amount,
-        userATA
-    }: BuyInstructionsParams): Promise<TransactionInstruction[]> {
-        return [
-            this.program.instruction.buy(
-                new BN(amount),
-                {
-                    accounts: {
-                        buyer,
-                        curve: this.curveAddress,
-                        userTokenAccount: userATA,
-                        // ... other required accounts
-                    }
-                }
+    async createToken(params: {
+        name: string;
+        symbol: string;
+        totalSupply: number;
+        basePrice: number;
+        curveType: 'linear' | 'exponential' | 'logarithmic';
+        slope?: number;
+        exponent?: number;
+        logBase?: number;
+    }) {
+        const config = {
+            curveType: { [params.curveType]: {} },
+            basePrice: new BN(params.basePrice),
+            slope: params.slope ? new BN(params.slope) : null,
+            exponent: params.exponent ? new BN(params.exponent) : null,
+            logBase: params.logBase ? new BN(params.logBase) : null,
+        };
+
+        validateBondingCurveConfig(config);
+
+        const mint = Keypair.generate();
+        const [curve] = PublicKey.findProgramAddressSync(
+            [Buffer.from("bonding_curve"), mint.publicKey.toBuffer()],
+            PROGRAM_ID
+        );
+
+        const tx = await this.program.methods
+            .initializeCurve(config)
+            .accounts({
+                authority: this.program.provider.publicKey,
+                curve,
+                mint: mint.publicKey,
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([mint])
+            .rpc();
+
+        return { mint: mint.publicKey.toString(), curve: curve.toString(), tx };
+    }
+
+    async buy(params: {
+        curveAddress: string;
+        amount: number;
+        maxSolCost: number;
+    }) {
+        const curve = new PublicKey(params.curveAddress);
+        const curveData = await this.program.account.curve.fetch(curve);
+
+        const buyerTokenAccount = await getAssociatedTokenAddress(
+            curveData.mint,
+            this.program.provider.publicKey
+        );
+
+        const [tokenVault] = PublicKey.findProgramAddressSync(
+            [Buffer.from("token_vault"), curveData.mint.toBuffer()],
+            PROGRAM_ID
+        );
+
+        const [vault] = PublicKey.findProgramAddressSync(
+            [Buffer.from("vault"), curveData.mint.toBuffer()],
+            PROGRAM_ID
+        );
+
+        return await this.program.methods
+            .buy(
+                new BN(params.amount),
+                new BN(params.maxSolCost)
             )
-        ];
+            .accounts({
+                buyer: this.program.provider.publicKey,
+                curve,
+                mint: curveData.mint,
+                tokenVault,
+                buyerTokenAccount,
+                vault,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+            })
+            .rpc();
     }
-}
 
-// Helper function for price impact calculation
-function calculatePriceImpact(
-    amount: number,
-    currentSupply: number,
-    totalSupply: number,
-    curveType: CurveType,
-    isSelling: boolean
-): number {
-    const baseImpact = (amount / totalSupply) * 100;
+    async getPrice(curveAddress: string, amount: number): Promise<number> {
+        const curve = new PublicKey(curveAddress);
+        const curveData = await this.program.account.curve.fetch(curve);
 
-    switch (curveType) {
-        case CurveType.LINEAR:
-            return baseImpact;
-        case CurveType.EXPONENTIAL:
-            return baseImpact * 1.5; // Higher impact for exponential curves
-        case CurveType.LOGARITHMIC:
-            return baseImpact * 0.75; // Lower impact for logarithmic curves
-        default:
-            return baseImpact;
+        return this.calculatePrice(curveData, amount);
+    }
+
+    private calculatePrice(curveData: any, amount: number): number {
+        const supply = Number(curveData.totalSupply);
+        const basePrice = Number(curveData.config.basePrice);
+
+        if ('linear' in curveData.config.curveType) {
+            const slope = Number(curveData.config.slope);
+            return (basePrice + (slope * supply)) * amount;
+        }
+
+        if ('exponential' in curveData.config.curveType) {
+            const exponent = Number(curveData.config.exponent);
+            return basePrice * Math.exp(exponent * supply) * amount;
+        }
+
+        const logBase = Number(curveData.config.logBase);
+        return basePrice * Math.log(1 + logBase * supply) * amount;
     }
 }

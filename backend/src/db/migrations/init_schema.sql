@@ -1,6 +1,8 @@
--- Drop existing schemas
+-- Begin transaction
+BEGIN;
+
+-- Drop existing schema if it exists
 DROP SCHEMA IF EXISTS token_platform CASCADE;
-DROP SCHEMA IF EXISTS token_launchpad CASCADE;
 
 -- Create fresh schema
 CREATE SCHEMA token_platform;
@@ -13,11 +15,11 @@ CREATE TABLE token_platform.users (
     last_login TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create tokens table with simplified fields
+-- Create tokens table
 CREATE TABLE token_platform.tokens (
     id SERIAL PRIMARY KEY,
     mint_address VARCHAR(44) UNIQUE NOT NULL,
-    curve_address VARCHAR(44) UNIQUE NOT NULL,  -- PDA of the bonding curve
+    curve_address VARCHAR(44) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
     symbol VARCHAR(10) NOT NULL,
     description TEXT,
@@ -26,12 +28,11 @@ CREATE TABLE token_platform.tokens (
     creator_id INTEGER REFERENCES token_platform.users(id),
     network VARCHAR(10) NOT NULL DEFAULT 'devnet',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    -- Only store minimal metadata since curve config is on-chain
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     CONSTRAINT valid_network CHECK (network IN ('mainnet', 'devnet'))
 );
 
--- Create token stats table for analytics
+-- Create token stats table
 CREATE TABLE token_platform.token_stats (
     token_id INTEGER PRIMARY KEY REFERENCES token_platform.tokens(id),
     holder_count INTEGER DEFAULT 0,
@@ -42,7 +43,25 @@ CREATE TABLE token_platform.token_stats (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create trade history table
+CREATE TABLE token_platform.trade_history (
+    id SERIAL PRIMARY KEY,
+    token_id INTEGER REFERENCES token_platform.tokens(id),
+    trader_address VARCHAR(44) NOT NULL,
+    transaction_signature VARCHAR(88) UNIQUE NOT NULL,
+    amount NUMERIC(20,9) NOT NULL,
+    price NUMERIC(20,9) NOT NULL,
+    is_buy BOOLEAN NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes
 CREATE INDEX idx_tokens_mint_address ON token_platform.tokens(mint_address);
 CREATE INDEX idx_tokens_curve_address ON token_platform.tokens(curve_address);
+CREATE INDEX idx_tokens_creator_id ON token_platform.tokens(creator_id);
 CREATE INDEX idx_users_wallet_address ON token_platform.users(wallet_address);
+CREATE INDEX idx_trade_history_token_id ON token_platform.trade_history(token_id);
+CREATE INDEX idx_trade_history_trader ON token_platform.trade_history(trader_address);
+CREATE INDEX idx_trade_history_timestamp ON token_platform.trade_history(timestamp);
+
+COMMIT;

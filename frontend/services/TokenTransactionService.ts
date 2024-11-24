@@ -1,70 +1,37 @@
-import { Connection, PublicKey, Transaction, SystemProgram, Keypair } from '@solana/web3.js';
-import { tokenService } from './tokenService';
-import { validateBondingCurveConfig } from "../../shared/utils/bondingCurveValidator";
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { Connection } from '@solana/web3.js';
+import { BondingCurve } from './bondingCurve';
+import { getProgramErrorMessage } from '../types/errors';
 
 export class TokenTransactionService {
-    constructor(
-        private connection: Connection,
-        private wallet: {
-            publicKey: PublicKey;
-            sendTransaction: (transaction: Transaction) => Promise<string>;
-            signTransaction: (transaction: Transaction) => Promise<Transaction>;
-        },
-        private program: any
-    ) { }
+    private bondingCurve: BondingCurve;
 
-    async createToken(config: {
+    constructor(connection: Connection, wallet: any) {
+        this.bondingCurve = new BondingCurve(connection, wallet);
+    }
+
+    async createToken(params: {
         name: string;
         symbol: string;
-        description?: string;
         totalSupply: number;
-        bondingCurve: TokenBondingCurveConfig;
+        basePrice: number;
+        slope: number;
     }) {
         try {
-            validateBondingCurveConfig(config.bondingCurve);
-
-            const mintKeypair = Keypair.generate();
-            const [curve] = PublicKey.findProgramAddressSync(
-                [Buffer.from("bonding_curve"), mintKeypair.publicKey.toBuffer()],
-                this.program.programId
-            );
-
-            // Initialize token and curve in one atomic transaction
-            const tx = await this.program.methods
-                .initializeCurve({
-                    name: config.name,
-                    symbol: config.symbol,
-                    totalSupply: config.totalSupply,
-                    config: config.bondingCurve
-                })
-                .accounts({
-                    authority: this.wallet.publicKey,
-                    mint: mintKeypair.publicKey,
-                    curve,
-                    systemProgram: SystemProgram.programId,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                })
-                .signers([mintKeypair])
-                .rpc();
-
-            // Create database entry
-            const dbToken = await tokenService.create({
-                mint_address: mintKeypair.publicKey.toString(),
-                name: config.name,
-                symbol: config.symbol,
-                description: config.description,
-                total_supply: config.totalSupply,
-                metadata: {
-                    curveAddress: curve.toString()
-                },
-                bondingCurveConfig: config.bondingCurve
-            });
-
-            return { tx, mintKeypair, dbToken };
+            return await this.bondingCurve.createToken(params);
         } catch (error) {
-            console.error('Error in TokenTransactionService.createToken:', error);
-            throw error;
+            throw new Error(getProgramErrorMessage(error));
+        }
+    }
+
+    async buyTokens(params: {
+        curveAddress: string;
+        amount: number;
+        maxSolCost: number;
+    }) {
+        try {
+            return await this.bondingCurve.buy(params);
+        } catch (error) {
+            throw new Error(getProgramErrorMessage(error));
         }
     }
 }

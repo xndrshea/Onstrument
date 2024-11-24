@@ -1,17 +1,7 @@
+import { TokenRecord } from 'shared/types/token'
 import { pool } from '../config/database'
 import { logger } from '../utils/logger'
 
-export interface TokenRecord {
-    mint_address: string
-    name: string
-    symbol: string
-    description: string
-    total_supply: number
-    creator_id: number
-    image_url?: string
-    network: 'mainnet' | 'devnet'
-    metadata?: Record<string, string>
-}
 
 export const dbService = {
     async createToken(token: Omit<TokenRecord, 'creator_id'>, walletAddress: string): Promise<TokenRecord> {
@@ -32,11 +22,20 @@ export const dbService = {
             // Create token
             const tokenResult = await client.query(
                 `INSERT INTO token_platform.tokens 
-                 (mint_address, creator_id, name, symbol, description, total_supply, image_url, network, metadata)
+                 (mint_address, curve_address, creator_id, name, symbol, description, total_supply, network, metadata)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  RETURNING *`,
-                [token.mint_address, userId, token.name, token.symbol, token.description,
-                token.total_supply, token.image_url, token.network, token.metadata]
+                [
+                    token.mint_address,
+                    token.curve_address,
+                    userId,
+                    token.name,
+                    token.symbol,
+                    token.description,
+                    token.total_supply,
+                    token.network,
+                    token.metadata
+                ]
             )
 
             // Initialize token stats
