@@ -2,9 +2,9 @@ import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 
 export enum CurveType {
-    Linear = 'Linear',
-    Exponential = 'Exponential',
-    Logarithmic = 'Logarithmic'
+    Linear = 0,
+    Exponential = 1,
+    Logarithmic = 2
 }
 
 export interface CurveConfig {
@@ -26,7 +26,7 @@ export interface BondingCurveAccount {
 export interface PriceQuote {
     spot_price: BN;
     total_price: BN;
-    price_impact: number;
+    price_impact: BN;
 }
 
 export interface TokenRecord {
@@ -35,7 +35,8 @@ export interface TokenRecord {
     curve_address: string;
     name: string;
     symbol: string;
-    description?: string;
+    description: string;
+    metadata_uri: string | null;
     total_supply: BN;
     decimals: number;
     curve_config: CurveConfig;
@@ -48,5 +49,19 @@ export interface CreateTokenParams {
     name: string;
     symbol: string;
     initial_supply: BN;
+    metadata_uri: string;
     curve_config: CurveConfig;
+}
+
+export interface TokenFormData {
+    name: string;
+    symbol: string;
+    description: string;
+    image: File | null;
+    supply: number;
+    curveType: CurveType;
+    basePrice: number;
+    slope: number;
+    exponent: number;
+    logBase: number;
 }

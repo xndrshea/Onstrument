@@ -2,17 +2,17 @@
 anchor_version = "0.30.1"
 
 [features]
-seeds = false
+resolution = true
 skip-lint = false
 
 [programs.devnet]
-bonding_curve = "HWy5j9JEBQedpxgvtYHY2BbvcJE774NaKSGfSUpR6GEM"
+bonding_curve = "BuABSBmaV2BbPLpS4CmWN9RSwnxoHz2HaEoRKEJFSoQ4"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "Devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

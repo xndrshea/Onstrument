@@ -33,7 +33,6 @@ class TokenController {
             await client.query('BEGIN')
 
             const {
-                mint_address,
                 name,
                 symbol,
                 description,
@@ -55,17 +54,12 @@ class TokenController {
             }
 
             const token = await createTokenModel({
-                mint_address,
-                curve_address,
                 name,
                 symbol,
                 description,
                 total_supply,
-                curve_type,
-                base_price,
-                slope,
-                exponent,
-                log_base
+                curve_config,
+                curve_address
             })
 
             await client.query('COMMIT')

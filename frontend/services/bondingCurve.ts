@@ -15,7 +15,7 @@ import {
     getAssociatedTokenAddress,
 } from '@solana/spl-token';
 import { BN } from 'bn.js';
-import { CurveType, CreateTokenParams } from '../../shared/types/token';
+import { CreateTokenParams } from '../../shared/types/token';
 import IDL from '../../target/idl/bonding_curve.json';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 
@@ -62,6 +62,21 @@ export class BondingCurve {
         console.log('[BondingCurve] Raw params:', params);
 
         try {
+            // Convert params to match IDL structure
+            const idlParams = {
+                name: params.name,
+                symbol: params.symbol,
+                initial_supply: params.initial_supply,
+                metadata_uri: params.metadata_uri,
+                curve_config: {
+                    curve_type: params.curve_config.curve_type,
+                    base_price: params.curve_config.base_price,
+                    slope: params.curve_config.slope,
+                    exponent: params.curve_config.exponent,
+                    log_base: params.curve_config.log_base
+                }
+            };
+
             // Generate a new keypair for the mint if not provided
             const mintKeypair = Keypair.generate();
 
@@ -86,18 +101,28 @@ export class BondingCurve {
                 this.wallet.publicKey!
             );
 
-            console.log('[BondingCurve] Calling program with params:', params);
+            const [metadataAddress] = PublicKey.findProgramAddressSync(
+                [
+                    Buffer.from('metadata'),
+                    this.program.programId.toBuffer(),
+                    mintKeypair.publicKey.toBuffer(),
+                ],
+                this.program.programId
+            );
+
+            console.log('[BondingCurve] Calling program with params:', idlParams);
             console.log('[BondingCurve] Accounts:', {
                 creator: this.wallet.publicKey?.toString(),
                 mint: mintKeypair.publicKey.toString(),
                 curve: curveAddress.toString(),
                 tokenVault: tokenVault.toString(),
                 solVault: solVault.toString(),
-                creatorTokenAccount: creatorTokenAccount.toString()
+                creatorTokenAccount: creatorTokenAccount.toString(),
+                metadata: metadataAddress.toString()
             });
 
             const tx = await this.program.methods
-                .createTokenWithCurve(params)
+                .createTokenWithCurve(idlParams)
                 .accounts({
                     creator: this.wallet.publicKey!,
                     mint: mintKeypair.publicKey,
@@ -105,6 +130,7 @@ export class BondingCurve {
                     tokenVault: tokenVault,
                     solVault: solVault,
                     creatorTokenAccount: creatorTokenAccount,
+                    metadata: metadataAddress,
                     systemProgram: SystemProgram.programId,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

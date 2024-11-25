@@ -7,6 +7,7 @@ import { TokenList } from './components/TokenList/TokenList'
 import { Modal } from './components/Modal/Modal'
 import Roadmap from './components/Roadmap/Roadmap'
 import { Footer } from './components/Footer/Footer'
+import Tokenomics from './components/pages/Tokenomics'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -40,6 +41,13 @@ function App() {
                         <Link to="/" style={{ textDecoration: 'none' }}>
                             <h1 style={{ color: 'white', cursor: 'pointer' }}>Solana Token Launchpad</h1>
                         </Link>
+                        <Link to="/tokenomics" style={{
+                            textDecoration: 'none',
+                            color: 'white',
+                            fontSize: '1rem'
+                        }}>
+                            Tokenomics
+                        </Link>
                         <Link to="/roadmap" style={{
                             textDecoration: 'none',
                             color: 'white',
@@ -68,6 +76,7 @@ function App() {
                             </>
                         } />
                         <Route path="/roadmap" element={<Roadmap />} />
+                        <Route path="/tokenomics" element={<Tokenomics />} />
                     </Routes>
                 </main>
 

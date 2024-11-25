@@ -4,21 +4,9 @@ import { CurveType, CreateTokenParams } from '../../../shared/types/token'
 import { BN } from 'bn.js'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
+import { TokenFormData } from '../../../shared/types/token';
 
 const PARAM_SCALE = 10_000; // Fixed-point scaling for curve parameters
-
-interface TokenFormData {
-    name: string
-    symbol: string
-    description: string
-    image: File | null
-    supply: number
-    curveType: CurveType
-    basePrice: number
-    slope: number | null
-    exponent: number | null
-    log_base: number | null
-}
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
@@ -93,6 +81,30 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         return true
     }
 
+    const generateTestMetadataJson = () => {
+        return {
+            name: formData.name,
+            symbol: formData.symbol,
+            description: formData.description,
+            image: "", // Optional for testing
+            seller_fee_basis_points: 0,
+            attributes: [],
+            properties: {
+                files: [],
+                category: "token",
+                creators: []
+            },
+            collection: null,
+            uses: null
+        };
+    };
+
+    const generateTestMetadataUri = () => {
+        const metadata = generateTestMetadataJson();
+        // Use base64 encoding to ensure the URI is valid and contains all metadata
+        return `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
+    };
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
 
@@ -103,21 +115,25 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         setIsLoading(true);
         setError(null);
 
+        // Generate test metadata URI
+        const testMetadataUri = generateTestMetadataUri();
+
         const params: CreateTokenParams = {
             name: formData.name,
             symbol: formData.symbol,
             initial_supply: new BN(formData.supply),
+            metadata_uri: testMetadataUri,
             curve_config: {
                 curve_type: formData.curveType as CurveType,
-                base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL), // Convert to lamports
-                slope: formData.slope ? new BN(formData.slope * PARAM_SCALE) : null,
-                exponent: formData.exponent ? new BN(formData.exponent * PARAM_SCALE) : null,
-                log_base: formData.log_base ? new BN(formData.log_base * PARAM_SCALE) : null
+                base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
+                slope: formData.slope ? new BN(Math.floor(formData.slope * PARAM_SCALE)) : null,
+                exponent: formData.exponent ? new BN(Math.floor(formData.exponent * PARAM_SCALE)) : null,
+                log_base: formData.log_base ? new BN(Math.floor(formData.log_base * PARAM_SCALE)) : null
             }
         };
 
         try {
-            const result = await tokenTransactionService.createToken(params);
+            const result = await tokenTransactionService.createToken(formData);
             console.log('Token created successfully:', result);
             setSuccess(true);
             onSuccess?.();
@@ -205,7 +221,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 <label>Curve Type</label>
                 <select
                     value={formData.curveType}
-                    onChange={e => setFormData({ ...formData, curveType: e.target.value as CurveType })}
+                    onChange={e => setFormData({ ...formData, curveType: Number(e.target.value) as CurveType })}
                 >
                     <option value={CurveType.Linear}>Linear</option>
                     <option value={CurveType.Exponential}>Exponential</option>
