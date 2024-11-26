@@ -10,24 +10,48 @@ export enum CurveType {
 export interface CurveConfig {
     curve_type: CurveType;
     base_price: BN;
-    slope: BN | null;
-    exponent: BN | null;
-    log_base: BN | null;
+    slope: BN;
+    exponent: BN;
+    log_base: BN;
 }
 
 export interface BondingCurveAccount {
-    authority: PublicKey;
     mint: PublicKey;
-    total_supply: BN;
     config: CurveConfig;
     bump: number;
 }
 
-export interface PriceQuote {
-    spot_price: BN;
-    total_price: BN;
-    price_impact: BN;
+export interface PriceInfo {
+    price: BN;
+    supply_delta: BN;
+    is_buy: boolean;
 }
+
+export interface CreateTokenParams {
+    name: string;
+    symbol: string;
+    initial_supply: BN;
+    metadata_uri: string;
+    curve_config: {
+        curve_type: CurveType;
+        base_price: BN;
+        slope: BN;
+        exponent: BN;
+        log_base: BN;
+    };
+}
+
+export interface BuyParams {
+    amount: BN;
+    max_sol_cost: BN;
+}
+
+export interface SellParams {
+    amount: BN;
+    min_sol_return: BN;
+}
+
+export type Network = 'mainnet' | 'devnet';
 
 export interface TokenRecord {
     id: number;
@@ -41,16 +65,6 @@ export interface TokenRecord {
     decimals: number;
     curve_config: CurveConfig;
     created_at: Date;
-}
-
-export type Network = 'mainnet' | 'devnet';
-
-export interface CreateTokenParams {
-    name: string;
-    symbol: string;
-    initial_supply: BN;
-    metadata_uri: string;
-    curve_config: CurveConfig;
 }
 
 export interface TokenFormData {

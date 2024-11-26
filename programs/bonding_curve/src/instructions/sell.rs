@@ -45,7 +45,7 @@ pub struct Sell<'info> {
 
 pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<()> {
     let curve = &mut ctx.accounts.curve;
-    let price = curve.calculate_sell_price(amount)?;
+    let price = curve.calculate_sell_price(&ctx.accounts.token_vault, amount)?;
     
     require!(price >= min_sol_return, ErrorCode::PriceBelowMinReturn);
 
@@ -68,10 +68,6 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<(
     **ctx.accounts.seller.try_borrow_mut_lamports()? = ctx.accounts.seller
         .lamports()
         .checked_add(price)
-        .ok_or(ErrorCode::MathOverflow)?;
-
-    // Update curve state
-    curve.total_supply = curve.total_supply.checked_sub(amount)
         .ok_or(ErrorCode::MathOverflow)?;
 
     Ok(())

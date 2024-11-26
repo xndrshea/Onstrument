@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
-use mpl_token_metadata::instructions::CreateV1Builder;
-use mpl_token_metadata::accounts::Metadata;
-use anchor_lang::solana_program::instruction::Instruction;
+use mpl_token_metadata::instructions::{CreateMetadataAccountV3, CreateMetadataAccountV3InstructionArgs};
+use mpl_token_metadata::types::DataV2;
+use solana_program::instruction::Instruction;
+use solana_program::{system_program, sysvar};
 
 pub fn create_metadata_ix(
     metadata: Pubkey,
@@ -13,20 +14,40 @@ pub fn create_metadata_ix(
     symbol: String,
     uri: String,
 ) -> Result<Instruction> {
-    Ok(CreateV1Builder::new()
-        .metadata(metadata)
-        .mint(mint, true)
-        .authority(mint_authority)
-        .payer(payer)
-        .update_authority(update_authority, true)
-        .name(name)
-        .symbol(symbol)
-        .uri(uri)
-        .seller_fee_basis_points(0)
-        .is_mutable(false)
-        .instruction())
+    let data_v2 = DataV2 {
+        name,
+        symbol,
+        uri,
+        seller_fee_basis_points: 0,
+        creators: None,
+        collection: None,
+        uses: None,
+    };
+
+    Ok(CreateMetadataAccountV3 {
+        metadata,
+        mint,
+        mint_authority,
+        payer,
+        update_authority: (update_authority, true),
+        system_program: system_program::ID,
+        rent: Some(sysvar::rent::ID),
+    }.instruction(
+        CreateMetadataAccountV3InstructionArgs {
+            data: data_v2,
+            is_mutable: false,
+            collection_details: None,
+        }
+    ))
 }
 
 pub fn find_metadata_account(mint: &Pubkey) -> (Pubkey, u8) {
-    Metadata::find_pda(mint)
+    Pubkey::find_program_address(
+        &[
+            b"metadata",
+            mpl_token_metadata::ID.as_ref(),
+            mint.as_ref(),
+        ],
+        &mpl_token_metadata::ID,
+    )
 }

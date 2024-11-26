@@ -1,17 +1,18 @@
 use anchor_lang::prelude::*;
-declare_id!("BuABSBmaV2BbPLpS4CmWN9RSwnxoHz2HaEoRKEJFSoQ4");
 
 pub mod instructions;
 pub mod state;
 pub mod utils;
 
-use instructions::*;
+use crate::instructions::*;
+
+declare_id!("DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw");
 
 #[program]
 pub mod bonding_curve {
     use super::*;
 
-    pub fn create_token(ctx: Context<CreateTokenWithCurve>, params: CreateTokenParams) -> Result<()> {
+    pub fn create_token(ctx: Context<CreateToken>, params: CreateTokenParams) -> Result<()> {
         create_token::handler(ctx, params)
     }
 

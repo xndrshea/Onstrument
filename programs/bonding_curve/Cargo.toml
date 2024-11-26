@@ -14,6 +14,9 @@ no-idl = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
 default = []
+anchor-debug = []
+custom-heap = []
+custom-panic = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
 [dependencies]
@@ -26,9 +29,3 @@ spl-associated-token-account = { workspace = true }
 mpl-token-auth-rules = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
-
-
-[profile.release]
-overflow-checks = true
-lto = "fat"
-codegen-units = 1

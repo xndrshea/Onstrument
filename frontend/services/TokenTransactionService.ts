@@ -32,55 +32,53 @@ export class TokenTransactionService {
     }
 
     async createToken(formData: TokenFormData): Promise<TokenRecord> {
-        // 1. Upload metadata to IPFS/Arweave if image exists
-        let metadataUri = null;
-        /* Comment out the image upload logic for now
-        if (formData.image) {
-            const imageUri = await this.storageService.uploadFile(formData.image);
-            metadataUri = await this.storageService.uploadJson({
-                name: formData.name,
-                symbol: formData.symbol,
-                description: formData.description,
-                image: imageUri
-            });
-        }
-        */
+        // 1. Upload metadata if needed
+        const metadataUri = formData.image
+            ? await this.uploadMetadata(formData)
+            : generateTestMetadataUri(formData);
 
-        // 2. Create token with bonding curve (single transaction)
+        // 2. Create token with bonding curve
         const { mint, curve } = await this.bondingCurve.createTokenWithCurve({
             name: formData.name,
             symbol: formData.symbol,
             initial_supply: new BN(formData.supply),
+            metadata_uri: metadataUri,
             curve_config: {
                 curve_type: formData.curveType,
                 base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                slope: formData.slope ? new BN(formData.slope * PARAM_SCALE) : null,
-                exponent: formData.exponent ? new BN(formData.exponent * PARAM_SCALE) : null,
-                log_base: formData.log_base ? new BN(formData.log_base * PARAM_SCALE) : null
-            },
-            metadata_uri: metadataUri || generateTestMetadataUri(formData)
+                slope: new BN(formData.slope * PARAM_SCALE),
+                exponent: new BN(formData.exponent * PARAM_SCALE),
+                log_base: new BN(formData.logBase * PARAM_SCALE)
+            }
         });
 
-        // 3. Return complete token record
-        return {
-            mint_address: mint,
-            curve_address: curve,
+        // 3. Create token record
+        const tokenRecord: TokenRecord = {
+            id: Date.now(), // Temporary ID for frontend tracking
+            mint_address: mint.toString(),
+            curve_address: curve.toString(),
             name: formData.name,
             symbol: formData.symbol,
-            description: formData.description,
+            description: formData.description || '',
             metadata_uri: metadataUri,
-            id: parseInt(mint),
             total_supply: new BN(formData.supply),
-            decimals: 9,
+            decimals: 9, // Standard SPL token decimals
             curve_config: {
                 curve_type: formData.curveType,
                 base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                slope: formData.slope ? new BN(formData.slope * PARAM_SCALE) : null,
-                exponent: formData.exponent ? new BN(formData.exponent * PARAM_SCALE) : null,
-                log_base: formData.log_base ? new BN(formData.log_base * PARAM_SCALE) : null
+                slope: new BN(formData.slope * PARAM_SCALE),
+                exponent: new BN(formData.exponent * PARAM_SCALE),
+                log_base: new BN(formData.logBase * PARAM_SCALE)
             },
             created_at: new Date()
         };
+
+        return tokenRecord;
+    }
+
+    private async uploadMetadata(formData: TokenFormData): Promise<string> {
+        // TODO: Implement metadata upload when storage service is ready
+        return generateTestMetadataUri(formData);
     }
 }
 

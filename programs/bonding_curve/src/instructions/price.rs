@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::Mint;
+use anchor_spl::token::{Mint, TokenAccount};
 use crate::state::*;
 
 #[derive(Accounts)]
@@ -11,6 +11,12 @@ pub struct GetPriceInfo<'info> {
         bump = curve.bump,
     )]
     pub curve: Account<'info, BondingCurve>,
+
+    #[account(
+        seeds = [b"token_vault", mint.key().as_ref()],
+        bump,
+    )]
+    pub token_vault: Account<'info, TokenAccount>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -24,9 +30,9 @@ pub fn get_info(ctx: Context<GetPriceInfo>, amount: u64, is_buy: bool) -> Result
     let curve = &ctx.accounts.curve;
     
     let price = if is_buy {
-        curve.calculate_buy_price(amount)?
+        curve.calculate_buy_price(&ctx.accounts.token_vault, amount)?
     } else {
-        curve.calculate_sell_price(amount)?
+        curve.calculate_sell_price(&ctx.accounts.token_vault, amount)?
     };
 
     let supply_delta = if is_buy {

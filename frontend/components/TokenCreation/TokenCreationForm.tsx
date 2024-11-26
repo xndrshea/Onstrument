@@ -30,8 +30,8 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         curveType: CurveType.Linear,
         basePrice: 0.1,
         slope: 1,
-        exponent: null,
-        log_base: null
+        exponent: 1,
+        logBase: 1
     })
 
     const validateForm = (): boolean => {
@@ -71,7 +71,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 }
                 break
             case CurveType.Logarithmic:
-                if (!formData.log_base || formData.log_base <= 0) {
+                if (!formData.logBase || formData.logBase <= 0) {
                     setError('Log base must be greater than 0 for logarithmic curves')
                     return false
                 }
@@ -124,11 +124,11 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             initial_supply: new BN(formData.supply),
             metadata_uri: testMetadataUri,
             curve_config: {
-                curve_type: formData.curveType as CurveType,
+                curve_type: formData.curveType,
                 base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                slope: formData.slope ? new BN(Math.floor(formData.slope * PARAM_SCALE)) : null,
-                exponent: formData.exponent ? new BN(Math.floor(formData.exponent * PARAM_SCALE)) : null,
-                log_base: formData.log_base ? new BN(Math.floor(formData.log_base * PARAM_SCALE)) : null
+                slope: new BN(Math.floor(formData.slope * PARAM_SCALE)),
+                exponent: new BN(Math.floor(formData.exponent * PARAM_SCALE)),
+                log_base: new BN(Math.floor(formData.logBase * PARAM_SCALE))
             }
         };
 
@@ -260,8 +260,8 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                     <label>Log Base</label>
                     <input
                         type="number"
-                        value={formData.log_base ?? ''}
-                        onChange={e => setFormData({ ...formData, log_base: parseFloat(e.target.value) })}
+                        value={formData.logBase ?? ''}
+                        onChange={e => setFormData({ ...formData, logBase: parseFloat(e.target.value) })}
                         min="0.01"
                         step="0.01"
                         required
