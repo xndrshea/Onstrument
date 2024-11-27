@@ -35,7 +35,7 @@ pub struct CreateToken<'info> {
         payer = creator,
         seeds = [b"bonding_curve", mint.key().as_ref()],
         bump,
-        space = 8 + std::mem::size_of::<BondingCurve>(),
+        space = 8 + std::mem::size_of::<BondingCurve>()
     )]
     pub curve: Account<'info, BondingCurve>,
 
@@ -47,17 +47,8 @@ pub struct CreateToken<'info> {
         token::mint = mint,
         token::authority = curve,
     )]
-    pub token_vault: Account<'info, TokenAccount>,
+    pub token_vault: Box<Account<'info, TokenAccount>>,
 
-    #[account(
-        init,
-        payer = creator,
-        seeds = [b"sol_vault", mint.key().as_ref()],
-        bump,
-        space = 0,
-    )]
-    /// CHECK: This is safe as it's just holding SOL
-    pub sol_vault: AccountInfo<'info>,
 
     /// CHECK: Validated in instruction
     #[account(mut)]
@@ -73,18 +64,29 @@ pub struct CreateToken<'info> {
 }
 
 pub fn handler(ctx: Context<CreateToken>, params: CreateTokenParams) -> Result<()> {
+    msg!("Starting token creation...");
+    
     // Validate parameters
     require!(params.initial_supply > 0, ErrorCode::InvalidAmount);
     require!(params.curve_config.validate(), ErrorCode::InvalidCurveConfig);
+    msg!("Parameters validated");
 
     // Initialize curve account
     let curve = &mut ctx.accounts.curve;
     curve.mint = ctx.accounts.mint.key();
     curve.config = params.curve_config;
     curve.bump = ctx.bumps.curve;
-  
+    msg!("Curve account initialized");
+
+    // Add this validation before creating metadata
+    let (expected_metadata, _) = find_metadata_account(&ctx.accounts.mint.key());
+    require!(
+        ctx.accounts.metadata.key() == expected_metadata,
+        ErrorCode::InvalidMetadataAddress
+    );
 
     // Create metadata
+    msg!("Creating metadata with URI: {}", params.metadata_uri);
     let metadata_ix = create_metadata_ix(
         ctx.accounts.metadata.key(),
         ctx.accounts.mint.key(),
@@ -95,6 +97,7 @@ pub fn handler(ctx: Context<CreateToken>, params: CreateTokenParams) -> Result<(
         params.symbol,
         params.metadata_uri,
     )?;
+    msg!("Metadata instruction created");
 
     let mint_key = ctx.accounts.mint.key();
     anchor_lang::solana_program::program::invoke_signed(
@@ -115,14 +118,13 @@ pub fn handler(ctx: Context<CreateToken>, params: CreateTokenParams) -> Result<(
         ]],
     )?;
 
-    // Mint initial supply using curve's authority
-    let mint_key = ctx.accounts.mint.key();
+    // Use curve PDA seeds for signing
     let curve_seeds = &[
         b"bonding_curve",
         mint_key.as_ref(),
         &[ctx.bumps.curve],
     ];
-    let signer = &[&curve_seeds[..]];
+    let signer_seeds = &[&curve_seeds[..]];
 
     anchor_spl::token::mint_to(
         CpiContext::new_with_signer(
@@ -132,7 +134,7 @@ pub fn handler(ctx: Context<CreateToken>, params: CreateTokenParams) -> Result<(
                 to: ctx.accounts.token_vault.to_account_info(),
                 authority: ctx.accounts.curve.to_account_info(),
             },
-            signer,
+            signer_seeds,
         ),
         params.initial_supply,
     )?;

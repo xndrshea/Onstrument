@@ -1,30 +1,34 @@
-import { logger } from './utils/logger'
-import { initializeDatabase } from './config/database'
-import { app } from './app'
-import apiRouter from './routes/api'
-import { verifyEnvironmentVariables } from './utils/configCheck'
+import express from 'express';
+import cors from 'cors';
+import { logger } from './utils/logger';
+import { pool, initializeDatabase } from './config/database';
+import apiRouter from './routes/api';
 
-const port = process.env.PORT || 3001
+const app = express();
+const PORT = process.env.PORT || 3001;
 
 async function startServer() {
-    // Verify environment variables
-    if (!verifyEnvironmentVariables()) {
-        process.exit(1)
-    }
+    try {
+        // Initialize database connection and verify/create tables if needed
+        const dbInitialized = await initializeDatabase();
+        if (!dbInitialized) {
+            throw new Error('Database initialization failed');
+        }
 
-    // Initialize database
-    const dbConnected = await initializeDatabase()
-    if (!dbConnected) {
-        logger.error('Failed to initialize database')
-        process.exit(1)
-    }
+        // Middleware
+        app.use(cors());
+        app.use(express.json());
 
-    app.listen(port, () => {
-        logger.info(`Server running on port ${port}`)
-    })
+        // Routes
+        app.use('/api', apiRouter);
+
+        app.listen(PORT, () => {
+            logger.info(`Server running on port ${PORT}`);
+        });
+    } catch (error) {
+        logger.error('Failed to start server:', error);
+        process.exit(1);
+    }
 }
 
-startServer().catch((error) => {
-    logger.error('Failed to start server:', error)
-    process.exit(1)
-}) 
+startServer(); 

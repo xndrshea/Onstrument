@@ -25,6 +25,6 @@ pub mod bonding_curve {
     }
 
     pub fn get_price_info(ctx: Context<GetPriceInfo>, amount: u64, is_buy: bool) -> Result<PriceInfo> {
-        price::get_info(ctx, amount, is_buy)  
+        price::get_price_info(ctx, amount, is_buy)
     }
 }

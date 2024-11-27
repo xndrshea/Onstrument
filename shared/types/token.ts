@@ -1,70 +1,54 @@
 import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 
-export enum CurveType {
-    Linear = 0,
-    Exponential = 1,
-    Logarithmic = 2
+export enum curveType {
+    Linear = 'linear',
+    Exponential = 'exponential',
+    Logarithmic = 'logarithmic'
 }
 
-export interface CurveConfig {
-    curve_type: CurveType;
-    base_price: BN;
+export interface curveConfig {
+    curveType: curveType;
+    basePrice: BN;
     slope: BN;
     exponent: BN;
-    log_base: BN;
+    logBase: BN;
 }
 
 export interface BondingCurveAccount {
     mint: PublicKey;
-    config: CurveConfig;
+    config: curveConfig;
     bump: number;
 }
 
-export interface PriceInfo {
+export interface priceInfo {
     price: BN;
-    supply_delta: BN;
-    is_buy: boolean;
+    supplyDelta: BN;
+    isBuy: boolean;
 }
 
-export interface CreateTokenParams {
+export interface createTokenParams {
     name: string;
     symbol: string;
-    initial_supply: BN;
-    metadata_uri: string;
-    curve_config: {
-        curve_type: CurveType;
-        base_price: BN;
-        slope: BN;
-        exponent: BN;
-        log_base: BN;
-    };
-}
-
-export interface BuyParams {
-    amount: BN;
-    max_sol_cost: BN;
-}
-
-export interface SellParams {
-    amount: BN;
-    min_sol_return: BN;
+    initialSupply: BN;
+    metadataUri: string;
+    curveConfig: curveConfig;
 }
 
 export type Network = 'mainnet' | 'devnet';
 
 export interface TokenRecord {
     id: number;
-    mint_address: string;
-    curve_address: string;
+    mintAddress: string;
+    curveAddress: string;
     name: string;
     symbol: string;
     description: string;
-    metadata_uri: string | null;
-    total_supply: BN;
+    metadataUri: string | null;
+    totalSupply: BN;
     decimals: number;
-    curve_config: CurveConfig;
-    created_at: Date;
+    curveConfig: curveConfig;
+    createdAt: Date;
 }
 
 export interface TokenFormData {
@@ -73,7 +57,7 @@ export interface TokenFormData {
     description: string;
     image: File | null;
     supply: number;
-    curveType: CurveType;
+    curveType: curveType;
     basePrice: number;
     slope: number;
     exponent: number;

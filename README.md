@@ -26,6 +26,19 @@ A decentralized trading platform for Solana tokens using customizable bonding cu
    - Supply tracking
    - Associated Token Account (ATA) handling
    - Creator tools and analytics
+   
+Who Uses This:
+1. Token Creators:
+Project owners or developers who want to launch a token with an automated market maker
+They need to provide initial parameters and pay for the transaction fees
+End Users (indirectly):
+Will interact with the created token through other instructions (buy/sell)
+The bonding curve determines the price they pay for tokens
+Protocol:
+The smart contract itself manages the token supply and pricing
+Acts as an automated market maker through the bonding curve mechanism
+This is typically part of a larger DeFi (Decentralized Finance) protocol where users can trade tokens in a decentralized way, with prices determined mathematically rather than through traditional order books.
+The code uses Anchor framework (a popular Solana development framework) and follows Solana's programming patterns for PDAs (Program Derived Addresses) and CPI (Cross-Program Invocation) calls.
 
 ### Key Features
 

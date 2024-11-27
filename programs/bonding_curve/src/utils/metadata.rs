@@ -3,6 +3,7 @@ use mpl_token_metadata::instructions::{CreateMetadataAccountV3, CreateMetadataAc
 use mpl_token_metadata::types::DataV2;
 use solana_program::instruction::Instruction;
 use solana_program::{system_program, sysvar};
+use crate::utils::error::ErrorCode;
 
 pub fn create_metadata_ix(
     metadata: Pubkey,
@@ -14,6 +15,13 @@ pub fn create_metadata_ix(
     symbol: String,
     uri: String,
 ) -> Result<Instruction> {
+    // Validate metadata PDA
+    let (expected_metadata, _) = find_metadata_account(&mint);
+    require!(
+        metadata == expected_metadata,
+        ErrorCode::InvalidMetadataAddress
+    );
+
     let data_v2 = DataV2 {
         name,
         symbol,
@@ -32,13 +40,11 @@ pub fn create_metadata_ix(
         update_authority: (update_authority, true),
         system_program: system_program::ID,
         rent: Some(sysvar::rent::ID),
-    }.instruction(
-        CreateMetadataAccountV3InstructionArgs {
-            data: data_v2,
-            is_mutable: false,
-            collection_details: None,
-        }
-    ))
+    }.instruction(CreateMetadataAccountV3InstructionArgs {
+        data: data_v2,
+        is_mutable: false,
+        collection_details: None,
+    }))
 }
 
 pub fn find_metadata_account(mint: &Pubkey) -> (Pubkey, u8) {

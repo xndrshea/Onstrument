@@ -8,7 +8,7 @@ dotenv.config()
 const config = {
     user: process.env.DB_USER || 'alexandershea',
     host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'token_launchpad',
+    database: process.env.DB_NAME || 'token_platform',
     password: process.env.DB_PASSWORD || '',
     port: parseInt(process.env.DB_PORT || '5432')
 };

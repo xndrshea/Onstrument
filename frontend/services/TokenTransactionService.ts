@@ -6,7 +6,7 @@ import { BondingCurve } from './bondingCurve';
 import { TokenService } from './tokenService';
 import {
     TokenRecord,
-    CreateTokenParams,
+    createTokenParams,
     TokenFormData
 } from '../../shared/types/token';
 
@@ -41,36 +41,36 @@ export class TokenTransactionService {
         const { mint, curve } = await this.bondingCurve.createTokenWithCurve({
             name: formData.name,
             symbol: formData.symbol,
-            initial_supply: new BN(formData.supply),
-            metadata_uri: metadataUri,
-            curve_config: {
-                curve_type: formData.curveType,
-                base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
+            initialSupply: new BN(formData.supply * PARAM_SCALE),
+            metadataUri: metadataUri,
+            curveConfig: {
+                curveType: formData.curveType,
+                basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
                 slope: new BN(formData.slope * PARAM_SCALE),
                 exponent: new BN(formData.exponent * PARAM_SCALE),
-                log_base: new BN(formData.logBase * PARAM_SCALE)
+                logBase: new BN(formData.logBase * PARAM_SCALE)
             }
         });
 
         // 3. Create token record
         const tokenRecord: TokenRecord = {
             id: Date.now(), // Temporary ID for frontend tracking
-            mint_address: mint.toString(),
-            curve_address: curve.toString(),
+            mintAddress: mint.toString(),
+            curveAddress: curve.toString(),
             name: formData.name,
             symbol: formData.symbol,
             description: formData.description || '',
-            metadata_uri: metadataUri,
-            total_supply: new BN(formData.supply),
+            metadataUri: metadataUri,
+            totalSupply: new BN(formData.supply),
             decimals: 9, // Standard SPL token decimals
-            curve_config: {
-                curve_type: formData.curveType,
-                base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
+            curveConfig: {
+                curveType: formData.curveType,
+                basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
                 slope: new BN(formData.slope * PARAM_SCALE),
                 exponent: new BN(formData.exponent * PARAM_SCALE),
-                log_base: new BN(formData.logBase * PARAM_SCALE)
+                logBase: new BN(formData.logBase * PARAM_SCALE)
             },
-            created_at: new Date()
+            createdAt: new Date()
         };
 
         return tokenRecord;

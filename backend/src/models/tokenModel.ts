@@ -1,60 +1,80 @@
-import { pool } from '../config/database';
-import {
-    TokenRecord,
-    CreateTokenParams
-} from '../../../shared/types/token';
-import BN from 'bn.js';
+import { pool } from '../db/pool';
+import { logger } from '../utils/logger';
 
 export class TokenModel {
-    static async getTokens(): Promise<TokenRecord[]> {
-        const result = await pool.query('SELECT * FROM token_platform.tokens ORDER BY created_at DESC');
-        return result.rows.map(row => this.mapDbToToken(row));
+    static async getTokens() {
+        try {
+            const result = await pool.query(`
+                SELECT t.*, ts.holder_count, ts.transaction_count, ts.last_price, 
+                       ts.market_cap, ts.volume_24h, ts.total_volume
+                FROM token_platform.tokens t
+                LEFT JOIN token_platform.token_stats ts ON t.id = ts.token_id
+                ORDER BY t.created_at DESC
+            `);
+            return result.rows;
+        } catch (error) {
+            logger.error('Error in getTokens:', error);
+            throw error;
+        }
     }
 
-    static async getToken(mint: string): Promise<TokenRecord | null> {
-        const result = await pool.query(
-            'SELECT * FROM token_platform.tokens WHERE mint_address = $1',
-            [mint]
-        );
-        return result.rows.length ? this.mapDbToToken(result.rows[0]) : null;
+    static async getTokenByMintAddress(mintAddress: string) {
+        try {
+            const result = await pool.query(`
+                SELECT t.*, ts.holder_count, ts.transaction_count, ts.last_price, 
+                       ts.market_cap, ts.volume_24h, ts.total_volume
+                FROM token_platform.tokens t
+                LEFT JOIN token_platform.token_stats ts ON t.id = ts.token_id
+                WHERE t.mint_address = $1
+            `, [mintAddress]);
+            return result.rows[0] || null;
+        } catch (error) {
+            logger.error('Error in getTokenByMintAddress:', error);
+            throw error;
+        }
     }
 
-    static async create(params: CreateTokenParams): Promise<TokenRecord> {
-        const result = await pool.query(
-            `INSERT INTO tokens (
-                mint_address, 
-                curve_address,
-                name,
-                symbol,
-                total_supply,
-                curve_config
-            ) VALUES ($1, $2, $3, $4, $5, $6) 
-            RETURNING *`,
-            [
-                params.mint_address,
-                params.curve_address,
-                params.name,
-                params.symbol,
-                params.total_supply.toString(),
-                JSON.stringify(params)
-            ]
-        );
-        return this.mapDbToToken(result.rows[0]);
-    }
+    static async createToken(tokenData: any) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-    private static mapDbToToken(row: any): TokenRecord {
-        return {
-            ...row,
-            total_supply: new BN(row.total_supply),
-            curve_config: {
-                ...row.curve_config,
-                base_price: new BN(row.curve_config.base_price)
-            }
-        };
-    }
-}
+            // Insert token
+            const tokenResult = await client.query(`
+                INSERT INTO token_platform.tokens (
+                    mint_address, curve_address, name, symbol, description,
+                    metadata_uri, total_supply, decimals, creator_id, 
+                    network, curve_config
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                RETURNING id
+            `, [
+                tokenData.mintAddress,
+                tokenData.curveAddress,
+                tokenData.name,
+                tokenData.symbol,
+                tokenData.description,
+                tokenData.metadataUri,
+                tokenData.totalSupply,
+                tokenData.decimals,
+                tokenData.creatorId,
+                tokenData.network,
+                tokenData.curveConfig
+            ]);
 
-// Export the static methods to match the controller's imports
-export const getTokens = TokenModel.getTokens.bind(TokenModel);
-export const getToken = TokenModel.getToken.bind(TokenModel);
-export const createToken = TokenModel.create.bind(TokenModel); 
+            // Initialize token stats
+            await client.query(`
+                INSERT INTO token_platform.token_stats (token_id)
+                VALUES ($1)
+            `, [tokenResult.rows[0].id]);
+
+            await client.query('COMMIT');
+            return tokenResult.rows[0];
+        } catch (error) {
+            await client.query('ROLLBACK');
+            logger.error('Error in createToken:', error);
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+} 

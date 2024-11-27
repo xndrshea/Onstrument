@@ -1,10 +1,10 @@
-import { TokenRecord, CreateTokenParams } from '../../shared/types/token';
+import { TokenRecord, createTokenParams } from '../../shared/types/token';
 import { logger } from '../utils/logger';
 
 const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export class TokenService {
-    async create(params: CreateTokenParams): Promise<TokenRecord> {
+    async create(params: createTokenParams): Promise<TokenRecord> {
         try {
             const response = await fetch(`${API_BASE_URL}/tokens`, {
                 method: 'POST',

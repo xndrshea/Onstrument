@@ -1,60 +1,115 @@
-import { AppError } from '../utils/appError';
+import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
-import { NextFunction, Request, Response } from 'express';
+import { curveType } from '../../../shared/types/token';
+
+class AppError extends Error {
+    constructor(message: string, public statusCode: number) {
+        super(message);
+    }
+}
 
 export const validateTokenData = (req: Request, res: Response, next: NextFunction) => {
-    const { mint_address, name, symbol, total_supply, metadata } = req.body;
+    const {
+        mintAddress,
+        curveAddress,
+        name,
+        symbol,
+        totalSupply,
+        curveType,
+        basePrice,
+        slope,
+        exponent,
+        logBase
+    } = req.body;
 
-    logger.info('Validating token data:', { mint_address, name, symbol, total_supply });
+    try {
+        // Basic field validation
+        if (!mintAddress || !curveAddress) {
+            throw new AppError('Missing mintAddress or curveAddress', 400);
+        }
 
-    if (!mint_address) {
-        return next(new AppError('Missing mint_address', 400));
-    }
+        if (!name || name.length > 100) {
+            throw new AppError('Invalid name (max 100 characters)', 400);
+        }
 
-    if (!name || typeof name !== 'string') {
-        return next(new AppError('Invalid or missing name', 400));
-    }
+        if (!symbol || symbol.length > 10) {
+            throw new AppError('Invalid symbol (max 10 characters)', 400);
+        }
 
-    // Symbol validation
-    if (!symbol) {
-        return next(new AppError('Missing symbol', 400));
-    }
+        // Curve parameter validation
+        if (!Object.values(curveType).includes(curveType)) {
+            throw new AppError('Invalid curve type', 400);
+        }
 
-    if (typeof symbol !== 'string') {
-        return next(new AppError('Symbol must be a string', 400));
-    }
+        if (typeof basePrice !== 'number' || basePrice <= 0) {
+            throw new AppError('Invalid base price', 400);
+        }
 
-    if (symbol.length > 10) {
-        return next(new AppError('Symbol too long (max 10 characters)', 400));
-    }
+        // Curve-specific parameter validation
+        switch (curveType) {
+            case curveType.Linear:
+                if (typeof slope !== 'number' || slope <= 0) {
+                    throw new AppError('Invalid slope for linear curve', 400);
+                }
+                break;
 
-    if (symbol.length < 1) {
-        return next(new AppError('Symbol must not be empty', 400));
-    }
+            case curveType.Exponential:
+                if (typeof exponent !== 'number' || exponent <= 0) {
+                    throw new AppError('Invalid exponent for exponential curve', 400);
+                }
+                break;
 
-    // Total supply validation
-    if (total_supply === undefined || total_supply === null) {
-        return next(new AppError('Missing total_supply', 400));
-    }
+            case curveType.Logarithmic:
+                if (typeof logBase !== 'number' || logBase <= 0) {
+                    throw new AppError('Invalid log base for logarithmic curve', 400);
+                }
+                break;
+        }
 
-    const parsedSupply = Number(total_supply);
-    if (isNaN(parsedSupply) || parsedSupply <= 0) {
-        return next(new AppError('Total supply must be a positive number', 400));
-    }
-
-    // Metadata validation (if provided)
-    if (metadata) {
-        try {
-            const parsedMetadata = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
-            if (typeof parsedMetadata !== 'object' || parsedMetadata === null) {
-                logger.error('Invalid metadata format:', metadata);
-                return next(new AppError('Invalid metadata format', 400));
-            }
-        } catch (error) {
-            logger.error('Metadata validation error:', error, metadata);
-            return next(new AppError('Invalid metadata JSON', 400));
+        next();
+    } catch (error) {
+        if (error instanceof AppError) {
+            logger.warn('Token validation failed:', error.message);
+            res.status(error.statusCode).json({ error: error.message });
+        } else {
+            logger.error('Unexpected validation error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
     }
+};
 
-    next();
+export const validateTradeData = (req: Request, res: Response, next: NextFunction) => {
+    const { mintAddress, traderAddress, signature, amount, pricePerToken, totalPrice, isBuy } = req.body;
+
+    try {
+        if (!mintAddress || !traderAddress || !signature) {
+            throw new AppError('Missing required trade parameters', 400);
+        }
+
+        if (typeof amount !== 'number' || amount <= 0) {
+            throw new AppError('Invalid trade amount', 400);
+        }
+
+        if (typeof pricePerToken !== 'number' || pricePerToken < 0) {
+            throw new AppError('Invalid price per token', 400);
+        }
+
+        if (typeof totalPrice !== 'number' || totalPrice < 0) {
+            throw new AppError('Invalid total price', 400);
+        }
+
+        if (typeof isBuy !== 'boolean') {
+            throw new AppError('Invalid trade type', 400);
+        }
+
+        next();
+    } catch (error) {
+        if (error instanceof AppError) {
+            logger.warn('Trade validation failed:', error.message);
+            res.status(error.statusCode).json({ error: error.message });
+        } else {
+            logger.error('Unexpected validation error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
 }; 

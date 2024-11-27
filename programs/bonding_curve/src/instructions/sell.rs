@@ -19,33 +19,34 @@ pub struct Sell<'info> {
 
     #[account(
         mut,
-        associated_token::mint = mint,
-        associated_token::authority = seller,
+        constraint = seller_token_account.owner == seller.key(),
+        constraint = seller_token_account.mint == mint.key(),
     )]
     pub seller_token_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
-        associated_token::mint = mint,
-        associated_token::authority = curve,
+        seeds = [b"token_vault", mint.key().as_ref()],
+        bump = curve.bump,
+        token::mint = mint,
+        token::authority = curve,
     )]
     pub token_vault: Account<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        seeds = [b"sol_vault", mint.key().as_ref()],
-        bump,
-    )]
-    /// CHECK: This is safe as it's just holding SOL
-    pub vault: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<()> {
+    // Get the current lamports before mutable borrow
+    let curve_lamports = ctx.accounts.curve.to_account_info().lamports();
+    
     let curve = &mut ctx.accounts.curve;
-    let price = curve.calculate_sell_price(&ctx.accounts.token_vault, amount)?;
+    let price = curve.calculate_sell_price(
+        &ctx.accounts.token_vault,
+        amount,
+        curve_lamports  // Use the stored lamports value
+    )?;
     
     require!(price >= min_sol_return, ErrorCode::PriceBelowMinReturn);
 
@@ -60,8 +61,9 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<(
     );
     anchor_spl::token::transfer(transfer_ctx, amount)?;
 
-    // Transfer SOL from vault to seller
-    **ctx.accounts.vault.try_borrow_mut_lamports()? = ctx.accounts.vault
+    // Transfer SOL from curve to seller
+    **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? = ctx.accounts.curve
+        .to_account_info()
         .lamports()
         .checked_sub(price)
         .ok_or(ErrorCode::MathOverflow)?;

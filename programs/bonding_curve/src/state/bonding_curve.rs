@@ -11,8 +11,9 @@ pub struct BondingCurve {
 }
 
 impl BondingCurve {
-    pub fn calculate_buy_price(&self, token_vault: &Account<TokenAccount>, amount: u64) -> Result<u64> {
+    pub fn calculate_buy_price(&self, token_vault: &Account<TokenAccount>, amount: u64, curve_lamports: u64) -> Result<u64> {
         let current_supply = token_vault.amount;
+        let current_sol = curve_lamports;
         let base_price = self.config.base_price
             .checked_mul(101)
             .ok_or(ErrorCode::MathOverflow)?
@@ -20,24 +21,25 @@ impl BondingCurve {
             .ok_or(ErrorCode::MathOverflow)?;
 
         match self.config.curve_type {
-            CurveType::Linear => self.calculate_linear_price(current_supply, amount, base_price),
-            CurveType::Exponential => self.calculate_exponential_price(current_supply, amount, base_price),
-            CurveType::Logarithmic => self.calculate_logarithmic_price(current_supply, amount, base_price),
+            CurveType::Linear => self.calculate_linear_price(current_supply, current_sol, amount, base_price),
+            CurveType::Exponential => self.calculate_exponential_price(current_supply, current_sol, amount, base_price),
+            CurveType::Logarithmic => self.calculate_logarithmic_price(current_supply, current_sol, amount, base_price),
         }
     }
 
-    pub fn calculate_sell_price(&self, token_vault: &Account<TokenAccount>, amount: u64) -> Result<u64> {
+    pub fn calculate_sell_price(&self, token_vault: &Account<TokenAccount>, amount: u64, curve_lamports: u64) -> Result<u64> {
         let current_supply = token_vault.amount;
+        let current_sol = curve_lamports;
         let base_price = self.config.base_price;
 
         match self.config.curve_type {
-            CurveType::Linear => self.calculate_linear_price(current_supply, amount, base_price),
-            CurveType::Exponential => self.calculate_exponential_price(current_supply, amount, base_price),
-            CurveType::Logarithmic => self.calculate_logarithmic_price(current_supply, amount, base_price),
+            CurveType::Linear => self.calculate_linear_price(current_supply, current_sol, amount, base_price),
+            CurveType::Exponential => self.calculate_exponential_price(current_supply, current_sol, amount, base_price),
+            CurveType::Logarithmic => self.calculate_logarithmic_price(current_supply, current_sol, amount, base_price),
         }
     }
 
-    fn calculate_linear_price(&self, current_supply: u64, amount: u64, base_price: u64) -> Result<u64> {
+    fn calculate_linear_price(&self, current_supply: u64, current_sol: u64, amount: u64, base_price: u64) -> Result<u64> {
         require!(
             self.config.curve_type == CurveType::Linear,
             ErrorCode::InvalidCurveConfig
@@ -54,7 +56,7 @@ impl BondingCurve {
             .ok_or(ErrorCode::MathOverflow)?)
     }
 
-    fn calculate_exponential_price(&self, current_supply: u64, amount: u64, base_price: u64) -> Result<u64> {
+    fn calculate_exponential_price(&self, current_supply: u64, current_sol: u64, amount: u64, base_price: u64) -> Result<u64> {
         require!(
             self.config.curve_type == CurveType::Exponential,
             ErrorCode::InvalidCurveConfig
@@ -82,7 +84,7 @@ impl BondingCurve {
             .ok_or(ErrorCode::MathOverflow)?)
     }
 
-    fn calculate_logarithmic_price(&self, current_supply: u64, amount: u64, base_price: u64) -> Result<u64> {
+    fn calculate_logarithmic_price(&self, current_supply: u64, current_sol: u64, amount: u64, base_price: u64) -> Result<u64> {
         require!(
             self.config.curve_type == CurveType::Logarithmic,
             ErrorCode::InvalidCurveConfig

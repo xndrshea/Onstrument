@@ -20,17 +20,11 @@ pub struct Buy<'info> {
     #[account(
         mut,
         seeds = [b"token_vault", mint.key().as_ref()],
-        bump,
+        bump = curve.bump,
+        token::mint = mint,
+        token::authority = curve,
     )]
     pub token_vault: Account<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        seeds = [b"sol_vault", mint.key().as_ref()],
-        bump,
-    )]
-    /// CHECK: This is safe as it's just holding SOL
-    pub sol_vault: AccountInfo<'info>,
 
     #[account(
         mut,
@@ -47,7 +41,8 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64) -> Result<()> 
     // Get the price first before any mutable borrows
     let price = ctx.accounts.curve.calculate_buy_price(
         &ctx.accounts.token_vault,
-        amount
+        amount,
+        ctx.accounts.curve.to_account_info().lamports()
     )?;
     
     require!(
@@ -55,41 +50,41 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64) -> Result<()> 
         ErrorCode::PriceExceedsMaxCost
     );
 
-    // Transfer SOL from buyer to vault
-    let transfer_ix = anchor_lang::system_program::Transfer {
+    // Transfer SOL from buyer to curve
+    let transfer_sol_ix = anchor_lang::system_program::Transfer {
         from: ctx.accounts.buyer.to_account_info(),
-        to: ctx.accounts.sol_vault.to_account_info(),
+        to: ctx.accounts.curve.to_account_info(),
     };
 
     anchor_lang::system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
-            transfer_ix,
+            transfer_sol_ix,
         ),
         price,
     )?;
 
-    // Create longer-lived values before CpiContext
-    let curve_bump = ctx.accounts.curve.bump;
+    // Transfer tokens from vault to buyer
     let mint_key = ctx.accounts.mint.key();
     let seeds = &[
-        b"bonding_curve" as &[u8],
+        b"token_vault",
         mint_key.as_ref(),
-        &[curve_bump],
+        &[ctx.accounts.curve.bump],
     ];
     let signer_seeds = &[&seeds[..]];
 
-    let transfer_ctx = CpiContext::new_with_signer(
-        ctx.accounts.token_program.to_account_info(),
-        Transfer {
-            from: ctx.accounts.token_vault.to_account_info(),
-            to: ctx.accounts.buyer_token_account.to_account_info(),
-            authority: ctx.accounts.curve.to_account_info(),
-        },
-        signer_seeds,
-    );
-    
-    anchor_spl::token::transfer(transfer_ctx, amount)?;
+    anchor_spl::token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.curve.to_account_info(),
+            Transfer {
+                from: ctx.accounts.token_vault.to_account_info(),
+                to: ctx.accounts.buyer_token_account.to_account_info(),
+                authority: ctx.accounts.curve.to_account_info(),
+            },
+            signer_seeds,
+        ),
+        amount,
+    )?;
 
     Ok(())
 }

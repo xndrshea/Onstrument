@@ -26,13 +26,14 @@ pub struct PriceInfo {
     pub is_buy: bool,
 }
 
-pub fn get_info(ctx: Context<GetPriceInfo>, amount: u64, is_buy: bool) -> Result<PriceInfo> {
+pub fn get_price_info(ctx: Context<GetPriceInfo>, amount: u64, is_buy: bool) -> Result<PriceInfo> {
     let curve = &ctx.accounts.curve;
+    let current_supply = ctx.accounts.token_vault.amount;
     
     let price = if is_buy {
-        curve.calculate_buy_price(&ctx.accounts.token_vault, amount)?
+        curve.calculate_buy_price(&ctx.accounts.token_vault, amount, current_supply)?
     } else {
-        curve.calculate_sell_price(&ctx.accounts.token_vault, amount)?
+        curve.calculate_sell_price(&ctx.accounts.token_vault, amount, current_supply)?
     };
 
     let supply_delta = if is_buy {

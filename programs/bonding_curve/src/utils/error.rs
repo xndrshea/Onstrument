@@ -26,4 +26,8 @@ pub enum ErrorCode {
     InvalidMintAuthority,
     #[msg("Numeric overflow")]
     Overflow,
+    #[msg("Invalid metadata address")]
+    InvalidMetadataAddress,
+    #[msg("Metadata creation failed")]
+    MetadataCreationFailed,
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { CurveType, CreateTokenParams } from '../../../shared/types/token'
+import { createTokenParams, curveType } from '../../../shared/types/token'
 import { BN } from 'bn.js'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
@@ -27,7 +27,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         description: '',
         image: null,
         supply: 1000000,
-        curveType: CurveType.Linear,
+        curveType: curveType.Linear,
         basePrice: 0.1,
         slope: 1,
         exponent: 1,
@@ -64,13 +64,13 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
 
         // Additional curve-specific validations
         switch (formData.curveType) {
-            case CurveType.Exponential:
+            case curveType.Exponential:
                 if (!formData.exponent || formData.exponent <= 0) {
                     setError('Exponent must be greater than 0 for exponential curves')
                     return false
                 }
                 break
-            case CurveType.Logarithmic:
+            case curveType.Logarithmic:
                 if (!formData.logBase || formData.logBase <= 0) {
                     setError('Log base must be greater than 0 for logarithmic curves')
                     return false
@@ -118,17 +118,17 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         // Generate test metadata URI
         const testMetadataUri = generateTestMetadataUri();
 
-        const params: CreateTokenParams = {
+        const params: createTokenParams = {
             name: formData.name,
             symbol: formData.symbol,
-            initial_supply: new BN(formData.supply),
-            metadata_uri: testMetadataUri,
-            curve_config: {
-                curve_type: formData.curveType,
-                base_price: new BN(formData.basePrice * LAMPORTS_PER_SOL),
+            initialSupply: new BN(formData.supply),
+            metadataUri: testMetadataUri,
+            curveConfig: {
+                curveType: formData.curveType,
+                basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
                 slope: new BN(Math.floor(formData.slope * PARAM_SCALE)),
                 exponent: new BN(Math.floor(formData.exponent * PARAM_SCALE)),
-                log_base: new BN(Math.floor(formData.logBase * PARAM_SCALE))
+                logBase: new BN(Math.floor(formData.logBase * PARAM_SCALE))
             }
         };
 
@@ -221,11 +221,11 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 <label>Curve Type</label>
                 <select
                     value={formData.curveType}
-                    onChange={e => setFormData({ ...formData, curveType: Number(e.target.value) as CurveType })}
+                    onChange={e => setFormData({ ...formData, curveType: Number(e.target.value) as unknown as curveType })}
                 >
-                    <option value={CurveType.Linear}>Linear</option>
-                    <option value={CurveType.Exponential}>Exponential</option>
-                    <option value={CurveType.Logarithmic}>Logarithmic</option>
+                    <option value={curveType.Linear}>Linear</option>
+                    <option value={curveType.Exponential}>Exponential</option>
+                    <option value={curveType.Logarithmic}>Logarithmic</option>
                 </select>
             </div>
 
@@ -241,7 +241,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 />
             </div>
 
-            {formData.curveType === CurveType.Exponential && (
+            {formData.curveType === curveType.Exponential && (
                 <div className="form-group">
                     <label>Exponent</label>
                     <input
@@ -255,7 +255,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 </div>
             )}
 
-            {formData.curveType === CurveType.Logarithmic && (
+            {formData.curveType === curveType.Logarithmic && (
                 <div className="form-group">
                     <label>Log Base</label>
                     <input
