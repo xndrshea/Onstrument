@@ -3,18 +3,17 @@ import type { BondingCurve as BondingCurveIDL } from '../../target/types/bonding
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, Idl, AnchorProvider } from '@coral-xyz/anchor';
 
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { BN } from 'bn.js';
 import { createTokenParams, curveType } from '../../shared/types/token';
-import { VersionedTransaction } from '@solana/web3.js';
 
 
 
 
 // Required Program IDs
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
-const programId = new PublicKey('DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw');
+const programId = new PublicKey('Cf6CYaiGJVmTa1oTPJ4XWgMTyp3vRgeuTPkUkM5hYmar');
 
 // Add this type to match Anchor's enum representation
 type AnchorCurveType =
@@ -24,7 +23,12 @@ type AnchorCurveType =
 
 // Type-safe conversion function
 function convertCurveType(type: curveType): AnchorCurveType {
-    return { [type]: {} } as AnchorCurveType;
+    switch (type) {
+        case 'linear': return { linear: {} };
+        case 'exponential': return { exponential: {} };
+        case 'logarithmic': return { logarithmic: {} };
+        default: throw new Error('Invalid curve type');
+    }
 }
 
 export class BondingCurve {
@@ -93,126 +97,135 @@ export class BondingCurve {
     }
 
     async createTokenWithCurve(params: createTokenParams) {
-        // Log input parameters
-        console.log('Creating token with params:', JSON.stringify(params, null, 2));
-
-        // Convert params to match program's expected format
-        const convertedParams = {
-            ...params,
-            initialSupply: new BN(params.initialSupply),
-            curveConfig: {
-                ...params.curveConfig,
-                curveType: convertCurveType(params.curveConfig.curveType),
-                basePrice: new BN(params.curveConfig.basePrice),
-                slope: new BN(params.curveConfig.slope),
-                exponent: new BN(params.curveConfig.exponent),
-                logBase: new BN(params.curveConfig.logBase),
-            }
-        };
-
-        const mintKeypair = Keypair.generate();
-
-        // Derive PDAs
-        const [curveAddress] = PublicKey.findProgramAddressSync(
-            [Buffer.from("bonding_curve"), mintKeypair.publicKey.toBuffer()],
-            this.program.programId
-        );
-
-        const [tokenVault] = PublicKey.findProgramAddressSync(
-            [Buffer.from("token_vault"), mintKeypair.publicKey.toBuffer()],
-            this.program.programId
-        );
-
-        // Derive metadata address
-        const [metadataAddress] = PublicKey.findProgramAddressSync(
-            [
-                Buffer.from("metadata"),
-                METADATA_PROGRAM_ID.toBuffer(),
-                mintKeypair.publicKey.toBuffer(),
-            ],
-            METADATA_PROGRAM_ID
-        );
-
-
         try {
-            // Debug wallet state
-            console.log('Wallet state:', {
-                connected: this.wallet?.connected,
-                publicKey: this.wallet?.publicKey?.toString(),
-                signTransaction: !!this.wallet?.signTransaction,
-                sendTransaction: !!this.wallet?.sendTransaction,
-            });
+            const mintKeypair = Keypair.generate();
 
-            const tx = await this.program.methods
-                .createToken(convertedParams)
-                .accountsStrict({
+            // Log the PDAs being derived
+            console.log('Deriving PDAs...');
+
+            const [curveAddress] = PublicKey.findProgramAddressSync(
+                [Buffer.from("bonding_curve"), mintKeypair.publicKey.toBuffer()],
+                this.program.programId
+            );
+            console.log('Curve PDA:', curveAddress.toString());
+
+            const [tokenVault] = PublicKey.findProgramAddressSync(
+                [Buffer.from("token_vault"), mintKeypair.publicKey.toBuffer()],
+                this.program.programId
+            );
+            console.log('Token Vault PDA:', tokenVault.toString());
+
+            // Derive metadata address
+            const [metadataAddress] = PublicKey.findProgramAddressSync(
+                [
+                    Buffer.from("metadata"),
+                    METADATA_PROGRAM_ID.toBuffer(),
+                    mintKeypair.publicKey.toBuffer(),
+                ],
+                METADATA_PROGRAM_ID
+            );
+            console.log('Metadata PDA:', metadataAddress.toString());
+
+            // Create token instruction
+            console.log('Building create token instruction...');
+            const createTokenIx = await this.program.methods
+                .createToken({
+                    curveConfig: {
+                        ...params.curveConfig,
+                        curveType: convertCurveType(params.curveConfig.curveType)
+                    },
+                    totalSupply: params.totalSupply
+                })
+                .accounts({
                     creator: this.wallet!.publicKey!,
-                    mint: mintKeypair.publicKey,
                     curve: curveAddress,
+                    mint: mintKeypair.publicKey,
                     tokenVault: tokenVault,
-                    metadata: metadataAddress,
-                    metadataProgram: METADATA_PROGRAM_ID,
                     tokenProgram: TOKEN_PROGRAM_ID,
-                    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                     rent: SYSVAR_RENT_PUBKEY,
                 })
                 .signers([mintKeypair])
-                .transaction();
+                .instruction();
 
-            // Get latest blockhash
-            const latestBlockhash = await this.connection.getLatestBlockhash('confirmed');
-            tx.recentBlockhash = latestBlockhash.blockhash;
-            tx.feePayer = this.wallet!.publicKey!;
+            const createMetadataIx = await this.program.methods
+                .createMetadata({
+                    name: params.name,
+                    symbol: params.symbol,
+                    uri: params.metadataUri
+                })
+                .accounts({
+                    creator: this.wallet!.publicKey!,
+                    curve: curveAddress,
+                    mint: mintKeypair.publicKey,
+                    metadata: metadataAddress,
+                    metadataProgram: METADATA_PROGRAM_ID,
+                    systemProgram: SystemProgram.programId,
+                    rent: SYSVAR_RENT_PUBKEY,
+                })
+                .instruction();
 
-            // Debug transaction
-            console.log('Transaction details:', {
-                signers: tx.signatures.map(s => s.publicKey.toString()),
-                instructions: tx.instructions.length,
-                recentBlockhash: tx.recentBlockhash,
-                feePayer: tx.feePayer?.toString(),
-            });
+            // Build and send transaction
+            const tx = await this.buildAndSendTransaction(
+                [createTokenIx, createMetadataIx],
+                [mintKeypair]
+            );
 
-            // Try direct signing first
-            if (!this.wallet?.signTransaction) {
-                throw new Error('Wallet does not support signing');
-            }
-
-            // Sign with wallet first
-            const signedTx = await this.wallet.signTransaction(tx);
-            console.log('Transaction signed by wallet');
-
-            // Then sign with mintKeypair
-            signedTx.partialSign(mintKeypair);
-            console.log('Transaction signed by mintKeypair');
-
-            // Send the fully signed transaction
-            const signature = await this.connection.sendRawTransaction(signedTx.serialize(), {
-                skipPreflight: true,
-                preflightCommitment: 'confirmed',
-            });
-
-            console.log('Transaction submitted:', signature);
-
-            // Wait for confirmation
-            const confirmation = await this.connection.confirmTransaction(signature, 'confirmed');
-            if (confirmation.value.err) {
-                throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
-            }
-
-            return { mint: mintKeypair.publicKey, curve: curveAddress, signature };
+            return {
+                mint: mintKeypair.publicKey,
+                curve: curveAddress,
+                signature: tx
+            };
 
         } catch (err: any) {
             console.error('Detailed error:', {
                 error: err,
                 message: err.message,
                 logs: err.logs,
-                stack: err.stack,
-                walletConnected: this.wallet?.connected,
-                walletPublicKey: this.wallet?.publicKey?.toString(),
+                programError: err.programError
             });
-            throw new Error(`Token creation failed: ${err.message || 'Unknown error'}`);
+            throw err;
         }
+    }
+
+    private async buildAndSendTransaction(
+        instructions: any[],
+        signers: Keypair[]
+    ) {
+        const latestBlockhash = await this.connection.getLatestBlockhash();
+
+        // Create a new transaction directly
+        const tx = new Transaction();
+
+        // Set the fee payer and blockhash
+        tx.feePayer = this.wallet!.publicKey!;
+        tx.recentBlockhash = latestBlockhash.blockhash;
+
+        // Add all instructions
+        tx.add(...instructions);
+
+        if (!this.wallet?.signTransaction) {
+            throw new Error('Wallet does not support signing');
+        }
+
+        const signedTx = await this.wallet.signTransaction(tx);
+        signers.forEach(signer => signedTx.partialSign(signer));
+
+        const signature = await this.connection.sendRawTransaction(signedTx.serialize(), {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+        });
+
+        await this.connection.confirmTransaction({
+            signature,
+            blockhash: latestBlockhash.blockhash,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+        });
+
+        // Update Solscan link to use devnet explorer
+        console.log(`Transaction submitted: https://solscan.io/tx/${signature}?cluster=devnet`);
+
+        return signature;
     }
 
     async buy(params: {
@@ -235,6 +248,10 @@ export class BondingCurve {
                 buyer: this.wallet!.publicKey!,
                 mint: this.mintAddress,
                 buyerTokenAccount,
+                curve: this.curveAddress!,
+                tokenVault: tokenVault,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
             })
             .rpc();
     }

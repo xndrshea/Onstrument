@@ -9,7 +9,8 @@ use serde::{Serialize, Deserialize};
     Clone,
     Copy,
     PartialEq,
-    Default
+    Default,
+    Debug
 )]
 pub enum CurveType {
     #[default]

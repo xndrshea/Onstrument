@@ -16,11 +16,13 @@ export class TokenTransactionService {
     private bondingCurve: BondingCurve;
     // private storageService: StorageService;
     private tokenService: TokenService;
+    private connection: Connection;
 
     constructor(
         connection: Connection,
         wallet: WalletContextState
     ) {
+        this.connection = connection;
         if (!connection) throw new Error('Connection is required');
         if (!wallet) throw new Error('Wallet is required');
         if (!wallet.publicKey) throw new Error('Wallet not connected');
@@ -31,57 +33,44 @@ export class TokenTransactionService {
         // this.storageService = new StorageService();
     }
 
-    async createToken(formData: TokenFormData): Promise<TokenRecord> {
-        // 1. Upload metadata if needed
-        const metadataUri = formData.image
-            ? await this.uploadMetadata(formData)
-            : generateTestMetadataUri(formData);
+    async createToken(params: createTokenParams): Promise<TokenRecord> {
+        try {
+            // Create token with bonding curve
+            const { mint, curve, signature } = await this.bondingCurve.createTokenWithCurve(params);
 
-        // 2. Create token with bonding curve
-        const { mint, curve } = await this.bondingCurve.createTokenWithCurve({
-            name: formData.name,
-            symbol: formData.symbol,
-            initialSupply: new BN(formData.supply * PARAM_SCALE),
-            metadataUri: metadataUri,
-            curveConfig: {
-                curveType: formData.curveType,
-                basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                slope: new BN(formData.slope * PARAM_SCALE),
-                exponent: new BN(formData.exponent * PARAM_SCALE),
-                logBase: new BN(formData.logBase * PARAM_SCALE)
+            if (!signature || !mint || !curve) {
+                throw new Error('Failed to create token - missing required parameters');
             }
-        });
 
-        // 3. Create token record
-        const tokenRecord: TokenRecord = {
-            id: Date.now(), // Temporary ID for frontend tracking
-            mintAddress: mint.toString(),
-            curveAddress: curve.toString(),
-            name: formData.name,
-            symbol: formData.symbol,
-            description: formData.description || '',
-            metadataUri: metadataUri,
-            totalSupply: new BN(formData.supply),
-            decimals: 9, // Standard SPL token decimals
-            curveConfig: {
-                curveType: formData.curveType,
-                basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                slope: new BN(formData.slope * PARAM_SCALE),
-                exponent: new BN(formData.exponent * PARAM_SCALE),
-                logBase: new BN(formData.logBase * PARAM_SCALE)
-            },
-            createdAt: new Date()
-        };
+            // Wait for confirmation
+            const confirmation = await this.connection.confirmTransaction(signature, 'confirmed');
 
-        return tokenRecord;
-    }
+            if (confirmation.value.err) {
+                throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
+            }
 
-    private async uploadMetadata(formData: TokenFormData): Promise<string> {
-        // TODO: Implement metadata upload when storage service is ready
-        return generateTestMetadataUri(formData);
+            // Create token record
+            const tokenRecord: TokenRecord = {
+                id: Date.now(),
+                mintAddress: mint.toString(),
+                curveAddress: curve.toString(),
+                name: params.name,
+                symbol: params.symbol,
+                description: '',
+                metadataUri: params.metadataUri || '',
+                totalSupply: params.totalSupply,
+                decimals: 9,
+                curveConfig: params.curveConfig,
+                createdAt: new Date()
+            };
+
+            // Save to database through tokenService
+            const savedToken = await this.tokenService.create(tokenRecord);
+            return savedToken;
+        } catch (error: any) {
+            console.error('Token creation error:', error);
+            throw error;
+        }
     }
 }
 
-function generateTestMetadataUri(formData: TokenFormData): string {
-    return `https://test.metadata/${formData.name}-${formData.symbol}`;
-}

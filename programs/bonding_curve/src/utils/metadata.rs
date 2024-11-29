@@ -5,6 +5,42 @@ use solana_program::instruction::Instruction;
 use solana_program::{system_program, sysvar};
 use crate::utils::error::ErrorCode;
 
+pub fn find_metadata_account(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            b"metadata",
+            mpl_token_metadata::ID.as_ref(),
+            mint.as_ref(),
+        ],
+        &mpl_token_metadata::ID,
+    )
+}
+
+pub fn validate_metadata_account(
+    metadata: &AccountInfo,
+    metadata_program: &AccountInfo,
+    system_program: &Program<System>,
+    mint: &Pubkey,
+) -> Result<()> {
+    // Validate metadata account owner
+    if metadata.owner != system_program.key {
+        return Err(ErrorCode::InvalidOwner.into());
+    }
+
+    // Validate metadata program
+    if metadata_program.key() != mpl_token_metadata::ID {
+        return Err(ErrorCode::InvalidMetadataProgram.into());
+    }
+
+    // Validate metadata PDA
+    let (expected_metadata, _) = find_metadata_account(mint);
+    if metadata.key() != expected_metadata {
+        return Err(ErrorCode::InvalidMetadataAddress.into());
+    }
+
+    Ok(())
+}
+
 pub fn create_metadata_ix(
     metadata: Pubkey,
     mint: Pubkey,
@@ -15,13 +51,6 @@ pub fn create_metadata_ix(
     symbol: String,
     uri: String,
 ) -> Result<Instruction> {
-    // Validate metadata PDA
-    let (expected_metadata, _) = find_metadata_account(&mint);
-    require!(
-        metadata == expected_metadata,
-        ErrorCode::InvalidMetadataAddress
-    );
-
     let data_v2 = DataV2 {
         name,
         symbol,
@@ -45,15 +74,4 @@ pub fn create_metadata_ix(
         is_mutable: false,
         collection_details: None,
     }))
-}
-
-pub fn find_metadata_account(mint: &Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(
-        &[
-            b"metadata",
-            mpl_token_metadata::ID.as_ref(),
-            mint.as_ref(),
-        ],
-        &mpl_token_metadata::ID,
-    )
 }

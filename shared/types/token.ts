@@ -30,7 +30,7 @@ export interface priceInfo {
 export interface createTokenParams {
     name: string;
     symbol: string;
-    initialSupply: BN;
+    totalSupply: BN;
     metadataUri: string;
     curveConfig: curveConfig;
 }

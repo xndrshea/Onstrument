@@ -46,33 +46,81 @@ router.get('/solana-price', priceLimiter, async (_req, res) => {
 // Token endpoints
 router.post('/tokens', apiLimiter, validateTokenData, async (req, res) => {
     try {
+        // Log the exact request data
+        console.log('Token creation request data:', {
+            mintAddress: req.body.mintAddress,
+            curveAddress: req.body.curveAddress,
+            name: req.body.name,
+            symbol: req.body.symbol,
+            totalSupply: req.body.totalSupply,
+            curveConfig: req.body.curveConfig
+        });
+
+        // Verify all required fields are present
+        if (!req.body.mintAddress || !req.body.curveAddress || !req.body.name ||
+            !req.body.symbol || !req.body.totalSupply || !req.body.curveConfig) {
+            throw new Error('Missing required fields');
+        }
+
+        // Log the SQL query parameters
+        const queryParams = [
+            req.body.mintAddress,
+            req.body.curveAddress,
+            req.body.name,
+            req.body.symbol,
+            req.body.description || '',
+            req.body.metadataUri || '',
+            req.body.totalSupply,
+            req.body.decimals || 9,
+            JSON.stringify(req.body.curveConfig)  // Ensure curveConfig is stringified
+        ];
+        console.log('Query parameters:', queryParams);
+
         const result = await pool.query(
             `INSERT INTO token_platform.tokens 
-             (mintAddress, curveAddress, name, symbol, description, totalSupply, 
-              creatorAddress, curveType, basePrice, slope, exponent, logBase, metadataUri)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             (mint_address, curve_address, name, symbol, description, 
+              metadata_uri, total_supply, decimals, curve_config)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING *`,
-            [
-                req.body.mintAddress,
-                req.body.curveAddress,
-                req.body.name,
-                req.body.symbol,
-                req.body.description,
-                req.body.totalSupply,
-                req.body.creatorAddress,
-                req.body.curveType,
-                req.body.basePrice,
-                req.body.slope,
-                req.body.exponent,
-                req.body.logBase,
-                req.body.metadataUri
-            ]
+            queryParams
         );
 
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        logger.error('Error creating token:', error);
-        res.status(500).json({ error: 'Failed to create token' });
+        if (!result.rows[0]) {
+            throw new Error('No data returned from database insert');
+        }
+
+        console.log('Database insert successful:', result.rows[0]);
+
+        const token = result.rows[0];
+        res.status(201).json({
+            id: token.id,
+            mintAddress: token.mint_address,
+            curveAddress: token.curve_address,
+            name: token.name,
+            symbol: token.symbol,
+            description: token.description,
+            metadataUri: token.metadata_uri,
+            totalSupply: token.total_supply,
+            decimals: token.decimals,
+            curveConfig: token.curve_config,
+            createdAt: token.created_at
+        });
+    } catch (error: any) {
+        // Enhanced error logging
+        console.error('Token creation error details:', {
+            message: error.message,
+            code: error.code,
+            detail: error.detail,
+            stack: error.stack,
+            requestBody: req.body
+        });
+
+        res.status(500).json({
+            error: 'Failed to create token',
+            message: error.message,
+            detail: error.detail || 'No additional details',
+            code: error.code
+        });
     }
 });
 
@@ -95,33 +143,33 @@ router.get('/tokens/:mintAddress', apiLimiter, async (req, res) => {
 });
 
 // Add this new endpoint near your other token endpoints
-router.get('/tokens', apiLimiter, async (_req, res) => {
+router.get('/tokens', apiLimiter, async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT * FROM token_platform.tokens ORDER BY created_at DESC`
         );
 
-        if (!result) {
-            throw new Error('Database query failed');
-        }
+        // Convert snake_case to camelCase
+        const tokens = result.rows.map(token => ({
+            id: token.id,
+            mintAddress: token.mint_address,
+            curveAddress: token.curve_address,
+            name: token.name,
+            symbol: token.symbol,
+            description: token.description,
+            metadataUri: token.metadata_uri,
+            totalSupply: token.total_supply,
+            decimals: token.decimals,
+            creatorId: token.creator_id,
+            network: token.network,
+            curveConfig: token.curve_config,
+            createdAt: token.created_at
+        }));
 
-        res.json(result.rows);
+        res.json(tokens);
     } catch (error) {
         logger.error('Error fetching tokens:', error);
-
-        // More specific error handling
-        if (error instanceof Error && 'code' in error && error.code === '42P01') {
-            res.status(500).json({
-                error: 'Database table not properly initialized',
-                details: 'Please contact system administrator'
-            });
-        } else {
-            res.status(500).json({
-                error: 'Failed to fetch tokens',
-                details: error instanceof Error ? error.message : 'Unknown error',
-                timestamp: new Date().toISOString()
-            });
-        }
+        res.status(500).json({ error: 'Failed to fetch tokens' });
     }
 });
 

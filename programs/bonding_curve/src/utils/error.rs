@@ -30,4 +30,8 @@ pub enum ErrorCode {
     InvalidMetadataAddress,
     #[msg("Metadata creation failed")]
     MetadataCreationFailed,
+    #[msg("Invalid account owner")]
+    InvalidOwner,
+    #[msg("Invalid metadata program")]
+    InvalidMetadataProgram,
 }

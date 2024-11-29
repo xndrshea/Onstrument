@@ -3,7 +3,7 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { tokenService } from '../../services/tokenService'
 import { TradingInterface } from '../Trading/TradingInterface'
 import { PublicKey } from '@solana/web3.js'
-import { TokenData } from '../../../shared/types/token'
+import { TokenRecord } from '../../../shared/types/token'
 import { BondingCurve } from '../../services/bondingCurve'
 
 interface TokenListProps {
@@ -14,14 +14,14 @@ const RAYDIUM_SOL_USDC_POOL = new PublicKey('58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBk
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
 
-const deduplicateTokens = (tokens: TokenData[]): TokenData[] => {
-    return Array.from(new Map(tokens.map(token => [token.mint_address, token])).values());
+const deduplicateTokens = (tokens: TokenRecord[]): TokenRecord[] => {
+    return Array.from(new Map(tokens.map(token => [token.mintAddress, token])).values());
 };
 
 export function TokenList({ onCreateClick }: TokenListProps) {
     const { connection } = useConnection()
-    const { publicKey, connected } = useWallet()
-    const [tokens, setTokens] = useState<TokenData[]>([])
+    const { wallet } = useWallet()
+    const [tokens, setTokens] = useState<TokenRecord[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -33,12 +33,12 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         setRefreshTrigger(prev => prev + 1)
     }
 
-    const fetchOnChainData = async (token: TokenData) => {
+    const fetchOnChainData = async (token: TokenRecord) => {
         try {
-            if (!token.mint_address || !token.curve_address) return token;
+            if (!token.mintAddress || !token.curveAddress) return token;
 
-            const curve = new BondingCurve(connection, null);
-            const curveData = await curve.getCurveData(new PublicKey(token.curve_address));
+            const curve = new BondingCurve(connection, wallet);
+            const curveData = await curve.getCurveData(new PublicKey(token.curveAddress));
 
             return {
                 ...token,
@@ -49,7 +49,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 }
             };
         } catch (error) {
-            console.warn(`Failed to fetch on-chain data for token ${token.mint_address}:`, error);
+            console.warn(`Failed to fetch on-chain data for token ${token.mintAddress}:`, error);
             return token;
         }
     };
@@ -59,18 +59,20 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             setIsLoading(true);
             try {
                 const tokens = await tokenService.getAllTokens();
+                if (!tokens) {
+                    throw new Error('No data received from server');
+                }
 
+                // Add more specific error handling
                 if (!Array.isArray(tokens)) {
-                    setError('Invalid data received from server');
-                    setTokens([]);
-                    return;
+                    throw new Error('Invalid data format received from server');
                 }
 
                 // Filter and validate tokens
                 const validTokens = tokens.filter(token => {
                     const isValid = token &&
                         typeof token === 'object' &&
-                        token.mint_address &&
+                        token.mintAddress &&
                         token.name &&
                         token.symbol;
 
@@ -89,7 +91,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 setError(null);
             } catch (error) {
                 console.error('Error fetching tokens:', error);
-                setError('Failed to fetch tokens. Please try again later.');
+                setError(error instanceof Error ? error.message : 'An unexpected error occurred');
                 setTokens([]);
             } finally {
                 setIsLoading(false);
@@ -128,7 +130,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         return () => clearInterval(interval);
     }, []);
 
-    const calculateMarketCap = (token: TokenData) => {
+    const calculateMarketCap = (token: TokenRecord) => {
         return 'N/A';
     };
 
@@ -136,8 +138,8 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const sortedTokens = useMemo(() => {
         if (!tokens.length) return [];
         return [...tokens].sort((a, b) => {
-            const dateA = new Date(a.created_at || 0).getTime();
-            const dateB = new Date(b.created_at || 0).getTime();
+            const dateA = new Date(a.createdAt || 0).getTime();
+            const dateB = new Date(b.createdAt || 0).getTime();
             return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
         });
     }, [tokens, sortOrder]);
@@ -177,18 +179,18 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             {tokens.length > 0 ? (
                 <div className="token-grid">
                     {sortedTokens.map((token) => (
-                        <div key={token.mint_address} className="token-card">
+                        <div key={token.mintAddress} className="token-card">
                             <h3>{token.name || 'Unnamed Token'}</h3>
                             <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
                             <p className="token-description">{token.description || 'No description available'}</p>
                             <p className="token-mint">
-                                Mint: {token.mint_address ?
-                                    `${token.mint_address.slice(0, 4)}...${token.mint_address.slice(-4)}` :
+                                Mint: {token.mintAddress ?
+                                    `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
                                     'N/A'}
                             </p>
                             <p className="token-date">
-                                {token.created_at ?
-                                    new Date(token.created_at).toLocaleDateString() :
+                                {token.createdAt ?
+                                    new Date(token.createdAt).toLocaleDateString() :
                                     'N/A'}
                             </p>
                             <p className="token-market-cap">
@@ -203,13 +205,13 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                             </div>
                             <div className="token-actions">
                                 <button
-                                    onClick={() => handleAddToWallet(token.mint_address)}
+                                    onClick={() => handleAddToWallet(token.mintAddress)}
                                     className="add-to-wallet-btn"
                                 >
                                     Add to Wallet
                                 </button>
                                 <a
-                                    href={`https://explorer.solana.com/address/${token.mint_address}?cluster=devnet`}
+                                    href={`https://solscan.io/address/${token.mintAddress}${wallet?.adapter?.network === 'mainnet-beta' ? '' : '?cluster=devnet'}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="view-explorer-btn"

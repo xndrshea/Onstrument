@@ -5,6 +5,7 @@ import { BN } from 'bn.js'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
 import { TokenFormData } from '../../../shared/types/token';
+import { PublicKey } from '@solana/web3.js'
 
 const PARAM_SCALE = 10_000; // Fixed-point scaling for curve parameters
 
@@ -81,30 +82,6 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         return true
     }
 
-    const generateTestMetadataJson = () => {
-        return {
-            name: formData.name,
-            symbol: formData.symbol,
-            description: formData.description,
-            image: "", // Optional for testing
-            seller_fee_basis_points: 0,
-            attributes: [],
-            properties: {
-                files: [],
-                category: "token",
-                creators: []
-            },
-            collection: null,
-            uses: null
-        };
-    };
-
-    const generateTestMetadataUri = () => {
-        const metadata = generateTestMetadataJson();
-        // Use base64 encoding to ensure the URI is valid and contains all metadata
-        return `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
-    };
-
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
 
@@ -114,15 +91,13 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
 
         setIsLoading(true);
         setError(null);
-
-        // Generate test metadata URI
-        const testMetadataUri = generateTestMetadataUri();
+        setSuccess(false); // Reset success state
 
         const params: createTokenParams = {
             name: formData.name,
             symbol: formData.symbol,
-            initialSupply: new BN(formData.supply),
-            metadataUri: testMetadataUri,
+            totalSupply: new BN(formData.supply),
+            metadataUri: `https://arweave.net/test-metadata`,
             curveConfig: {
                 curveType: formData.curveType,
                 basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
@@ -133,14 +108,41 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         };
 
         try {
-            const result = await tokenTransactionService.createToken(formData);
+            const result = await tokenTransactionService.createToken(params); // Use params instead of formData
+
+            // Verify the transaction was successful
+            if (!result || !result.mintAddress) {
+                throw new Error('Transaction failed - invalid result');
+            }
+
+            // Additional verification could be added here
+            const mintAccount = await connection.getAccountInfo(new PublicKey(result.mintAddress));
+            if (!mintAccount) {
+                throw new Error('Failed to verify mint account creation');
+            }
+
             console.log('Token created successfully:', result);
             setSuccess(true);
             onSuccess?.();
             onTokenCreated?.();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Token creation failed:', error);
-            setError(error instanceof Error ? error.message : 'Failed to create token');
+
+            // Enhanced error handling
+            let errorMessage = 'Failed to create token';
+
+            if (error.message?.includes('Simulation failed')) {
+                errorMessage = 'Transaction simulation failed. Please check your wallet balance and parameters.';
+            } else if (error.message?.includes('0x1')) {
+                errorMessage = 'Insufficient balance to create token';
+            } else if (error.message?.includes('6007')) {
+                errorMessage = 'Invalid curve configuration parameters';
+            } else if (error instanceof Error) {
+                errorMessage = error.message;
+            }
+
+            setError(errorMessage);
+            setSuccess(false);
         } finally {
             setIsLoading(false);
         }

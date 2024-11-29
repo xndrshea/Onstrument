@@ -6,7 +6,7 @@ pub mod utils;
 
 use crate::instructions::*;
 
-declare_id!("DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw");
+declare_id!("Cf6CYaiGJVmTa1oTPJ4XWgMTyp3vRgeuTPkUkM5hYmar");
 
 #[program]
 pub mod bonding_curve {
@@ -14,6 +14,10 @@ pub mod bonding_curve {
 
     pub fn create_token(ctx: Context<CreateToken>, params: CreateTokenParams) -> Result<()> {
         create_token::handler(ctx, params)
+    }
+
+    pub fn create_metadata(ctx: Context<CreateMetadata>, params: CreateMetadataParams) -> Result<()> {
+        create_metadata::handler(ctx, params)
     }
 
     pub fn buy(ctx: Context<Buy>, amount: u64, max_sol_cost: u64) -> Result<()> {
