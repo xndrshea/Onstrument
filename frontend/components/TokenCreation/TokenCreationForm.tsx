@@ -91,24 +91,26 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
 
         setIsLoading(true);
         setError(null);
-        setSuccess(false); // Reset success state
-
-        const params: createTokenParams = {
-            name: formData.name,
-            symbol: formData.symbol,
-            totalSupply: new BN(formData.supply),
-            metadataUri: `https://arweave.net/test-metadata`,
-            curveConfig: {
-                curveType: formData.curveType,
-                basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                slope: new BN(Math.floor(formData.slope * PARAM_SCALE)),
-                exponent: new BN(Math.floor(formData.exponent * PARAM_SCALE)),
-                logBase: new BN(Math.floor(formData.logBase * PARAM_SCALE))
-            }
-        };
+        setSuccess(false);
 
         try {
-            const result = await tokenTransactionService.createToken(params); // Use params instead of formData
+            // Create the params object for on-chain creation
+            const params: createTokenParams = {
+                name: formData.name,
+                symbol: formData.symbol,
+                totalSupply: new BN(formData.supply),
+                metadataUri: `https://arweave.net/test-metadata`,
+                curveConfig: {
+                    curveType: formData.curveType,
+                    basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
+                    slope: new BN(Math.floor(formData.slope * PARAM_SCALE)),
+                    exponent: new BN(Math.floor(formData.exponent * PARAM_SCALE)),
+                    logBase: new BN(Math.floor(formData.logBase * PARAM_SCALE))
+                }
+            };
+
+            // Pass both the params and the description
+            const result = await tokenTransactionService.createToken(params, formData.description);
 
             // Verify the transaction was successful
             if (!result || !result.mintAddress) {

@@ -6,9 +6,11 @@ export class TokenModel {
         try {
             const result = await pool.query(`
                 SELECT t.*, ts.holder_count, ts.transaction_count, ts.last_price, 
-                       ts.market_cap, ts.volume_24h, ts.total_volume
+                       ts.market_cap, ts.volume_24h, ts.total_volume,
+                       tm.description
                 FROM token_platform.tokens t
                 LEFT JOIN token_platform.token_stats ts ON t.id = ts.token_id
+                LEFT JOIN token_platform.token_metadata tm ON t.mint_address = tm.mint_address
                 ORDER BY t.created_at DESC
             `);
             return result.rows;

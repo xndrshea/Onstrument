@@ -33,7 +33,7 @@ export class TokenTransactionService {
         // this.storageService = new StorageService();
     }
 
-    async createToken(params: createTokenParams): Promise<TokenRecord> {
+    async createToken(params: createTokenParams, description: string): Promise<TokenRecord> {
         try {
             // Create token with bonding curve
             const { mint, curve, signature } = await this.bondingCurve.createTokenWithCurve(params);
@@ -49,14 +49,14 @@ export class TokenTransactionService {
                 throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
             }
 
-            // Create token record
+            // Create token record with description
             const tokenRecord: TokenRecord = {
                 id: Date.now(),
                 mintAddress: mint.toString(),
                 curveAddress: curve.toString(),
                 name: params.name,
                 symbol: params.symbol,
-                description: '',
+                description: description,
                 metadataUri: params.metadataUri || '',
                 totalSupply: params.totalSupply,
                 decimals: 9,

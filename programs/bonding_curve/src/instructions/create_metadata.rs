@@ -58,10 +58,8 @@ pub fn handler(ctx: Context<CreateMetadata>, params: CreateMetadataParams) -> Re
         params.uri,
     )?;
 
-    // Store the mint key to extend its lifetime
-    let mint_key = ctx.accounts.mint.key();
-    
     // Get the curve PDA signer seeds
+    let mint_key = ctx.accounts.mint.key();
     let curve_seeds = &[
         b"bonding_curve",
         mint_key.as_ref(),
