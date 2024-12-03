@@ -1,13 +1,11 @@
 import React, { useState } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { createTokenParams, curveType } from '../../../shared/types/token'
+import { createTokenParams } from '../../../shared/types/token'
 import { BN } from 'bn.js'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
 import { TokenFormData } from '../../../shared/types/token';
 import { PublicKey } from '@solana/web3.js'
-
-const PARAM_SCALE = 10_000; // Fixed-point scaling for curve parameters
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
@@ -28,11 +26,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         description: '',
         image: null,
         supply: 1000000,
-        curveType: curveType.Linear,
         basePrice: 0.1,
-        slope: 1,
-        exponent: 1,
-        logBase: 1
     })
 
     const validateForm = (): boolean => {
@@ -56,29 +50,6 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             setError('Base price must be greater than 0')
             return false
         }
-
-        // Slope is required for all curve types
-        if (!formData.slope || formData.slope <= 0) {
-            setError('Slope must be greater than 0')
-            return false
-        }
-
-        // Additional curve-specific validations
-        switch (formData.curveType) {
-            case curveType.Exponential:
-                if (!formData.exponent || formData.exponent <= 0) {
-                    setError('Exponent must be greater than 0 for exponential curves')
-                    return false
-                }
-                break
-            case curveType.Logarithmic:
-                if (!formData.logBase || formData.logBase <= 0) {
-                    setError('Log base must be greater than 0 for logarithmic curves')
-                    return false
-                }
-                break
-        }
-
         return true
     }
 
@@ -98,14 +69,10 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             const params: createTokenParams = {
                 name: formData.name,
                 symbol: formData.symbol,
-                totalSupply: new BN(formData.supply),
+                totalSupply: new BN(formData.supply * LAMPORTS_PER_SOL),
                 metadataUri: `https://arweave.net/test-metadata`,
                 curveConfig: {
-                    curveType: formData.curveType,
                     basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
-                    slope: new BN(Math.floor(formData.slope * PARAM_SCALE)),
-                    exponent: new BN(Math.floor(formData.exponent * PARAM_SCALE)),
-                    logBase: new BN(Math.floor(formData.logBase * PARAM_SCALE))
                 }
             };
 
@@ -221,61 +188,9 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 />
             </div>
 
-            <div className="form-group">
-                <label>Curve Type</label>
-                <select
-                    value={formData.curveType}
-                    onChange={e => setFormData({ ...formData, curveType: Number(e.target.value) as unknown as curveType })}
-                >
-                    <option value={curveType.Linear}>Linear</option>
-                    <option value={curveType.Exponential}>Exponential</option>
-                    <option value={curveType.Logarithmic}>Logarithmic</option>
-                </select>
-            </div>
-
-            <div className="form-group">
-                <label>Slope</label>
-                <input
-                    type="number"
-                    value={formData.slope ?? ''}
-                    onChange={e => setFormData({ ...formData, slope: parseFloat(e.target.value) })}
-                    min="0.01"
-                    step="0.01"
-                    required
-                />
-            </div>
-
-            {formData.curveType === curveType.Exponential && (
-                <div className="form-group">
-                    <label>Exponent</label>
-                    <input
-                        type="number"
-                        value={formData.exponent ?? ''}
-                        onChange={e => setFormData({ ...formData, exponent: parseFloat(e.target.value) })}
-                        min="0.01"
-                        step="0.01"
-                        required
-                    />
-                </div>
-            )}
-
-            {formData.curveType === curveType.Logarithmic && (
-                <div className="form-group">
-                    <label>Log Base</label>
-                    <input
-                        type="number"
-                        value={formData.logBase ?? ''}
-                        onChange={e => setFormData({ ...formData, logBase: parseFloat(e.target.value) })}
-                        min="0.01"
-                        step="0.01"
-                        required
-                    />
-                </div>
-            )}
-
             <button type="submit" disabled={isLoading}>
                 {isLoading ? 'Creating Token...' : 'Create Token'}
             </button>
         </form>
-    )
+    );
 } 

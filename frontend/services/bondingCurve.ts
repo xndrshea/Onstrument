@@ -4,35 +4,20 @@ import { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, Idl, AnchorProvider } from '@coral-xyz/anchor';
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { BN } from 'bn.js';
-import { createTokenParams, curveType } from '../../shared/types/token';
+import { createTokenParams } from '../../shared/types/token';
+import { getProgramErrorMessage } from '../types/errors';
 
-
-
+// Add this constant at the top of the file
+const TOKEN_DECIMALS = 9;
+const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
 
 // Required Program IDs
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 const programId = new PublicKey('Cf6CYaiGJVmTa1oTPJ4XWgMTyp3vRgeuTPkUkM5hYmar');
-
-// Add this type to match Anchor's enum representation
-type AnchorCurveType =
-    | { linear: Record<string, never> }
-    | { exponential: Record<string, never> }
-    | { logarithmic: Record<string, never> };
-
-// Type-safe conversion function
-function convertCurveType(type: curveType): AnchorCurveType {
-    switch (type) {
-        case 'linear': return { linear: {} };
-        case 'exponential': return { exponential: {} };
-        case 'logarithmic': return { logarithmic: {} };
-        default: throw new Error('Invalid curve type');
-    }
-}
-
 export class BondingCurve {
-    private program: Program<BondingCurveIDL>;
+    public readonly program: Program<BondingCurveIDL>;
     private connection: Connection;
     private wallet: WalletContextState | null;
     public readonly mintAddress: PublicKey | undefined;
@@ -131,8 +116,7 @@ export class BondingCurve {
             const createTokenIx = await this.program.methods
                 .createToken({
                     curveConfig: {
-                        ...params.curveConfig,
-                        curveType: convertCurveType(params.curveConfig.curveType)
+                        basePrice: params.curveConfig.basePrice
                     },
                     totalSupply: params.totalSupply
                 })
@@ -144,7 +128,7 @@ export class BondingCurve {
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                     rent: SYSVAR_RENT_PUBKEY,
-                })
+                } as any)
                 .signers([mintKeypair])
                 .instruction();
 
@@ -162,7 +146,7 @@ export class BondingCurve {
                     metadataProgram: METADATA_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                     rent: SYSVAR_RENT_PUBKEY,
-                })
+                } as any)
                 .instruction();
 
             // Build and send transaction
@@ -194,14 +178,9 @@ export class BondingCurve {
     ) {
         const latestBlockhash = await this.connection.getLatestBlockhash();
 
-        // Create a new transaction directly
         const tx = new Transaction();
-
-        // Set the fee payer and blockhash
         tx.feePayer = this.wallet!.publicKey!;
         tx.recentBlockhash = latestBlockhash.blockhash;
-
-        // Add all instructions
         tx.add(...instructions);
 
         if (!this.wallet?.signTransaction) {
@@ -211,27 +190,18 @@ export class BondingCurve {
         const signedTx = await this.wallet.signTransaction(tx);
         signers.forEach(signer => signedTx.partialSign(signer));
 
-        const signature = await this.connection.sendRawTransaction(signedTx.serialize(), {
-            skipPreflight: false,
-            preflightCommitment: 'confirmed',
-        });
-
+        const signature = await this.connection.sendRawTransaction(signedTx.serialize());
         await this.connection.confirmTransaction({
             signature,
             blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
         });
 
-        // Update Solscan link to use devnet explorer
         console.log(`Transaction submitted: https://solscan.io/tx/${signature}?cluster=devnet`);
-
         return signature;
     }
 
-    async buy(params: {
-        amount: number;
-        maxSolCost: number;
-    }) {
+    async ensureTokenAccount(): Promise<PublicKey> {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
         const buyerTokenAccount = await getAssociatedTokenAddress(
@@ -239,21 +209,82 @@ export class BondingCurve {
             this.wallet!.publicKey!
         );
 
-        return await this.program.methods
-            .buy(
-                new BN(params.amount),
-                new BN(params.maxSolCost * LAMPORTS_PER_SOL)
-            )
-            .accounts({
-                buyer: this.wallet!.publicKey!,
-                mint: this.mintAddress,
-                buyerTokenAccount,
-                curve: this.curveAddress!,
-                tokenVault: tokenVault,
-                tokenProgram: TOKEN_PROGRAM_ID,
-                systemProgram: SystemProgram.programId,
-            })
-            .rpc();
+        try {
+            const tokenAccountInfo = await this.connection.getAccountInfo(buyerTokenAccount);
+            if (!tokenAccountInfo) {
+                const createAtaIx = createAssociatedTokenAccountInstruction(
+                    this.wallet!.publicKey!,
+                    buyerTokenAccount,
+                    this.wallet!.publicKey!,
+                    this.mintAddress
+                );
+
+                const latestBlockhash = await this.connection.getLatestBlockhash();
+                const tx = new Transaction();
+                tx.feePayer = this.wallet!.publicKey!;
+                tx.recentBlockhash = latestBlockhash.blockhash;
+                tx.add(createAtaIx);
+
+                const signedTx = await this.wallet!.signTransaction!(tx);
+                const signature = await this.connection.sendRawTransaction(signedTx.serialize());
+                await this.connection.confirmTransaction({
+                    signature,
+                    blockhash: latestBlockhash.blockhash,
+                    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+                });
+            }
+            return buyerTokenAccount;
+        } catch (error) {
+            console.error('Error ensuring token account:', error);
+            throw error;
+        }
+    }
+
+    async buy(params: {
+        amount: number;
+        maxSolCost: number;
+    }) {
+        if (!this.mintAddress) throw new Error('Mint address is required');
+        if (!this.curveAddress) throw new Error('Curve address is required');
+
+        // Convert to raw units and ensure they're integers
+        const scaledAmount = Math.floor(params.amount * TOKEN_DECIMAL_MULTIPLIER);
+        const scaledMaxCost = Math.floor(params.maxSolCost * LAMPORTS_PER_SOL);
+
+        if (scaledAmount <= 0) {
+            throw new Error('Amount must be greater than 0');
+        }
+
+        // Ensure token account exists
+        const buyerTokenAccount = await this.ensureTokenAccount();
+
+        const [tokenVault] = PublicKey.findProgramAddressSync(
+            [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
+            this.program.programId
+        );
+
+        try {
+            return await this.program.methods
+                .buy(new BN(scaledAmount), new BN(scaledMaxCost))
+                .accounts({
+                    buyer: this.wallet!.publicKey!,
+                    mint: this.mintAddress,
+                    buyerTokenAccount,
+                    curve: this.curveAddress,
+                    tokenVault: tokenVault,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                    systemProgram: SystemProgram.programId,
+                } as any)
+                .rpc();
+        } catch (error: any) {
+            console.error('Buy error:', {
+                error,
+                message: error.message,
+                code: error.code,
+                logs: error.logs
+            });
+            throw error;
+        }
     }
 
     async sell(params: {
@@ -265,11 +296,6 @@ export class BondingCurve {
 
         const [tokenVault] = PublicKey.findProgramAddressSync(
             [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
-            this.program.programId
-        );
-
-        const [solVault] = PublicKey.findProgramAddressSync(
-            [Buffer.from("sol_vault"), this.mintAddress.toBuffer()],
             this.program.programId
         );
 
@@ -286,29 +312,74 @@ export class BondingCurve {
             .accounts({
                 seller: this.wallet!.publicKey!,
                 mint: this.mintAddress,
-            })
+                sellerTokenAccount,
+                curve: this.curveAddress,
+                tokenVault: tokenVault,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+            } as any)
             .rpc();
     }
 
     async getPriceQuote(amount: number, isBuy: boolean): Promise<{
         price: number;
-        supplyDelta: number;
         isBuy: boolean;
     }> {
+        if (!this.mintAddress || !this.curveAddress) {
+            throw new Error('Mint address and curve address are required');
+        }
+
+        try {
+            const tokenVault = this.getTokenVault();
+
+            // Fetch and validate account states
+            const [curveAccount, vaultAccount, curveSolBalance] = await Promise.all([
+                this.program.account.bondingCurve.fetch(this.curveAddress),
+                this.connection.getTokenAccountBalance(tokenVault),
+                this.connection.getBalance(this.curveAddress),
+            ]);
+
+            console.log('Debug values:', {
+                basePrice: curveAccount.config.basePrice.toString(),
+                currentSupply: vaultAccount.value.amount,
+                curveSolBalance: curveSolBalance,
+                virtualSol: (BigInt(vaultAccount.value.amount) * BigInt(curveAccount.config.basePrice.toString())).toString(),
+                scaledAmount: new BN(Math.floor(amount * TOKEN_DECIMAL_MULTIPLIER)).toString(),
+                isBuy,
+                accounts: {
+                    mint: this.mintAddress.toString(),
+                    curve: this.curveAddress.toString(),
+                    tokenVault: tokenVault.toString()
+                }
+            });
+
+            const scaledAmount = new BN(Math.floor(amount * TOKEN_DECIMAL_MULTIPLIER));
+
+            const result = await this.program.methods
+                .getPriceInfo(scaledAmount, isBuy)
+                .accounts({
+                    mint: this.mintAddress,
+                    curve: this.curveAddress,
+                    tokenVault: tokenVault,
+                })
+                .view();
+
+            return {
+                price: Number(result.price) / LAMPORTS_PER_SOL,
+                isBuy: result.isBuy
+            };
+        } catch (error: any) {
+            console.error('Price quote error:', error);
+            throw error;
+        }
+    }
+
+    private getTokenVault(): PublicKey {
         if (!this.mintAddress) throw new Error('Mint address is required');
-
-        const quote = await this.program.methods
-            .getPriceInfo(new BN(amount), isBuy)
-            .accounts({
-                mint: this.mintAddress,
-            })
-            .view();
-
-        return {
-            price: Number(quote.price) / LAMPORTS_PER_SOL,
-            supplyDelta: Number(quote.supplyDelta),
-            isBuy: quote.isBuy
-        };
+        return PublicKey.findProgramAddressSync(
+            [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
+            this.program.programId
+        )[0];
     }
 
 }

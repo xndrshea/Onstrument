@@ -6,8 +6,6 @@ pub enum ErrorCode {
     SlippageExceeded,
     #[msg("Insufficient liquidity in pool")]
     InsufficientLiquidity,
-    #[msg("Invalid curve parameters")]
-    InvalidCurveParameters,
     #[msg("Math operation overflow")]
     MathOverflow,
     #[msg("Price exceeds maximum cost")]
@@ -24,8 +22,6 @@ pub enum ErrorCode {
     InvalidDecimals,
     #[msg("Invalid mint authority")]
     InvalidMintAuthority,
-    #[msg("Numeric overflow")]
-    Overflow,
     #[msg("Invalid metadata address")]
     InvalidMetadataAddress,
     #[msg("Metadata creation failed")]

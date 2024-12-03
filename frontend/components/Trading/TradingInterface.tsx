@@ -1,41 +1,47 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { formatSupply } from '../../utils/formatting'
-import { getProgramErrorMessage } from '../../types/errors'
 import { TokenRecord } from '../../../shared/types/token'
 import { BondingCurve } from '../../services/bondingCurve'
-import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import { getAssociatedTokenAddress } from '@solana/spl-token'
+import { BN } from '@project-serum/anchor';
+
+// Program-specific error codes from IDL
+const ERROR_CODES = {
+    SLIPPAGE_EXCEEDED: 6000,
+    INSUFFICIENT_LIQUIDITY: 6001,
+    MATH_OVERFLOW: 6002,
+    PRICE_EXCEEDS_MAX_COST: 6003,
+    PRICE_BELOW_MIN_RETURN: 6004,
+    // ... other error codes as needed
+} as const;
 
 interface TradingInterfaceProps {
     token: TokenRecord
     onTradeComplete: () => void
 }
 
-const MAX_SLIPPAGE = 0.05 // 5% slippage tolerance
-
 export function TradingInterface({ token, onTradeComplete }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
-    const { publicKey, connected } = wallet
+    const { publicKey, connected, sendTransaction } = wallet
 
     // State management
     const [amount, setAmount] = useState<string>('')
     const [isLoading, setIsLoading] = useState(false)
     const [isSelling, setIsSelling] = useState(false)
-    const [transactionStatus, setTransactionStatus] = useState<string>('')
     const [error, setError] = useState<string | null>(null)
     const [solBalance, setSolBalance] = useState<number>(0)
     const [userBalance, setUserBalance] = useState<bigint>(BigInt(0))
     const [bondingCurveBalance, setBondingCurveBalance] = useState<bigint>(BigInt(0))
-    const [currentPrice, setCurrentPrice] = useState<number>(0)
-    const [totalCost, setTotalCost] = useState<number>(0)
-    const [slippageWarning, setSlippageWarning] = useState(false)
+    const [priceInfo, setPriceInfo] = useState<{ price: number; totalCost: number } | null>(null)
+    const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05); // Default 5%
 
-    // Initialize local interface for interacting with the bonding curve program
+    // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
-        if (!connection || !wallet || !wallet.publicKey || !token.mint_address) {
+        if (!connection || !publicKey || !token.mintAddress || !token.curveAddress) {
             return null;
         }
 
@@ -43,146 +49,117 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             return new BondingCurve(
                 connection,
                 wallet,
-                new PublicKey(token.mint_address),
-                new PublicKey(token.curve_address)
+                new PublicKey(token.mintAddress),
+                new PublicKey(token.curveAddress)
             );
         } catch (error) {
             console.error('Error creating bonding curve interface:', error);
-            setError('Failed to initialize trading interface');
             return null;
         }
-    }, [connection, wallet, token.mint_address, token.curve_address]);
+    }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet]);
 
-    // Update balances and price info
-    const updateBalances = useCallback(async () => {
+    // Fetch balances and price
+    const updateBalances = async () => {
         if (!publicKey || !bondingCurve) return;
 
         try {
-            setError(null);
+            const [tokenVault] = PublicKey.findProgramAddressSync(
+                [Buffer.from("token_vault"), new PublicKey(token.mintAddress).toBuffer()],
+                bondingCurve.program.programId
+            );
 
-            // Get the user's Associated Token Account (ATA) address
             const ata = await getAssociatedTokenAddress(
-                new PublicKey(token.mint_address),
+                new PublicKey(token.mintAddress),
                 publicKey
             );
 
-            const [solBal, tokenAccountInfo, priceInfo] = await Promise.all([
+            const [solBal, tokenAccountInfo, vaultBalance] = await Promise.all([
                 connection.getBalance(publicKey),
-                connection.getTokenAccountBalance(ata),
-                bondingCurve.getPriceQuote(1_000_000, true)
+                connection.getTokenAccountBalance(ata).catch(() => ({ value: { amount: '0', decimals: 9 } })),
+                connection.getTokenAccountBalance(tokenVault)
             ]);
 
             setSolBalance(solBal / LAMPORTS_PER_SOL);
             setUserBalance(BigInt(tokenAccountInfo.value.amount));
-            setCurrentPrice(priceInfo.price);
-
-            const [tokenVault] = PublicKey.findProgramAddressSync(
-                [Buffer.from("token_vault"), new PublicKey(token.mint_address).toBuffer()],
-                new PublicKey("DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw") // Program ID from IDL
-            );
-
-            const balance = await connection.getTokenAccountBalance(tokenVault);
-            setBondingCurveBalance(BigInt(balance.value.amount));
+            setBondingCurveBalance(BigInt(vaultBalance.value.amount));
         } catch (error) {
             console.error('Error updating balances:', error);
-            setError('Failed to fetch current balances. Please try again.');
-            setSolBalance(0);
-            setUserBalance(BigInt(0));
-            setCurrentPrice(0);
-            setBondingCurveBalance(BigInt(0));
+            setError('Failed to fetch balances');
         }
-    }, [publicKey, bondingCurve, connection, token.mint_address]);
+    };
 
-    // Handle price updates when amount changes
+    // Update price when amount changes
     useEffect(() => {
-        if (!bondingCurve || !amount || isNaN(parseFloat(amount))) {
-            setTotalCost(0);
-            setCurrentPrice(0);
-            setSlippageWarning(false);
-            return;
-        }
+        const updatePrice = async () => {
+            if (!bondingCurve || !amount || isNaN(parseFloat(amount))) {
+                setPriceInfo(null);
+                return;
+            }
 
-        const timer = setTimeout(async () => {
             try {
-                const parsedAmount = parseFloat(amount) * 1e9;
-                if (parsedAmount <= 0) {
-                    setError('Please enter a positive amount');
-                    return;
-                }
+                const quote = await bondingCurve.getPriceQuote(
+                    parseFloat(amount),
+                    !isSelling
+                );
 
-                const priceInfo = await bondingCurve.getPriceQuote(parsedAmount, !isSelling);
-                setTotalCost(priceInfo.price);
-                setCurrentPrice(priceInfo.price / parsedAmount);
-
-                const priceImpact = Math.abs(priceInfo.supplyDelta) / parsedAmount;
-                setSlippageWarning(priceImpact > MAX_SLIPPAGE);
+                setPriceInfo({
+                    price: quote.price,
+                    totalCost: quote.price * LAMPORTS_PER_SOL
+                });
                 setError(null);
             } catch (error) {
                 console.error('Error fetching price:', error);
-                setError(getProgramErrorMessage(error));
-                setTotalCost(0);
-                setCurrentPrice(0);
+                setPriceInfo(null);
+                setError('Failed to fetch price');
             }
-        }, 500);
+        };
 
-        return () => clearTimeout(timer);
-    }, [amount, bondingCurve, isSelling]);
+        updatePrice();
+    }, [amount, isSelling, bondingCurve, token.mintAddress, token.curveAddress]);
 
-    // Handle transaction execution
-    const handleTransaction = async (operation: 'buy' | 'sell', amount: string) => {
-        if (!publicKey || !amount || !bondingCurve) {
-            setError('Please connect your wallet and enter an amount');
-            return;
-        }
-
-        const parsedAmount = parseFloat(amount) * 1e9;
-        if (parsedAmount <= 0) {
-            setError('Please enter a positive amount');
-            return;
-        }
-
-        if (operation === 'buy' && totalCost > solBalance * LAMPORTS_PER_SOL) {
-            setError('Insufficient SOL balance');
-            return;
-        }
-
-        if (operation === 'sell' && parsedAmount > Number(userBalance)) {
-            setError('Insufficient token balance');
+    // Handle transaction
+    const handleTransaction = async () => {
+        if (!publicKey || !amount || !bondingCurve || !priceInfo) {
+            setError('Invalid transaction parameters');
             return;
         }
 
         try {
-            setError(null);
             setIsLoading(true);
-            setTransactionStatus(`Preparing ${operation}...`);
+            const parsedAmount = new BN(parseFloat(amount) * 1e9);
 
-            let signature;
-            if (operation === 'buy') {
-                signature = await bondingCurve.buy({
-                    amount: parsedAmount,
-                    maxSolCost: totalCost * (1 + MAX_SLIPPAGE)
-                });
+            if (isSelling) {
+                const minSolReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
+                await bondingCurve.sell({ amount: parsedAmount, minSolReturn });
             } else {
-                signature = await bondingCurve.sell({
-                    amount: parsedAmount,
-                    minSolReturn: totalCost * (1 - MAX_SLIPPAGE)
-                });
+                const maxSolCost = new BN(Math.ceil(priceInfo.totalCost * (1 + slippageTolerance)));
+                await bondingCurve.buy({ amount: parsedAmount, maxSolCost });
             }
 
-            setTransactionStatus('Confirming transaction...');
-            await connection.confirmTransaction(signature, 'confirmed');
-
-            setTransactionStatus('Transaction successful!');
             await updateBalances();
             onTradeComplete();
-
-        } catch (error) {
-            console.error(`${operation} failed:`, error);
-            setError(getProgramErrorMessage(error));
+            setAmount('');
+        } catch (error: any) {
+            console.error('Transaction failed:', error);
+            // Handle program-specific errors
+            if (error.code === ERROR_CODES.SLIPPAGE_EXCEEDED) {
+                setError('Price changed too much during transaction');
+            } else if (error.code === ERROR_CODES.INSUFFICIENT_LIQUIDITY) {
+                setError('Insufficient liquidity in pool');
+            } else {
+                setError('Transaction failed');
+            }
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Initial balance fetch
+    useEffect(() => {
+        if (connected && publicKey) {
+            updateBalances();
+        }
+    }, [connected, publicKey]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">
@@ -249,30 +226,43 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                             />
                         </div>
 
+                        {/* Slippage Tolerance Input */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Slippage Tolerance (%)
+                            </label>
+                            <input
+                                type="number"
+                                value={slippageTolerance * 100}
+                                onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (!isNaN(value) && value >= 0 && value <= 100) {
+                                        setSlippageTolerance(value / 100);
+                                    }
+                                }}
+                                className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Enter slippage %"
+                                min="0"
+                                max="100"
+                                step="0.1"
+                            />
+                        </div>
+
                         {/* Price Information */}
                         {amount && !isNaN(parseFloat(amount)) && (
                             <div className="mb-4 p-3 bg-gray-50 rounded">
                                 <div className="flex justify-between mb-2">
                                     <span className="text-sm text-gray-500">Current Price</span>
                                     <span className="font-medium">
-                                        {(currentPrice / LAMPORTS_PER_SOL).toFixed(4)} SOL
+                                        {((priceInfo?.price ?? 0) / LAMPORTS_PER_SOL).toFixed(4)} SOL
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-gray-500">Total Cost</span>
                                     <span className="font-medium">
-                                        {(totalCost / LAMPORTS_PER_SOL).toFixed(4)} SOL
+                                        {((priceInfo?.totalCost ?? 0) / LAMPORTS_PER_SOL).toFixed(4)} SOL
                                     </span>
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Slippage Warning */}
-                        {slippageWarning && (
-                            <div className="mb-4 p-3 bg-yellow-50 text-yellow-700 rounded">
-                                <p className="text-sm">
-                                    Warning: This trade may have high price impact due to limited liquidity
-                                </p>
                             </div>
                         )}
 
@@ -284,9 +274,9 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                         )}
 
                         {/* Transaction Status */}
-                        {transactionStatus && (
+                        {isLoading && (
                             <div className="mb-4 p-3 bg-blue-50 text-blue-700 rounded">
-                                <p className="text-sm">{transactionStatus}</p>
+                                <p className="text-sm">Processing transaction...</p>
                             </div>
                         )}
 
@@ -296,7 +286,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                                 ? 'bg-gray-300 cursor-not-allowed'
                                 : 'bg-blue-600 hover:bg-blue-700 text-white'
                                 }`}
-                            onClick={() => handleTransaction(isSelling ? 'sell' : 'buy', amount)}
+                            onClick={handleTransaction}
                             disabled={isLoading || !amount || isNaN(parseFloat(amount))}
                         >
                             {isLoading ? (

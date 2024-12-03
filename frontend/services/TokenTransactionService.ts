@@ -1,5 +1,4 @@
-import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
+import { Connection } from '@solana/web3.js';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { BondingCurve } from './bondingCurve';
 // import { StorageService } from './storageService';
@@ -9,8 +8,6 @@ import {
     createTokenParams,
     TokenFormData
 } from '../../shared/types/token';
-
-const PARAM_SCALE = 10_000;
 
 export class TokenTransactionService {
     private bondingCurve: BondingCurve;
@@ -43,7 +40,11 @@ export class TokenTransactionService {
             }
 
             // Wait for confirmation
-            const confirmation = await this.connection.confirmTransaction(signature, 'confirmed');
+            const confirmation = await this.connection.confirmTransaction({
+                signature,
+                blockhash: await this.connection.getLatestBlockhash().then(res => res.blockhash),
+                lastValidBlockHeight: await this.connection.getLatestBlockhash().then(res => res.lastValidBlockHeight),
+            });
 
             if (confirmation.value.err) {
                 throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);

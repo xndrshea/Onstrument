@@ -10,13 +10,15 @@ export function formatMarketCap(marketCap: number): string {
 }
 
 export function formatSupply(supply: bigint): string {
-    const numberSupply = Number(supply) / 1e9; // Convert from raw units to token units
-    if (numberSupply >= 1_000_000) {
-        return `${(numberSupply / 1_000_000).toFixed(2)}M`;
-    } else if (numberSupply >= 1_000) {
-        return `${(numberSupply / 1_000).toFixed(2)}K`;
+    // Convert from raw units (1e9) to decimal representation
+    const decimalSupply = Number(supply) / 1e9;
+
+    if (decimalSupply >= 1_000_000) {
+        return `${(decimalSupply / 1_000_000).toFixed(2)}M`;
+    } else if (decimalSupply >= 1_000) {
+        return `${(decimalSupply / 1_000).toFixed(2)}K`;
     }
-    return numberSupply.toFixed(2);
+    return decimalSupply.toFixed(2);
 }
 
 export function convertBigIntToNumber(value: bigint | undefined): number {

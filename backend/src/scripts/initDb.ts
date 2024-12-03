@@ -9,7 +9,7 @@ export async function initDatabase() {
             CREATE SCHEMA IF NOT EXISTS token_platform;
         `);
 
-        // Create tokens table with index in a single transaction
+        // Create tokens table with the simplified curve_config
         await client.query(`
             BEGIN;
             
@@ -23,22 +23,12 @@ export async function initDatabase() {
                 metadata_uri TEXT,
                 total_supply NUMERIC NOT NULL,
                 decimals INTEGER DEFAULT 9,
-                curve_config JSONB NOT NULL,
+                curve_config JSONB NOT NULL DEFAULT '{"basePrice": 0}',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
 
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_indexes 
-                    WHERE schemaname = 'token_platform' 
-                    AND tablename = 'tokens' 
-                    AND indexname = 'idx_token_platform_tokens_mint_address'
-                ) THEN
-                    CREATE INDEX idx_token_platform_tokens_mint_address 
-                    ON token_platform.tokens(mint_address);
-                END IF;
-            END $$;
+            CREATE INDEX IF NOT EXISTS idx_token_platform_tokens_mint_address 
+            ON token_platform.tokens(mint_address);
 
             COMMIT;
         `);
@@ -46,7 +36,7 @@ export async function initDatabase() {
         logger.info('Database initialized successfully');
         return true;
     } catch (error) {
-        logger.error('Database initialization failed:', error);
+        logger.error('Error initializing database:', error);
         throw error;
     } finally {
         client.release();

@@ -16,11 +16,7 @@ export class TokenService {
                 totalSupply: token.totalSupply.toString(),
                 decimals: token.decimals || 9,
                 curveConfig: {
-                    curveType: token.curveConfig.curveType,
-                    basePrice: token.curveConfig.basePrice.toString(),
-                    slope: token.curveConfig.slope.toString(),
-                    exponent: token.curveConfig.exponent?.toString(),
-                    logBase: token.curveConfig.logBase?.toString()
+                    basePrice: token.curveConfig.basePrice.toString()
                 }
             };
 

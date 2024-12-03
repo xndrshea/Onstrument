@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { tokenService } from '../../services/tokenService'
 import { TradingInterface } from '../Trading/TradingInterface'
 import { PublicKey } from '@solana/web3.js'
 import { TokenRecord } from '../../../shared/types/token'
-import { BondingCurve } from '../../services/bondingCurve'
 
 interface TokenListProps {
     onCreateClick: () => void
@@ -32,27 +31,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const refreshTokens = () => {
         setRefreshTrigger(prev => prev + 1)
     }
-
-    const fetchOnChainData = async (token: TokenRecord) => {
-        try {
-            if (!token.mintAddress || !token.curveAddress) return token;
-
-            const curve = new BondingCurve(connection, wallet);
-            const curveData = await curve.getCurveData(new PublicKey(token.curveAddress));
-
-            return {
-                ...token,
-                onChainData: {
-                    totalSupply: curveData.totalSupply.toString(),
-                    currentPrice: curveData.spotPrice,
-                    reserveBalance: curveData.reserveBalance.toString()
-                }
-            };
-        } catch (error) {
-            console.warn(`Failed to fetch on-chain data for token ${token.mintAddress}:`, error);
-            return token;
-        }
-    };
 
     useEffect(() => {
         const fetchTokens = async () => {
@@ -82,12 +60,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                     return isValid;
                 });
 
-                // Fetch on-chain data for each token
-                const tokensWithOnChainData = await Promise.all(
-                    validTokens.map(token => fetchOnChainData(token))
-                );
-
-                setTokens(deduplicateTokens(tokensWithOnChainData));
+                setTokens(deduplicateTokens(tokens));
                 setError(null);
             } catch (error) {
                 console.error('Error fetching tokens:', error);
@@ -204,12 +177,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                                 />
                             </div>
                             <div className="token-actions">
-                                <button
-                                    onClick={() => handleAddToWallet(token.mintAddress)}
-                                    className="add-to-wallet-btn"
-                                >
-                                    Add to Wallet
-                                </button>
+
                                 <a
                                     href={`https://solscan.io/address/${token.mintAddress}${wallet?.adapter?.network === 'mainnet-beta' ? '' : '?cluster=devnet'}`}
                                     target="_blank"

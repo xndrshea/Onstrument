@@ -7,7 +7,6 @@ import { TokenList } from './components/TokenList/TokenList'
 import { Modal } from './components/Modal/Modal'
 import Roadmap from './components/Roadmap/Roadmap'
 import { Footer } from './components/Footer/Footer'
-import Tokenomics from './components/pages/Tokenomics'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -76,7 +75,6 @@ function App() {
                             </>
                         } />
                         <Route path="/roadmap" element={<Roadmap />} />
-                        <Route path="/tokenomics" element={<Tokenomics />} />
                     </Routes>
                 </main>
 

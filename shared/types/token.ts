@@ -1,18 +1,9 @@
 import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 
-export enum curveType {
-    Linear = 'linear',
-    Exponential = 'exponential',
-    Logarithmic = 'logarithmic'
-}
 
 export interface curveConfig {
-    curveType: curveType;
     basePrice: BN;
-    slope: BN;
-    exponent: BN;
-    logBase: BN;
 }
 
 export interface BondingCurveAccount {
@@ -23,7 +14,6 @@ export interface BondingCurveAccount {
 
 export interface priceInfo {
     price: BN;
-    supplyDelta: BN;
     isBuy: boolean;
 }
 
@@ -57,9 +47,5 @@ export interface TokenFormData {
     description: string;
     image: File | null;
     supply: number;
-    curveType: curveType;
     basePrice: number;
-    slope: number;
-    exponent: number;
-    logBase: number;
 }
