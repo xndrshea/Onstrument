@@ -183,7 +183,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                             <div className="token-actions">
 
                                 <a
-                                    href={`https://solscan.io/address/${token.mintAddress}${wallet?.adapter?.network === 'mainnet-beta' ? '' : '?cluster=devnet'}`}
+                                    href={`https://solscan.io/address/${token.mintAddress}?cluster=devnet`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="view-explorer-btn"

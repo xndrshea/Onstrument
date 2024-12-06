@@ -261,6 +261,7 @@ export class BondingCurve {
                     buyer: this.wallet!.publicKey!,
                     mint: this.mintAddress,
                     buyerTokenAccount,
+                    // @ts-ignore - Anchor types mismatch
                     curve: this.curveAddress,
                     tokenVault: tokenVault,
                     tokenProgram: TOKEN_PROGRAM_ID,
@@ -316,6 +317,7 @@ export class BondingCurve {
                 .accounts({
                     seller: this.wallet!.publicKey!,
                     mint: this.mintAddress,
+                    // @ts-ignore - Anchor types mismatch
                     curve: this.curveAddress,
                     sellerTokenAccount: sellerTokenAccount,
                     tokenVault: tokenVault,

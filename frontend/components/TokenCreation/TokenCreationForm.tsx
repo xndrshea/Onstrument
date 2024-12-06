@@ -26,7 +26,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         description: '',
         image: null,
         supply: 1000000,
-        virtualSol: 1,
+        virtualSol: 30,
     })
 
     const validateForm = (): boolean => {
@@ -166,7 +166,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             </div>
 
             <div className="form-group">
-                <label>Initial Supply</label>
+                <label>Supply</label>
                 <input
                     type="number"
                     value={formData.supply}
@@ -177,7 +177,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             </div>
 
             <div className="form-group">
-                <label>Virtual SOL (this will influence your starting market cap)</label>
+                <label>Virtual SOL / Starting Market Cap</label>
                 <input
                     type="number"
                     value={formData.virtualSol}
