@@ -23,7 +23,7 @@ export async function initDatabase() {
                 metadata_uri TEXT,
                 total_supply NUMERIC NOT NULL,
                 decimals INTEGER DEFAULT 9,
-                curve_config JSONB NOT NULL DEFAULT '{"basePrice": 0}',
+                curve_config JSONB NOT NULL DEFAULT '{"virtualSol": 0}',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
 

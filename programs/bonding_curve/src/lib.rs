@@ -6,7 +6,7 @@ pub mod utils;
 
 use crate::instructions::*;
 
-declare_id!("Cf6CYaiGJVmTa1oTPJ4XWgMTyp3vRgeuTPkUkM5hYmar");
+declare_id!("5EgejWaVQjxQ8ydLHvPdBpDGvkKioS1Uk3amGKqSx2zg");
 
 #[program]
 pub mod bonding_curve {
@@ -28,7 +28,7 @@ pub mod bonding_curve {
         sell::handler(ctx, amount, min_sol_return)
     }
 
-    pub fn get_price_info(ctx: Context<GetPriceInfo>, amount: u64, is_buy: bool) -> Result<PriceInfo> {
-        price::get_price_info(ctx, amount, is_buy)
+    pub fn get_price_info(ctx: Context<GetPriceInfo>) -> Result<PriceInfo> {
+        price::get_price_info(ctx)
     }
 }

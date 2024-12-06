@@ -6,7 +6,7 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
 import { TokenFormData } from '../../../shared/types/token';
 import { PublicKey } from '@solana/web3.js'
-
+import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 interface TokenCreationFormProps {
     onSuccess?: () => void
     onTokenCreated?: () => void
@@ -26,7 +26,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         description: '',
         image: null,
         supply: 1000000,
-        basePrice: 0.1,
+        virtualSol: 1,
     })
 
     const validateForm = (): boolean => {
@@ -46,7 +46,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             setError('Supply must be greater than 0')
             return false
         }
-        if (formData.basePrice <= 0) {
+        if (formData.virtualSol <= 0) {
             setError('Base price must be greater than 0')
             return false
         }
@@ -69,10 +69,10 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             const params: createTokenParams = {
                 name: formData.name,
                 symbol: formData.symbol,
-                totalSupply: new BN(formData.supply * LAMPORTS_PER_SOL),
+                totalSupply: new BN(formData.supply * (10 ** TOKEN_DECIMALS)),
                 metadataUri: `https://arweave.net/test-metadata`,
                 curveConfig: {
-                    basePrice: new BN(formData.basePrice * LAMPORTS_PER_SOL),
+                    virtualSol: new BN(formData.virtualSol * LAMPORTS_PER_SOL),
                 }
             };
 
@@ -177,11 +177,11 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             </div>
 
             <div className="form-group">
-                <label>Base Price (SOL)</label>
+                <label>Virtual SOL (this will influence your starting market cap)</label>
                 <input
                     type="number"
-                    value={formData.basePrice}
-                    onChange={e => setFormData({ ...formData, basePrice: parseFloat(e.target.value) })}
+                    value={formData.virtualSol}
+                    onChange={e => setFormData({ ...formData, virtualSol: parseFloat(e.target.value) })}
                     min="0.000001"
                     step="0.000001"
                     required

@@ -4,18 +4,17 @@ import { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, Idl, AnchorProvider } from '@coral-xyz/anchor';
 
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { BN } from 'bn.js';
 import { createTokenParams } from '../../shared/types/token';
-import { getProgramErrorMessage } from '../types/errors';
 
 // Add this constant at the top of the file
-const TOKEN_DECIMALS = 9;
+export const TOKEN_DECIMALS = 6;
 const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
 
 // Required Program IDs
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
-const programId = new PublicKey('Cf6CYaiGJVmTa1oTPJ4XWgMTyp3vRgeuTPkUkM5hYmar');
+const programId = new PublicKey('5EgejWaVQjxQ8ydLHvPdBpDGvkKioS1Uk3amGKqSx2zg');
 export class BondingCurve {
     public readonly program: Program<BondingCurveIDL>;
     private connection: Connection;
@@ -69,7 +68,7 @@ export class BondingCurve {
 
     private async setupLogListener() {
         const logsCallback = (logs: any, ctx: any) => {
-            console.log("Transaction logs:", logs);
+
         };
 
         const subscriptionId = await this.connection.onLogs(
@@ -116,7 +115,7 @@ export class BondingCurve {
             const createTokenIx = await this.program.methods
                 .createToken({
                     curveConfig: {
-                        basePrice: params.curveConfig.basePrice
+                        virtualSol: params.curveConfig.virtualSol
                     },
                     totalSupply: params.totalSupply
                 })
@@ -241,31 +240,41 @@ export class BondingCurve {
     }
 
     async buy(params: {
-        amount: number;
-        maxSolCost: number;
+        amount: InstanceType<typeof BN> | number;
+        maxSolCost: InstanceType<typeof BN> | number;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
         if (!this.curveAddress) throw new Error('Curve address is required');
 
-        // Convert to raw units and ensure they're integers
-        const scaledAmount = Math.floor(params.amount * TOKEN_DECIMAL_MULTIPLIER);
-        const scaledMaxCost = Math.floor(params.maxSolCost * LAMPORTS_PER_SOL);
+        // Convert to BN if number provided
+        const scaledAmount = BN.isBN(params.amount)
+            ? params.amount
+            : new BN(Math.floor(params.amount * TOKEN_DECIMAL_MULTIPLIER));
 
-        if (scaledAmount <= 0) {
+        const scaledMaxCost = BN.isBN(params.maxSolCost)
+            ? params.maxSolCost
+            : new BN(Math.floor(params.maxSolCost * LAMPORTS_PER_SOL));
+
+        if (scaledAmount.lten(0)) {
             throw new Error('Amount must be greater than 0');
         }
 
         // Ensure token account exists
         const buyerTokenAccount = await this.ensureTokenAccount();
 
-        const [tokenVault] = PublicKey.findProgramAddressSync(
+        // Get curve account to check its bump
+        const curveAccount = await this.program.account.bondingCurve.fetch(this.curveAddress);
+        console.log('Curve bump:', curveAccount.bump);
+
+        const [tokenVault, tokenVaultBump] = PublicKey.findProgramAddressSync(
             [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
             this.program.programId
         );
+        console.log('Token vault bump:', tokenVaultBump);
 
         try {
             return await this.program.methods
-                .buy(new BN(scaledAmount), new BN(scaledMaxCost))
+                .buy(scaledAmount, scaledMaxCost)
                 .accounts({
                     buyer: this.wallet!.publicKey!,
                     mint: this.mintAddress,
@@ -288,11 +297,24 @@ export class BondingCurve {
     }
 
     async sell(params: {
-        amount: number;
-        minSolReturn: number;
+        amount: InstanceType<typeof BN> | number;
+        minSolReturn: InstanceType<typeof BN> | number;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
         if (!this.curveAddress) throw new Error('Curve address is required');
+
+        // Convert to BN if number provided
+        const scaledAmount = BN.isBN(params.amount)
+            ? params.amount
+            : new BN(Math.floor(params.amount * TOKEN_DECIMAL_MULTIPLIER));
+
+        const scaledMinReturn = BN.isBN(params.minSolReturn)
+            ? params.minSolReturn
+            : new BN(Math.floor(params.minSolReturn * LAMPORTS_PER_SOL));
+
+        if (scaledAmount.lten(0)) {
+            throw new Error('Amount must be greater than 0');
+        }
 
         const [tokenVault] = PublicKey.findProgramAddressSync(
             [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
@@ -304,25 +326,33 @@ export class BondingCurve {
             this.wallet!.publicKey!
         );
 
-        return await this.program.methods
-            .sell(
-                new BN(params.amount),
-                new BN(params.minSolReturn * LAMPORTS_PER_SOL)
-            )
-            .accounts({
-                seller: this.wallet!.publicKey!,
-                mint: this.mintAddress,
-                sellerTokenAccount,
-                curve: this.curveAddress,
-                tokenVault: tokenVault,
-                tokenProgram: TOKEN_PROGRAM_ID,
-                systemProgram: SystemProgram.programId,
-            } as any)
-            .rpc();
+        try {
+            return await this.program.methods
+                .sell(scaledAmount, scaledMinReturn)
+                .accounts({
+                    seller: this.wallet!.publicKey!,
+                    mint: this.mintAddress,
+                    sellerTokenAccount,
+                    curve: this.curveAddress,
+                    tokenVault: tokenVault,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                    systemProgram: SystemProgram.programId,
+                } as any)
+                .rpc();
+        } catch (error: any) {
+            console.error('Sell error:', {
+                error,
+                message: error.message,
+                code: error.code,
+                logs: error.logs
+            });
+            throw error;
+        }
     }
 
     async getPriceQuote(amount: number, isBuy: boolean): Promise<{
         price: number;
+        totalCost: number;
         isBuy: boolean;
     }> {
         if (!this.mintAddress || !this.curveAddress) {
@@ -331,32 +361,8 @@ export class BondingCurve {
 
         try {
             const tokenVault = this.getTokenVault();
-
-            // Fetch and validate account states
-            const [curveAccount, vaultAccount, curveSolBalance] = await Promise.all([
-                this.program.account.bondingCurve.fetch(this.curveAddress),
-                this.connection.getTokenAccountBalance(tokenVault),
-                this.connection.getBalance(this.curveAddress),
-            ]);
-
-            console.log('Debug values:', {
-                basePrice: curveAccount.config.basePrice.toString(),
-                currentSupply: vaultAccount.value.amount,
-                curveSolBalance: curveSolBalance,
-                virtualSol: (BigInt(vaultAccount.value.amount) * BigInt(curveAccount.config.basePrice.toString())).toString(),
-                scaledAmount: new BN(Math.floor(amount * TOKEN_DECIMAL_MULTIPLIER)).toString(),
-                isBuy,
-                accounts: {
-                    mint: this.mintAddress.toString(),
-                    curve: this.curveAddress.toString(),
-                    tokenVault: tokenVault.toString()
-                }
-            });
-
-            const scaledAmount = new BN(Math.floor(amount * TOKEN_DECIMAL_MULTIPLIER));
-
             const result = await this.program.methods
-                .getPriceInfo(scaledAmount, isBuy)
+                .getPriceInfo()
                 .accounts({
                     mint: this.mintAddress,
                     curve: this.curveAddress,
@@ -364,9 +370,19 @@ export class BondingCurve {
                 })
                 .view();
 
+            if (!result || typeof result.spotPrice === 'undefined') {
+                throw new Error('Invalid price quote response');
+            }
+
+            // The spot price is in lamports
+            const spotPriceInLamports = new BN(result.spotPrice).toNumber();
+            // Calculate total cost in lamports
+            const totalCostInLamports = spotPriceInLamports * amount;
+
             return {
-                price: Number(result.price) / LAMPORTS_PER_SOL,
-                isBuy: result.isBuy
+                price: spotPriceInLamports / LAMPORTS_PER_SOL,
+                totalCost: totalCostInLamports,  // Keep in lamports for accurate BN conversion
+                isBuy
             };
         } catch (error: any) {
             console.error('Price quote error:', error);
@@ -380,6 +396,55 @@ export class BondingCurve {
             [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
             this.program.programId
         )[0];
+    }
+
+    async getSpotPrice(): Promise<number> {
+        if (!this.mintAddress || !this.curveAddress) {
+            throw new Error('Mint address and curve address are required');
+        }
+
+        try {
+            const curveAccount = await this.program.account.bondingCurve.fetch(
+                this.curveAddress
+            );
+
+            console.log('Curve Account:', {
+                virtualSol: curveAccount.config.virtualSol.toString(),
+                bump: curveAccount.bump,
+            });
+
+            const tokenVault = this.getTokenVault();
+            const tokenVaultInfo = await this.program.provider.connection.getTokenAccountBalance(tokenVault);
+            console.log('Token Vault Balance:', tokenVaultInfo.value.amount);
+
+            const result = await this.program.methods
+                .getPriceInfo()
+                .accounts({
+                    mint: this.mintAddress,
+                    curve: this.curveAddress,
+                    tokenVault: tokenVault,
+                })
+                .view();
+
+            if (!result || typeof result.spotPrice === 'undefined') {
+                throw new Error('Invalid price response');
+            }
+
+            // Correct price calculation:
+            // The spot price is in lamports per token base unit
+            // We need to convert it to SOL per display unit
+            const price = result.spotPrice.toNumber() / LAMPORTS_PER_SOL;
+
+            return price;
+        } catch (error: any) {
+            console.error('Detailed error:', {
+                error,
+                message: error.message,
+                logs: error?.logs || error?.simulationResponse?.logs,
+                curveAddress: this.curveAddress.toString()
+            });
+            throw error;
+        }
     }
 
 }

@@ -20,7 +20,7 @@ pub struct Buy<'info> {
     #[account(
         mut,
         seeds = [b"token_vault", mint.key().as_ref()],
-        bump = curve.bump,
+        bump,
         token::mint = mint,
         token::authority = curve,
     )]
@@ -50,7 +50,9 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64) -> Result<()> 
         ErrorCode::PriceExceedsMaxCost
     );
 
-    // Transfer SOL from buyer to curve
+    // Transfer SOL from buyer to curve - ensure price is greater than 0
+    require!(price > 0, ErrorCode::InvalidAmount);
+    
     let transfer_sol_ix = anchor_lang::system_program::Transfer {
         from: ctx.accounts.buyer.to_account_info(),
         to: ctx.accounts.curve.to_account_info(),
@@ -67,7 +69,7 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64) -> Result<()> 
     // Transfer tokens from vault to buyer
     let mint_key = ctx.accounts.mint.key();
     let seeds = &[
-        b"token_vault",
+        b"bonding_curve",
         mint_key.as_ref(),
         &[ctx.accounts.curve.bump],
     ];
@@ -75,7 +77,7 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64) -> Result<()> 
 
     anchor_spl::token::transfer(
         CpiContext::new_with_signer(
-            ctx.accounts.curve.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
             Transfer {
                 from: ctx.accounts.token_vault.to_account_info(),
                 to: ctx.accounts.buyer_token_account.to_account_info(),

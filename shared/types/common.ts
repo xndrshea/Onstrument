@@ -8,5 +8,5 @@ export interface NumericConfig {
 
 export const PRICE_CONFIG: NumericConfig = {
     precision: 20,
-    scale: 9
+    scale: 6
 };

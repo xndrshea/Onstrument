@@ -1,6 +1,6 @@
 import { Connection } from '@solana/web3.js';
 import { WalletContextState } from '@solana/wallet-adapter-react';
-import { BondingCurve } from './bondingCurve';
+import { BondingCurve, TOKEN_DECIMALS } from './bondingCurve';
 // import { StorageService } from './storageService';
 import { TokenService } from './tokenService';
 import {
@@ -60,7 +60,7 @@ export class TokenTransactionService {
                 description: description,
                 metadataUri: params.metadataUri || '',
                 totalSupply: params.totalSupply,
-                decimals: 9,
+                decimals: TOKEN_DECIMALS,
                 curveConfig: params.curveConfig,
                 createdAt: new Date()
             };

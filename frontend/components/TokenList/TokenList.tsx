@@ -4,6 +4,7 @@ import { tokenService } from '../../services/tokenService'
 import { TradingInterface } from '../Trading/TradingInterface'
 import { PublicKey } from '@solana/web3.js'
 import { TokenRecord } from '../../../shared/types/token'
+import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 
 interface TokenListProps {
     onCreateClick: () => void
@@ -168,6 +169,9 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                             </p>
                             <p className="token-market-cap">
                                 Market Cap: {calculateMarketCap(token)}
+                            </p>
+                            <p className="token-supply">
+                                Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
                             </p>
                             <div className="trading-section">
                                 <h4>Trade Token</h4>

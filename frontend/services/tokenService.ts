@@ -14,9 +14,9 @@ export class TokenService {
                 description: token.description || '',
                 metadataUri: token.metadataUri || '',
                 totalSupply: token.totalSupply.toString(),
-                decimals: token.decimals || 9,
+                decimals: token.decimals || 6,
                 curveConfig: {
-                    basePrice: token.curveConfig.basePrice.toString()
+                    virtualSol: token.curveConfig.virtualSol
                 }
             };
 

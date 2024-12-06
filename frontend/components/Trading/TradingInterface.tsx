@@ -2,9 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { formatSupply } from '../../utils/formatting'
 import { TokenRecord } from '../../../shared/types/token'
-import { BondingCurve } from '../../services/bondingCurve'
+import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { BN } from '@project-serum/anchor';
 
@@ -38,6 +37,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
     const [bondingCurveBalance, setBondingCurveBalance] = useState<bigint>(BigInt(0))
     const [priceInfo, setPriceInfo] = useState<{ price: number; totalCost: number } | null>(null)
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05); // Default 5%
+    const [spotPrice, setSpotPrice] = useState<number | null>(null);
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -88,34 +88,48 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
         }
     };
 
-    // Update price when amount changes
+    // Add new effect to fetch spot price
     useEffect(() => {
-        const updatePrice = async () => {
-            if (!bondingCurve || !amount || isNaN(parseFloat(amount))) {
+        const fetchSpotPrice = async () => {
+            if (!bondingCurve) return;
+
+            try {
+                const result = await bondingCurve.getSpotPrice();
+                setSpotPrice(result);
+                setError(null);
+            } catch (error: any) {
+                console.error('Error fetching spot price:', error);
+                setError(error.message || 'Failed to fetch spot price');
+            }
+        };
+
+        fetchSpotPrice();
+        // Refresh price periodically
+        const interval = setInterval(fetchSpotPrice, 10000);
+        return () => clearInterval(interval);
+    }, [bondingCurve]);
+
+    // Separate price quote calculation
+    useEffect(() => {
+        const updatePriceQuote = async () => {
+            if (!bondingCurve || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
                 setPriceInfo(null);
                 return;
             }
 
             try {
-                const quote = await bondingCurve.getPriceQuote(
-                    parseFloat(amount),
-                    !isSelling
-                );
-
-                setPriceInfo({
-                    price: quote.price,
-                    totalCost: quote.price * LAMPORTS_PER_SOL
-                });
+                const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling);
+                setPriceInfo(quote);
                 setError(null);
-            } catch (error) {
-                console.error('Error fetching price:', error);
+            } catch (error: any) {
+                console.error('Error fetching price quote:', error);
                 setPriceInfo(null);
-                setError('Failed to fetch price');
+                setError(error.message || 'Failed to fetch price quote');
             }
         };
 
-        updatePrice();
-    }, [amount, isSelling, bondingCurve, token.mintAddress, token.curveAddress]);
+        updatePriceQuote();
+    }, [amount, isSelling, bondingCurve]);
 
     // Handle transaction
     const handleTransaction = async () => {
@@ -126,13 +140,32 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
 
         try {
             setIsLoading(true);
-            const parsedAmount = new BN(parseFloat(amount) * 1e9);
+            // Log the input parameters
+            console.log('Transaction Parameters:', {
+                amount,
+                priceInfo,
+                slippageTolerance,
+                isSelling
+            });
+
+            const parsedAmount = new BN(parseFloat(amount) * (10 ** TOKEN_DECIMALS));
+            console.log('Parsed amount:', parsedAmount.toString());
 
             if (isSelling) {
                 const minSolReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
+                console.log('Sell parameters:', {
+                    parsedAmount: parsedAmount.toString(),
+                    minSolReturn: minSolReturn.toString()
+                });
                 await bondingCurve.sell({ amount: parsedAmount, minSolReturn });
             } else {
                 const maxSolCost = new BN(Math.ceil(priceInfo.totalCost * (1 + slippageTolerance)));
+                console.log('Buy parameters:', {
+                    parsedAmount: parsedAmount.toString(),
+                    maxSolCost: maxSolCost.toString(),
+                    totalCost: priceInfo.totalCost,
+                    slippageMultiplier: (1 + slippageTolerance)
+                });
                 await bondingCurve.buy({ amount: parsedAmount, maxSolCost });
             }
 
@@ -140,14 +173,21 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             onTradeComplete();
             setAmount('');
         } catch (error: any) {
-            console.error('Transaction failed:', error);
+            console.error('Transaction failed:', {
+                error,
+                code: error.code,
+                message: error.message,
+                logs: error.logs
+            });
             // Handle program-specific errors
             if (error.code === ERROR_CODES.SLIPPAGE_EXCEEDED) {
                 setError('Price changed too much during transaction');
             } else if (error.code === ERROR_CODES.INSUFFICIENT_LIQUIDITY) {
                 setError('Insufficient liquidity in pool');
+            } else if (error.code === ERROR_CODES.PRICE_EXCEEDS_MAX_COST) {
+                setError('Price exceeds maximum cost - try increasing slippage tolerance');
             } else {
-                setError('Transaction failed');
+                setError(error.message || 'Transaction failed');
             }
         } finally {
             setIsLoading(false);
@@ -160,6 +200,24 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             updateBalances();
         }
     }, [connected, publicKey]);
+
+    // Add at the top of the component, after the state declarations
+    useEffect(() => {
+        // Load saved values
+        const savedAmount = localStorage.getItem(`trade_amount_${token.mintAddress}`);
+        const savedIsSelling = localStorage.getItem(`trade_isSelling_${token.mintAddress}`);
+
+        if (savedAmount) setAmount(savedAmount);
+        if (savedIsSelling) setIsSelling(savedIsSelling === 'true');
+    }, [token.mintAddress]);
+
+    // Update localStorage when values change
+    useEffect(() => {
+        if (amount) {
+            localStorage.setItem(`trade_amount_${token.mintAddress}`, amount);
+        }
+        localStorage.setItem(`trade_isSelling_${token.mintAddress}`, isSelling.toString());
+    }, [amount, isSelling, token.mintAddress]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">
@@ -182,8 +240,20 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                         <div className="p-3 bg-gray-50 rounded">
                             <p className="text-sm text-gray-500">Your {token.symbol} Balance</p>
                             <p className="text-lg font-semibold">
-                                {formatSupply(userBalance)}
+                                {Number(userBalance) / (10 ** TOKEN_DECIMALS)} {token.symbol}
                             </p>
+                        </div>
+                    </div>
+
+                    {/* Current Price Display - Always visible */}
+                    <div className="mb-4 p-3 bg-gray-50 rounded">
+                        <div className="flex justify-between">
+                            <span className="text-sm text-gray-500">Current Token Price</span>
+                            <span className="font-medium">
+                                {spotPrice !== null
+                                    ? `${spotPrice.toFixed(6)} SOL`
+                                    : 'Loading...'}
+                            </span>
                         </div>
                     </div>
 
@@ -303,7 +373,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                         <div className="flex justify-between">
                             <span className="text-sm text-gray-500">Pool Balance</span>
                             <span className="text-sm font-medium">
-                                {formatSupply(bondingCurveBalance)} {token.symbol}
+                                {Number(bondingCurveBalance) / (10 ** TOKEN_DECIMALS)} {token.symbol}
                             </span>
                         </div>
                     </div>

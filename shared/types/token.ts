@@ -3,7 +3,7 @@ import BN from 'bn.js';
 
 
 export interface curveConfig {
-    basePrice: BN;
+    virtualSol: BN;
 }
 
 export interface BondingCurveAccount {
@@ -13,8 +13,7 @@ export interface BondingCurveAccount {
 }
 
 export interface priceInfo {
-    price: BN;
-    isBuy: boolean;
+    spotPrice: BN;
 }
 
 export interface createTokenParams {
@@ -47,5 +46,5 @@ export interface TokenFormData {
     description: string;
     image: File | null;
     supply: number;
-    basePrice: number;
+    virtualSol: number;
 }

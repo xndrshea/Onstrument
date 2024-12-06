@@ -20,7 +20,7 @@ pub struct CreateToken<'info> {
     #[account(
         init,
         payer = creator,
-        mint::decimals = 9,
+        mint::decimals = 6,
         mint::authority = curve,
         mint::freeze_authority = curve,
     )]

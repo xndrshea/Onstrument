@@ -4,13 +4,13 @@ use serde::{Serialize, Deserialize};
 #[account]
 #[derive(Default, Serialize, Deserialize)]
 pub struct CurveConfig {
-    pub base_price: u64,
+    pub virtual_sol: u64,
 }
 
 impl CurveConfig {
     pub fn validate(&self) -> bool {
-        // Basic validation - ensure base price is not zero
-        self.base_price > 0
+        msg!("Using CurveConfig with virtual_sol field");
+        self.virtual_sol > 0
     }
 }
 

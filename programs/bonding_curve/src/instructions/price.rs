@@ -1,10 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, TokenAccount};
 use crate::state::*;
-use crate::utils::error::ErrorCode;
 
 #[derive(Accounts)]
-#[instruction(amount: u64, is_buy: bool)]
 pub struct GetPriceInfo<'info> {
     /// The mint of the token
     pub mint: Account<'info, Mint>,
@@ -12,7 +10,7 @@ pub struct GetPriceInfo<'info> {
     /// The bonding curve account
     #[account(
         seeds = [b"bonding_curve", mint.key().as_ref()],
-        bump,
+        bump = curve.bump,
         has_one = mint,
     )]
     pub curve: Account<'info, BondingCurve>,
@@ -22,33 +20,24 @@ pub struct GetPriceInfo<'info> {
         seeds = [b"token_vault", mint.key().as_ref()],
         bump,
         token::mint = mint,
+        token::authority = curve,
     )]
     pub token_vault: Account<'info, TokenAccount>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct PriceInfo {
-    pub price: u64,
-    pub is_buy: bool,
+    pub spot_price: u64,
 }
 
-pub fn get_price_info(ctx: Context<GetPriceInfo>, amount: u64, is_buy: bool) -> Result<PriceInfo> {
-    if amount == 0 {
-        return err!(ErrorCode::InvalidAmount);
-    }
-
+pub fn get_price_info(ctx: Context<GetPriceInfo>) -> Result<PriceInfo> {
     let curve = &ctx.accounts.curve;
     let token_vault = &ctx.accounts.token_vault;
     let curve_lamports = ctx.accounts.curve.to_account_info().lamports();
     
-    let price = if is_buy {
-        curve.calculate_buy_price(token_vault, amount, curve_lamports)?
-    } else {
-        curve.calculate_sell_price(token_vault, amount, curve_lamports)?
-    };
+    let spot_price = curve.get_spot_price(token_vault, curve_lamports)?;
 
     Ok(PriceInfo {
-        price,
-        is_buy,
+        spot_price,
     })
 }
