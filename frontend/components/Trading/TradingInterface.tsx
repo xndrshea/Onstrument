@@ -7,16 +7,6 @@ import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { BN } from '@project-serum/anchor';
 
-// Program-specific error codes from IDL
-const ERROR_CODES = {
-    SLIPPAGE_EXCEEDED: 6000,
-    INSUFFICIENT_LIQUIDITY: 6001,
-    MATH_OVERFLOW: 6002,
-    PRICE_EXCEEDS_MAX_COST: 6003,
-    PRICE_BELOW_MIN_RETURN: 6004,
-    // ... other error codes as needed
-} as const;
-
 interface TradingInterfaceProps {
     token: TokenRecord
     onTradeComplete: () => void
@@ -25,7 +15,7 @@ interface TradingInterfaceProps {
 export function TradingInterface({ token, onTradeComplete }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
-    const { publicKey, connected, sendTransaction } = wallet
+    const { publicKey, connected } = wallet
 
     // State management
     const [amount, setAmount] = useState<string>('')
@@ -94,8 +84,8 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             if (!bondingCurve) return;
 
             try {
-                const result = await bondingCurve.getSpotPrice();
-                setSpotPrice(result);
+                const result = await bondingCurve.getPriceQuote(1, !isSelling);
+                setSpotPrice(result.price);
                 setError(null);
             } catch (error: any) {
                 console.error('Error fetching spot price:', error);
@@ -140,55 +130,31 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
 
         try {
             setIsLoading(true);
-            // Log the input parameters
-            console.log('Transaction Parameters:', {
-                amount,
-                priceInfo,
-                slippageTolerance,
-                isSelling
-            });
-
             const parsedAmount = new BN(parseFloat(amount) * (10 ** TOKEN_DECIMALS));
-            console.log('Parsed amount:', parsedAmount.toString());
 
             if (isSelling) {
-                const minSolReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
-                console.log('Sell parameters:', {
-                    parsedAmount: parsedAmount.toString(),
-                    minSolReturn: minSolReturn.toString()
+                const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
+                await bondingCurve.sell({
+                    amount: parsedAmount,
+                    minSolReturn: minReturn
                 });
-                await bondingCurve.sell({ amount: parsedAmount, minSolReturn });
             } else {
-                const maxSolCost = new BN(Math.ceil(priceInfo.totalCost * (1 + slippageTolerance)));
-                console.log('Buy parameters:', {
-                    parsedAmount: parsedAmount.toString(),
-                    maxSolCost: maxSolCost.toString(),
-                    totalCost: priceInfo.totalCost,
-                    slippageMultiplier: (1 + slippageTolerance)
+                const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL);
+                if (solBalance * LAMPORTS_PER_SOL < minRequired) {
+                    throw new Error(`Insufficient SOL. Need ${(minRequired / LAMPORTS_PER_SOL).toFixed(4)} SOL (including fees)`);
+                }
+
+                await bondingCurve.buy({
+                    amount: parsedAmount,
+                    maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
                 });
-                await bondingCurve.buy({ amount: parsedAmount, maxSolCost });
             }
 
             await updateBalances();
             onTradeComplete();
             setAmount('');
         } catch (error: any) {
-            console.error('Transaction failed:', {
-                error,
-                code: error.code,
-                message: error.message,
-                logs: error.logs
-            });
-            // Handle program-specific errors
-            if (error.code === ERROR_CODES.SLIPPAGE_EXCEEDED) {
-                setError('Price changed too much during transaction');
-            } else if (error.code === ERROR_CODES.INSUFFICIENT_LIQUIDITY) {
-                setError('Insufficient liquidity in pool');
-            } else if (error.code === ERROR_CODES.PRICE_EXCEEDS_MAX_COST) {
-                setError('Price exceeds maximum cost - try increasing slippage tolerance');
-            } else {
-                setError(error.message || 'Transaction failed');
-            }
+            console.error('Transaction error:', error)
         } finally {
             setIsLoading(false);
         }
@@ -302,19 +268,22 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                                 Slippage Tolerance (%)
                             </label>
                             <input
-                                type="number"
+                                type="text"
                                 value={slippageTolerance * 100}
                                 onChange={(e) => {
-                                    const value = parseFloat(e.target.value);
-                                    if (!isNaN(value) && value >= 0 && value <= 100) {
-                                        setSlippageTolerance(value / 100);
+                                    // Allow empty string or valid numbers
+                                    const value = e.target.value;
+                                    if (value === '') {
+                                        setSlippageTolerance(0);
+                                    } else {
+                                        const parsed = parseFloat(value);
+                                        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                                            setSlippageTolerance(parsed / 100);
+                                        }
                                     }
                                 }}
                                 className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
                                 placeholder="Enter slippage %"
-                                min="0"
-                                max="100"
-                                step="0.1"
                             />
                         </div>
 
@@ -322,13 +291,9 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                         {amount && !isNaN(parseFloat(amount)) && (
                             <div className="mb-4 p-3 bg-gray-50 rounded">
                                 <div className="flex justify-between mb-2">
-                                    <span className="text-sm text-gray-500">Current Price</span>
-                                    <span className="font-medium">
-                                        {((priceInfo?.price ?? 0) / LAMPORTS_PER_SOL).toFixed(4)} SOL
+                                    <span className="text-sm text-gray-500">
+                                        {isSelling ? 'SOL You Will Receive' : 'SOL Cost'}
                                     </span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-gray-500">Total Cost</span>
                                     <span className="font-medium">
                                         {((priceInfo?.totalCost ?? 0) / LAMPORTS_PER_SOL).toFixed(4)} SOL
                                     </span>

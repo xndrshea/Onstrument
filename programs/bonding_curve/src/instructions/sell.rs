@@ -3,6 +3,8 @@ use anchor_spl::token::{Token, TokenAccount, Transfer, Mint};
 use solana_program::rent::Rent;
 use crate::state::*;
 use crate::utils::error::ErrorCode;
+use solana_program::program::invoke_signed;
+use solana_program::system_instruction;
 
 #[derive(Accounts)]
 pub struct Sell<'info> {
@@ -50,11 +52,11 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<(
     let available_liquidity = curve_lamports.checked_sub(rent_exempt_balance)
         .ok_or(ErrorCode::InsufficientLiquidity)?;
     
-    let curve = &mut ctx.accounts.curve;
-    let price = curve.calculate_sell_price(
+    // Get the price first before any mutable borrows
+    let price = ctx.accounts.curve.calculate_sell_price(
         &ctx.accounts.token_vault,
         amount,
-        available_liquidity  // Use available liquidity instead of total lamports
+        available_liquidity
     )?;
     
     require!(price >= min_sol_return, ErrorCode::PriceBelowMinReturn);
@@ -71,16 +73,9 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<(
     );
     anchor_spl::token::transfer(transfer_ctx, amount)?;
 
-    // Transfer SOL from curve to seller
-    **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? = ctx.accounts.curve
-        .to_account_info()
-        .lamports()
-        .checked_sub(price)
-        .ok_or(ErrorCode::MathOverflow)?;
-    **ctx.accounts.seller.try_borrow_mut_lamports()? = ctx.accounts.seller
-        .lamports()
-        .checked_add(price)
-        .ok_or(ErrorCode::MathOverflow)?;
+    // Transfer SOL from curve to seller using direct lamport transfer
+    **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? -= price;
+    **ctx.accounts.seller.to_account_info().try_borrow_mut_lamports()? += price;
 
     Ok(())
 }

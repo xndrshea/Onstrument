@@ -3,7 +3,7 @@ use anchor_spl::token::{Mint, TokenAccount};
 use crate::state::*;
 
 #[derive(Accounts)]
-pub struct GetPriceInfo<'info> {
+pub struct GetPrice<'info> {
     /// The mint of the token
     pub mint: Account<'info, Mint>,
     
@@ -25,19 +25,14 @@ pub struct GetPriceInfo<'info> {
     pub token_vault: Account<'info, TokenAccount>,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub struct PriceInfo {
-    pub spot_price: u64,
-}
-
-pub fn get_price_info(ctx: Context<GetPriceInfo>) -> Result<PriceInfo> {
+pub fn calculate_price(ctx: Context<GetPrice>, amount: u64, is_buy: bool) -> Result<u64> {
     let curve = &ctx.accounts.curve;
     let token_vault = &ctx.accounts.token_vault;
     let curve_lamports = ctx.accounts.curve.to_account_info().lamports();
-    
-    let spot_price = curve.get_spot_price(token_vault, curve_lamports)?;
 
-    Ok(PriceInfo {
-        spot_price,
-    })
+    if is_buy {
+        curve.calculate_buy_price(token_vault, amount, curve_lamports)
+    } else {
+        curve.calculate_sell_price(token_vault, amount, curve_lamports)
+    }
 }

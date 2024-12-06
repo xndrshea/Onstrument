@@ -28,7 +28,7 @@ pub mod bonding_curve {
         sell::handler(ctx, amount, min_sol_return)
     }
 
-    pub fn get_price_info(ctx: Context<GetPriceInfo>) -> Result<PriceInfo> {
-        price::get_price_info(ctx)
+    pub fn calculate_price(ctx: Context<GetPrice>, amount: u64, is_buy: bool) -> Result<u64> {
+        price::calculate_price(ctx, amount, is_buy)
     }
 }

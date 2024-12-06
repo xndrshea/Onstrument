@@ -93,26 +93,4 @@ impl BondingCurve {
         
         Ok(price_difference as u64)
     }
-
-    pub fn get_spot_price(&self, token_vault: &Account<TokenAccount>, curve_lamports: u64) -> Result<u64> {
-        let (effective_sol, total_tokens) = self.get_effective_amounts(token_vault, curve_lamports)?;
-        
-        // Prevent division by zero
-        require!(total_tokens > 0, ErrorCode::InsufficientLiquidity);
-        
-        // Price = SOL / Tokens
-        // Using u128 for intermediate calculation to prevent overflow
-        let price = (effective_sol as u128)
-            .checked_mul(PRECISION_FACTOR as u128)
-            .ok_or(error!(ErrorCode::MathOverflow))?
-            .checked_div(total_tokens as u128)
-            .ok_or(error!(ErrorCode::MathOverflow))?;
-            
-        // Convert back to u64, checking for overflow
-        if price > u64::MAX as u128 {
-            return Err(error!(ErrorCode::MathOverflow));
-        }
-        
-        Ok(price as u64)
-    }
 }
