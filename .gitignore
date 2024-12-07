@@ -5,3 +5,9 @@ node_modules
 dist
 /logs
 *.log
+# Build artifacts
+/target/*
+!/target/idl/
+!/target/types
+/target/debug/
+/target/release/
