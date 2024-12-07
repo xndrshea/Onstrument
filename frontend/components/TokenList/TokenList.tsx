@@ -16,7 +16,7 @@ const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112')
 
 const deduplicateTokens = (tokens: TokenRecord[]): TokenRecord[] => {
-    return Array.from(new Map(tokens.map(token => [token.mintAddress, token])).values());
+    return Array.from(new Map(tokens.map(token => [token.mintAddress || token.mint_address, token])).values());
 };
 
 export function TokenList({ onCreateClick }: TokenListProps) {
@@ -44,26 +44,22 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                     throw new Error('No data received from server');
                 }
 
-                // Add more specific error handling
-                if (!Array.isArray(tokens)) {
-                    throw new Error('Invalid data format received from server');
-                }
-
-                // Filter and validate tokens
+                // Simplified validation that accepts both cases
                 const validTokens = tokens.filter(token => {
-                    const isValid = token &&
-                        typeof token === 'object' &&
-                        token.mintAddress &&
-                        token.name &&
-                        token.symbol;
-
-                    if (!isValid) {
-                        console.warn('Invalid token data:', token);
+                    if (!token || typeof token !== 'object') {
+                        console.warn('Invalid token object:', token);
+                        return false;
                     }
-                    return isValid;
+
+                    // Accept either camelCase or snake_case
+                    const hasValidMint = Boolean(token.mintAddress || token.mint_address);
+                    const hasValidName = Boolean(token.name);
+                    const hasValidSymbol = Boolean(token.symbol);
+
+                    return hasValidMint && hasValidName && hasValidSymbol;
                 });
 
-                setTokens(deduplicateTokens(tokens));
+                setTokens(deduplicateTokens(validTokens));
                 setError(null);
             } catch (error) {
                 console.error('Error fetching tokens:', error);
@@ -119,16 +115,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
         });
     }, [tokens, sortOrder]);
-
-    // Add new fetch function
-    const fetchAllTokens = async () => {
-        const [customTokens, dexTokens] = await Promise.all([
-            tokenService.getAllTokens(),
-            dexService.getTopTokens()
-        ]);
-
-        setTokens([...customTokens, ...dexTokens]);
-    };
 
     if (isLoading) {
         return <div className="loading">Loading tokens...</div>
