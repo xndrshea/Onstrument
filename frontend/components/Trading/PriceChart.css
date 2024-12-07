@@ -1,0 +1,10 @@
+.price-chart-container {
+    background: #232427;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+}
+
+.price-chart-container canvas {
+    cursor: crosshair;
+}

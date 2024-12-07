@@ -6,7 +6,6 @@ import { TokenService } from './tokenService';
 import {
     TokenRecord,
     createTokenParams,
-    TokenFormData
 } from '../../shared/types/token';
 
 export class TokenTransactionService {
@@ -62,7 +61,8 @@ export class TokenTransactionService {
                 totalSupply: params.totalSupply,
                 decimals: TOKEN_DECIMALS,
                 curveConfig: params.curveConfig,
-                createdAt: new Date()
+                createdAt: new Date(),
+                token_type: 'bonding_curve'
             };
 
             // Save to database through tokenService

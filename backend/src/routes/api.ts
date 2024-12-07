@@ -4,6 +4,8 @@ import cors from 'cors';
 import { pool } from '../db/pool';
 import { validateTokenData } from '../middleware/validation';
 import { logger } from '../utils/logger';
+import { PriceHistoryModel } from '../models/priceHistoryModel';
+import { DexService } from '../services/dexService';
 
 const router = express.Router();
 router.use(cors());
@@ -173,33 +175,73 @@ router.get('/tokens', apiLimiter, async (req, res) => {
     }
 });
 
-// Trade history endpoint
-router.post('/trades', apiLimiter, async (req, res) => {
+// Add these routes to your existing router
+router.post('/price-history', async (req, res) => {
     try {
-        const result = await pool.query(
-            `INSERT INTO token_platform.tradeHistory 
-             (mintAddress, traderAddress, signature, amount, pricePerToken, 
-              totalPrice, isBuy)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING *`,
-            [
-                req.body.mintAddress,
-                req.body.traderAddress,
-                req.body.signature,
-                req.body.amount,
-                req.body.pricePerToken,
-                req.body.totalPrice,
-                req.body.isBuy
-            ]
-        );
-
-        res.status(201).json(result.rows[0]);
+        const { tokenMintAddress, price, totalSupply } = req.body;
+        await PriceHistoryModel.recordPrice(tokenMintAddress, price, totalSupply);
+        res.status(201).json({ success: true });
     } catch (error) {
-        logger.error('Error recording trade:', error);
+        logger.error('Error recording price:', error);
+        res.status(500).json({ error: 'Failed to record price' });
+    }
+});
+
+router.get('/price-history/:mintAddress', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        const history = await PriceHistoryModel.getPriceHistory(mintAddress);
+        res.json(history);
+    } catch (error) {
+        logger.error('Error fetching price history:', error);
+        res.status(500).json({ error: 'Failed to fetch price history' });
+    }
+});
+
+const dexService = new DexService();
+
+// Add these new routes after existing token routes
+router.get('/dex/tokens', apiLimiter, async (req, res) => {
+    try {
+        const tokens = await dexService.getTopTokens();
+        res.json(tokens);
+    } catch (error) {
+        logger.error('Error fetching DEX tokens:', error);
+        res.status(500).json({ error: 'Failed to fetch DEX tokens' });
+    }
+});
+
+router.get('/dex/price/:mintAddress', apiLimiter, async (req, res) => {
+    try {
+        const price = await dexService.getTokenPrice(req.params.mintAddress);
+        res.json({ price });
+    } catch (error) {
+        logger.error('Error fetching token price:', error);
+        res.status(500).json({ error: 'Failed to fetch token price' });
+    }
+});
+
+// Add route to record DEX trade history
+router.post('/dex/trades', apiLimiter, async (req, res) => {
+    try {
+        const { tokenMintAddress, price, amount, type } = req.body;
+        await PriceHistoryModel.recordPrice(tokenMintAddress, price, amount);
+        res.status(201).json({ success: true });
+    } catch (error) {
+        logger.error('Error recording DEX trade:', error);
         res.status(500).json({ error: 'Failed to record trade' });
     }
 });
 
-
+router.get('/dex/pool/:mintAddress', apiLimiter, async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        const poolInfo = await dexService.getPoolInfo(mintAddress);
+        res.json(poolInfo);
+    } catch (error) {
+        logger.error('Error fetching pool info:', error);
+        res.status(500).json({ error: 'Failed to fetch pool info' });
+    }
+});
 
 export default router; 

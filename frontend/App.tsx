@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { TokenCreationForm } from './components/TokenCreation/TokenCreationForm'
@@ -7,6 +7,9 @@ import { TokenList } from './components/TokenList/TokenList'
 import { Modal } from './components/Modal/Modal'
 import Roadmap from './components/Roadmap/Roadmap'
 import { Footer } from './components/Footer/Footer'
+import { TokenDetailsPage } from './components/pages/TokenDetailsPage'
+import { MarketPage } from './components/pages/MarketPage'
+import { Header } from './components/Header/Header'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -29,34 +32,10 @@ function App() {
                 display: 'flex',
                 flexDirection: 'column'
             }}>
-                <nav style={{
-                    padding: '20px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    backgroundColor: '#232427'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-                        <Link to="/" style={{ textDecoration: 'none' }}>
-                            <h1 style={{ color: 'white', cursor: 'pointer' }}>Solana Token Launchpad</h1>
-                        </Link>
-                        <Link to="/tokenomics" style={{
-                            textDecoration: 'none',
-                            color: 'white',
-                            fontSize: '1rem'
-                        }}>
-                            Tokenomics
-                        </Link>
-                        <Link to="/roadmap" style={{
-                            textDecoration: 'none',
-                            color: 'white',
-                            fontSize: '1rem'
-                        }}>
-                            Roadmap
-                        </Link>
-                    </div>
+                <Header />
+                <div className="flex justify-end p-4">
                     <WalletMultiButton />
-                </nav>
+                </div>
 
                 <main style={{ padding: '20px', color: 'white', flex: 1 }}>
                     <Routes>
@@ -74,6 +53,8 @@ function App() {
                                 />
                             </>
                         } />
+                        <Route path="/market" element={<MarketPage />} />
+                        <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
                         <Route path="/roadmap" element={<Roadmap />} />
                     </Routes>
                 </main>

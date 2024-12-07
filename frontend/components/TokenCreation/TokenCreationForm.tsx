@@ -177,7 +177,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             </div>
 
             <div className="form-group">
-                <label>Virtual SOL / Starting Market Cap</label>
+                <label>Starting Market Cap (in SOL)</label>
                 <input
                     type="number"
                     value={formData.virtualSol}

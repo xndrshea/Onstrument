@@ -5,7 +5,8 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { TokenRecord } from '../../../shared/types/token'
 import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
-import { BN } from '@project-serum/anchor';
+import { dexService } from '../../services/dexService'
+import { BN } from '@project-serum/anchor'
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -29,6 +30,9 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05); // Default 5%
     const [spotPrice, setSpotPrice] = useState<number | null>(null);
 
+    // Add token type check
+    const isDexToken = token.token_type === 'dex';
+
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
         if (!connection || !publicKey || !token.mintAddress || !token.curveAddress) {
@@ -50,28 +54,30 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
 
     // Fetch balances and price
     const updateBalances = async () => {
-        if (!publicKey || !bondingCurve) return;
+        if (!publicKey) return;
 
         try {
-            const [tokenVault] = PublicKey.findProgramAddressSync(
-                [Buffer.from("token_vault"), new PublicKey(token.mintAddress).toBuffer()],
-                bondingCurve.program.programId
-            );
-
             const ata = await getAssociatedTokenAddress(
                 new PublicKey(token.mintAddress),
                 publicKey
             );
 
-            const [solBal, tokenAccountInfo, vaultBalance] = await Promise.all([
+            const [solBal, tokenAccountInfo] = await Promise.all([
                 connection.getBalance(publicKey),
-                connection.getTokenAccountBalance(ata).catch(() => ({ value: { amount: '0', decimals: 9 } })),
-                connection.getTokenAccountBalance(tokenVault)
+                connection.getTokenAccountBalance(ata).catch(() => ({ value: { amount: '0', decimals: 9 } }))
             ]);
 
             setSolBalance(solBal / LAMPORTS_PER_SOL);
             setUserBalance(BigInt(tokenAccountInfo.value.amount));
-            setBondingCurveBalance(BigInt(vaultBalance.value.amount));
+
+            if (!isDexToken && bondingCurve) {
+                const [tokenVault] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("token_vault"), new PublicKey(token.mintAddress).toBuffer()],
+                    bondingCurve.program.programId
+                );
+                const vaultBalance = await connection.getTokenAccountBalance(tokenVault);
+                setBondingCurveBalance(BigInt(vaultBalance.value.amount));
+            }
         } catch (error) {
             console.error('Error updating balances:', error);
             setError('Failed to fetch balances');
@@ -81,35 +87,49 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
     // Add new effect to fetch spot price
     useEffect(() => {
         const fetchSpotPrice = async () => {
-            if (!bondingCurve) return;
-
-            try {
-                const result = await bondingCurve.getPriceQuote(1, !isSelling);
-                setSpotPrice(result.price);
-                setError(null);
-            } catch (error: any) {
-                console.error('Error fetching spot price:', error);
-                setError(error.message || 'Failed to fetch spot price');
+            if (isDexToken) {
+                try {
+                    const price = await dexService.getTokenPrice(token.mintAddress);
+                    setSpotPrice(price);
+                    setError(null);
+                } catch (error: any) {
+                    console.error('Error fetching DEX price:', error);
+                    setError(error.message || 'Failed to fetch price');
+                }
+            } else if (bondingCurve) {
+                try {
+                    const result = await bondingCurve.getPriceQuote(1, !isSelling);
+                    setSpotPrice(result.price);
+                    setError(null);
+                } catch (error: any) {
+                    console.error('Error fetching spot price:', error);
+                    setError(error.message || 'Failed to fetch spot price');
+                }
             }
         };
 
         fetchSpotPrice();
-        // Refresh price periodically
         const interval = setInterval(fetchSpotPrice, 10000);
         return () => clearInterval(interval);
-    }, [bondingCurve]);
+    }, [bondingCurve, isDexToken, token.mintAddress]);
 
     // Separate price quote calculation
     useEffect(() => {
         const updatePriceQuote = async () => {
-            if (!bondingCurve || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+            if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
                 setPriceInfo(null);
                 return;
             }
 
             try {
-                const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling);
-                setPriceInfo(quote);
+                if (isDexToken) {
+                    const price = await dexService.getTokenPrice(token.mintAddress);
+                    const totalCost = price * parseFloat(amount);
+                    setPriceInfo({ price, totalCost });
+                } else if (bondingCurve) {
+                    const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling);
+                    setPriceInfo(quote);
+                }
                 setError(null);
             } catch (error: any) {
                 console.error('Error fetching price quote:', error);
@@ -119,11 +139,11 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
         };
 
         updatePriceQuote();
-    }, [amount, isSelling, bondingCurve]);
+    }, [amount, isSelling, bondingCurve, isDexToken, token.mintAddress]);
 
     // Handle transaction
     const handleTransaction = async () => {
-        if (!publicKey || !amount || !bondingCurve || !priceInfo) {
+        if (!publicKey || !amount) {
             setError('Invalid transaction parameters');
             return;
         }
@@ -132,21 +152,49 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             setIsLoading(true);
             const parsedAmount = new BN(parseFloat(amount) * (10 ** TOKEN_DECIMALS));
 
-            if (isSelling) {
-                const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
-                await bondingCurve.sell({
+            if (isDexToken) {
+                // Handle DEX trading
+                await dexService.executeTrade({
+                    mintAddress: token.mintAddress,
                     amount: parsedAmount,
-                    minSolReturn: minReturn
+                    isSelling,
+                    slippageTolerance
                 });
-            } else {
-                const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL);
-                if (solBalance * LAMPORTS_PER_SOL < minRequired) {
-                    throw new Error(`Insufficient SOL. Need ${(minRequired / LAMPORTS_PER_SOL).toFixed(4)} SOL (including fees)`);
-                }
+            } else if (bondingCurve && priceInfo) {
+                // Existing bonding curve logic
+                if (isSelling) {
+                    const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
+                    await bondingCurve.sell({
+                        amount: parsedAmount,
+                        minSolReturn: minReturn
+                    });
+                } else {
+                    const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL);
+                    if (solBalance * LAMPORTS_PER_SOL < minRequired) {
+                        throw new Error(`Insufficient SOL. Need ${(minRequired / LAMPORTS_PER_SOL).toFixed(4)} SOL (including fees)`);
+                    }
 
-                await bondingCurve.buy({
-                    amount: parsedAmount,
-                    maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
+                    await bondingCurve.buy({
+                        amount: parsedAmount,
+                        maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
+                    });
+                }
+            }
+
+            // Record price history for both types
+            const newPrice = isDexToken
+                ? await dexService.getTokenPrice(token.mintAddress)
+                : (await bondingCurve?.getPriceQuote(1, !isSelling))?.price;
+
+            if (newPrice) {
+                await fetch('/api/price-history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tokenMintAddress: token.mintAddress,
+                        price: newPrice,
+                        totalSupply: Number(token.totalSupply.toString()) / (10 ** token.decimals)
+                    })
                 });
             }
 
@@ -154,7 +202,8 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             onTradeComplete();
             setAmount('');
         } catch (error: any) {
-            console.error('Transaction error:', error)
+            console.error('Transaction error:', error);
+            setError(error.message || 'Transaction failed');
         } finally {
             setIsLoading(false);
         }
@@ -336,9 +385,15 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                     <div className="mt-6 p-3 bg-gray-50 rounded">
                         <h3 className="text-sm font-medium text-gray-700 mb-2">Pool Information</h3>
                         <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Pool Balance</span>
+                            <span className="text-sm text-gray-500">
+                                {isDexToken ? 'DEX Liquidity' : 'Pool Balance'}
+                            </span>
                             <span className="text-sm font-medium">
-                                {Number(bondingCurveBalance) / (10 ** TOKEN_DECIMALS)} {token.symbol}
+                                {isDexToken ? (
+                                    `${token.liquidity?.toFixed(2) || 'Loading...'} SOL`
+                                ) : (
+                                    `${Number(bondingCurveBalance) / (10 ** TOKEN_DECIMALS)} ${token.symbol}`
+                                )}
                             </span>
                         </div>
                     </div>

@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { tokenService } from '../../services/tokenService'
-import { TradingInterface } from '../Trading/TradingInterface'
 import { PublicKey } from '@solana/web3.js'
 import { TokenRecord } from '../../../shared/types/token'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
+import { Link } from 'react-router-dom'
+import { dexService } from '../../services/dexService'
 
 interface TokenListProps {
     onCreateClick: () => void
@@ -27,6 +28,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [refreshTrigger, setRefreshTrigger] = useState(0)
     const [solanaPrice, setSolanaPrice] = useState<number>(0)
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+    const [tokenType, setTokenType] = useState<'all' | 'bonding_curve' | 'dex'>('all')
 
     // Function to refresh the token list
     const refreshTokens = () => {
@@ -118,6 +120,16 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         });
     }, [tokens, sortOrder]);
 
+    // Add new fetch function
+    const fetchAllTokens = async () => {
+        const [customTokens, dexTokens] = await Promise.all([
+            tokenService.getAllTokens(),
+            dexService.getTopTokens()
+        ]);
+
+        setTokens([...customTokens, ...dexTokens]);
+    };
+
     if (isLoading) {
         return <div className="loading">Loading tokens...</div>
     }
@@ -148,51 +160,48 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                     <button className="create-token-button" onClick={onCreateClick}>
                         + Create Token
                     </button>
+                    <select
+                        className="sort-selector"
+                        value={tokenType}
+                        onChange={(e) => setTokenType(e.target.value as any)}
+                    >
+                        <option value="all">All Tokens</option>
+                        <option value="bonding_curve">Custom Tokens</option>
+                        <option value="dex">DEX Tokens</option>
+                    </select>
                 </div>
             </div>
             {tokens.length > 0 ? (
                 <div className="token-grid">
-                    {sortedTokens.map((token) => (
-                        <div key={token.mintAddress} className="token-card">
-                            <h3>{token.name || 'Unnamed Token'}</h3>
-                            <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
-                            <p className="token-description">{token.description || 'No description available'}</p>
-                            <p className="token-mint">
-                                Mint: {token.mintAddress ?
-                                    `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
-                                    'N/A'}
-                            </p>
-                            <p className="token-date">
-                                {token.createdAt ?
-                                    new Date(token.createdAt).toLocaleDateString() :
-                                    'N/A'}
-                            </p>
-                            <p className="token-market-cap">
-                                Market Cap: {calculateMarketCap(token)}
-                            </p>
-                            <p className="token-supply">
-                                Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
-                            </p>
-                            <div className="trading-section">
-                                <h4>Trade Token</h4>
-                                <TradingInterface
-                                    token={token}
-                                    onTradeComplete={() => refreshTokens()}
-                                />
-                            </div>
-                            <div className="token-actions">
-
-                                <a
-                                    href={`https://solscan.io/address/${token.mintAddress}?cluster=devnet`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="view-explorer-btn"
-                                >
-                                    View on Explorer
-                                </a>
-                            </div>
-                        </div>
-                    ))}
+                    {tokens
+                        .filter(token => tokenType === 'all' || token.token_type === tokenType)
+                        .map(token => (
+                            <Link
+                                to={`/token/${token.mintAddress}`}
+                                key={token.mintAddress}
+                                className="token-card"
+                            >
+                                <h3>{token.name || 'Unnamed Token'}</h3>
+                                <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
+                                <p className="token-description">{token.description || 'No description available'}</p>
+                                <p className="token-mint">
+                                    Mint: {token.mintAddress ?
+                                        `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
+                                        'N/A'}
+                                </p>
+                                <p className="token-date">
+                                    {token.createdAt ?
+                                        new Date(token.createdAt).toLocaleDateString() :
+                                        'N/A'}
+                                </p>
+                                <p className="token-market-cap">
+                                    Market Cap: {calculateMarketCap(token)}
+                                </p>
+                                <p className="token-supply">
+                                    Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
+                                </p>
+                            </Link>
+                        ))}
                 </div>
             ) : (
                 <div className="no-tokens">

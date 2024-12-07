@@ -37,17 +37,21 @@ export async function initializeDatabase() {
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'token_platform' 
                 AND table_name = 'tokens'
-            );
+            ) AS tokens_exist,
+            EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'token_platform' 
+                AND table_name = 'price_history'
+            ) AS price_history_exist;
         `)
 
-        if (tablesExist.rows[0].exists) {
-            logger.info('Database tables already exist, skipping initialization')
-            client.release()
-            return true
+        if (!tablesExist.rows[0].tokens_exist || !tablesExist.rows[0].price_history_exist) {
+            logger.info('Some tables missing, starting initialization...')
+            await initDatabase()
+        } else {
+            logger.info('All database tables exist, skipping initialization')
         }
 
-        logger.info('Tables not found, starting initialization...')
-        await initDatabase()
         client.release()
         return true
     } catch (error: any) {

@@ -38,6 +38,8 @@ export interface TokenRecord {
     decimals: number;
     curveConfig: curveConfig;
     createdAt: Date;
+    token_type: 'bonding_curve' | 'dex';
+    liquidity?: number;
 }
 
 export interface TokenFormData {
