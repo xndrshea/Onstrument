@@ -51,6 +51,12 @@ export class BondingCurve {
         this.mintAddress = mintAddress;
         this.curveAddress = curveAddress;
 
+        // Add these debug logs
+        console.log('IDL Program ID:', {
+            fromIDL: idl.address,
+            fromTypes: (idl as any).metadata?.address,
+        });
+
         const provider = new AnchorProvider(
             connection,
             wallet as any,
@@ -61,6 +67,13 @@ export class BondingCurve {
             idl as BondingCurveIDL,
             provider
         );
+
+        // Log the actual program ID being used
+        console.log('Program ID being used:', {
+            programId: this.program.programId.toString(),
+            mintAddress: mintAddress?.toString(),
+            curveAddress: curveAddress?.toString()
+        });
     }
 
 
@@ -352,22 +365,56 @@ export class BondingCurve {
             const scaledAmount = new BN(amount * TOKEN_DECIMAL_MULTIPLIER);
             const tokenVault = this.getTokenVault();
 
-            const price = await this.program.methods
-                .calculatePrice(scaledAmount, isBuy)
-                .accounts({
-                    mint: this.mintAddress,
-                    curve: this.curveAddress,
-                    tokenVault: tokenVault,
-                })
-                .view();
+            // Check accounts individually and provide specific error messages
+            const curveInfo = await this.connection.getAccountInfo(this.curveAddress);
+            if (!curveInfo) {
+                throw new Error(`Curve account ${this.curveAddress.toString()} not found`);
+            }
 
-            return {
-                price: price.toNumber() / LAMPORTS_PER_SOL,
-                totalCost: price.toNumber(),
-                isBuy
-            };
-        } catch (error) {
-            console.error('Price quote error:', error);
+            const vaultInfo = await this.connection.getAccountInfo(tokenVault);
+            if (!vaultInfo) {
+                throw new Error(`Token vault ${tokenVault.toString()} not found`);
+            }
+
+            try {
+                const price = await this.program.methods
+                    .calculatePrice(scaledAmount, isBuy)
+                    .accounts({
+                        mint: this.mintAddress,
+                        curve: this.curveAddress,
+                        tokenVault: tokenVault,
+                    })
+                    .view();
+
+                return {
+                    price: price.toNumber() / LAMPORTS_PER_SOL,
+                    totalCost: price.toNumber(),
+                    isBuy
+                };
+            } catch (viewError: any) {
+                console.error('View method error:', viewError);
+                // If the view method fails, try simulating the transaction
+                const priceSimulation = await this.program.methods
+                    .calculatePrice(scaledAmount, isBuy)
+                    .accounts({
+                        mint: this.mintAddress,
+                        curve: this.curveAddress,
+                        tokenVault: tokenVault,
+                    })
+                    .simulate();
+
+                // Extract the return value from simulation logs
+                // You might need to adjust this based on your program's actual logging
+                console.log('Simulation result:', priceSimulation);
+                throw new Error('Price calculation failed - please check program logs');
+            }
+        } catch (error: any) {
+            console.error('Price quote error:', {
+                error,
+                curveAddress: this.curveAddress.toString(),
+                mintAddress: this.mintAddress.toString(),
+                tokenVault: this.getTokenVault().toString()
+            });
             throw error;
         }
     }
