@@ -51,11 +51,6 @@ export class BondingCurve {
         this.mintAddress = mintAddress;
         this.curveAddress = curveAddress;
 
-        // Add these debug logs
-        console.log('IDL Program ID:', {
-            fromIDL: idl.address,
-            fromTypes: (idl as any).metadata?.address,
-        });
 
         const provider = new AnchorProvider(
             connection,
@@ -67,13 +62,6 @@ export class BondingCurve {
             idl as BondingCurveIDL,
             provider
         );
-
-        // Log the actual program ID being used
-        console.log('Program ID being used:', {
-            programId: this.program.programId.toString(),
-            mintAddress: mintAddress?.toString(),
-            curveAddress: curveAddress?.toString()
-        });
     }
 
 
