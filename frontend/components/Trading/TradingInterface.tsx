@@ -62,21 +62,38 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                 publicKey
             );
 
-            const [solBal, tokenAccountInfo] = await Promise.all([
-                connection.getBalance(publicKey),
-                connection.getTokenAccountBalance(ata).catch(() => ({ value: { amount: '0', decimals: 9 } }))
-            ]);
+            // Check if ATA exists first
+            const ataInfo = await connection.getAccountInfo(ata);
 
+            const solBal = await connection.getBalance(publicKey);
             setSolBalance(solBal / LAMPORTS_PER_SOL);
-            setUserBalance(BigInt(tokenAccountInfo.value.amount));
+
+            // Only fetch token balance if ATA exists
+            if (ataInfo) {
+                const tokenAccountInfo = await connection.getTokenAccountBalance(ata);
+                setUserBalance(BigInt(tokenAccountInfo.value.amount));
+            } else {
+                setUserBalance(BigInt(0));
+            }
 
             if (!isDexToken && bondingCurve) {
-                const [tokenVault] = PublicKey.findProgramAddressSync(
-                    [Buffer.from("token_vault"), new PublicKey(token.mintAddress).toBuffer()],
-                    bondingCurve.program.programId
-                );
-                const vaultBalance = await connection.getTokenAccountBalance(tokenVault);
-                setBondingCurveBalance(BigInt(vaultBalance.value.amount));
+                try {
+                    const [tokenVault] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("token_vault"), new PublicKey(token.mintAddress).toBuffer()],
+                        bondingCurve.program.programId
+                    );
+                    const vaultInfo = await connection.getAccountInfo(tokenVault);
+
+                    if (vaultInfo) {
+                        const vaultBalance = await connection.getTokenAccountBalance(tokenVault);
+                        setBondingCurveBalance(BigInt(vaultBalance.value.amount));
+                    } else {
+                        setBondingCurveBalance(BigInt(0));
+                    }
+                } catch (vaultError) {
+                    console.warn('Error fetching vault balance:', vaultError);
+                    setBondingCurveBalance(BigInt(0));
+                }
             }
         } catch (error) {
             console.error('Error updating balances:', error);
@@ -98,12 +115,17 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                 }
             } else if (bondingCurve) {
                 try {
-                    const result = await bondingCurve.getPriceQuote(1, !isSelling);
+                    // Try to get price quote with a small amount first
+                    const result = await bondingCurve.getPriceQuote(0.1, !isSelling);
                     setSpotPrice(result.price);
                     setError(null);
                 } catch (error: any) {
                     console.error('Error fetching spot price:', error);
-                    setError(error.message || 'Failed to fetch spot price');
+                    // Don't show error if it's just initialization
+                    if (!error.message?.includes('could not find account')) {
+                        setError('Price quote unavailable');
+                    }
+                    setSpotPrice(null);
                 }
             }
         };
@@ -111,7 +133,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
         fetchSpotPrice();
         const interval = setInterval(fetchSpotPrice, 10000);
         return () => clearInterval(interval);
-    }, [bondingCurve, isDexToken, token.mintAddress]);
+    }, [bondingCurve, isDexToken, token.mintAddress, isSelling]);
 
     // Separate price quote calculation
     useEffect(() => {

@@ -5,7 +5,6 @@ import { pool } from '../db/pool';
 import { validateTokenData } from '../middleware/validation';
 import { logger } from '../utils/logger';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
-import { DexService } from '../services/dexService';
 
 const router = express.Router();
 router.use(cors());
@@ -148,10 +147,11 @@ router.get('/tokens/:mintAddress', apiLimiter, async (req, res) => {
 router.get('/tokens', apiLimiter, async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT * FROM token_platform.tokens ORDER BY created_at DESC`
+            `SELECT * FROM token_platform.tokens 
+             WHERE token_type = 'bonding_curve' 
+             ORDER BY created_at DESC`
         );
 
-        // Convert snake_case to camelCase
         const tokens = result.rows.map(token => ({
             id: token.id,
             mintAddress: token.mint_address,
@@ -195,52 +195,6 @@ router.get('/price-history/:mintAddress', async (req, res) => {
     } catch (error) {
         logger.error('Error fetching price history:', error);
         res.status(500).json({ error: 'Failed to fetch price history' });
-    }
-});
-
-const dexService = new DexService();
-
-// Add these new routes after existing token routes
-router.get('/dex/tokens', apiLimiter, async (req, res) => {
-    try {
-        const tokens = await dexService.getTopTokens();
-        res.json(tokens);
-    } catch (error) {
-        logger.error('Error fetching DEX tokens:', error);
-        res.status(500).json({ error: 'Failed to fetch DEX tokens' });
-    }
-});
-
-router.get('/dex/price/:mintAddress', apiLimiter, async (req, res) => {
-    try {
-        const price = await dexService.getTokenPrice(req.params.mintAddress);
-        res.json({ price });
-    } catch (error) {
-        logger.error('Error fetching token price:', error);
-        res.status(500).json({ error: 'Failed to fetch token price' });
-    }
-});
-
-// Add route to record DEX trade history
-router.post('/dex/trades', apiLimiter, async (req, res) => {
-    try {
-        const { tokenMintAddress, price, amount, type } = req.body;
-        await PriceHistoryModel.recordPrice(tokenMintAddress, price, amount);
-        res.status(201).json({ success: true });
-    } catch (error) {
-        logger.error('Error recording DEX trade:', error);
-        res.status(500).json({ error: 'Failed to record trade' });
-    }
-});
-
-router.get('/dex/pool/:mintAddress', apiLimiter, async (req, res) => {
-    try {
-        const { mintAddress } = req.params;
-        const poolInfo = await dexService.getPoolInfo(mintAddress);
-        res.json(poolInfo);
-    } catch (error) {
-        logger.error('Error fetching pool info:', error);
-        res.status(500).json({ error: 'Failed to fetch pool info' });
     }
 });
 
