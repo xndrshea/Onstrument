@@ -270,23 +270,23 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                 <>
                     {/* Balance Information */}
                     <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="p-3 bg-gray-50 rounded">
-                            <p className="text-sm text-gray-500">Your SOL Balance</p>
-                            <p className="text-lg font-semibold">{solBalance.toFixed(4)} SOL</p>
+                        <div className="p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
+                            <p className="text-sm text-gray-700">Your SOL Balance</p>
+                            <p className="text-lg font-semibold text-gray-900">{solBalance.toFixed(4)} SOL</p>
                         </div>
-                        <div className="p-3 bg-gray-50 rounded">
-                            <p className="text-sm text-gray-500">Your {token.symbol} Balance</p>
-                            <p className="text-lg font-semibold">
+                        <div className="p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
+                            <p className="text-sm text-gray-700">Your {token.symbol} Balance</p>
+                            <p className="text-lg font-semibold text-gray-900">
                                 {Number(userBalance) / (10 ** TOKEN_DECIMALS)} {token.symbol}
                             </p>
                         </div>
                     </div>
 
-                    {/* Current Price Display - Always visible */}
-                    <div className="mb-4 p-3 bg-gray-50 rounded">
+                    {/* Current Price Display */}
+                    <div className="mb-4 p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
                         <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">Current Token Price</span>
-                            <span className="font-medium">
+                            <span className="text-sm text-gray-700">Current Token Price</span>
+                            <span className="font-medium text-gray-900">
                                 {spotPrice !== null
                                     ? `${spotPrice.toFixed(6)} SOL`
                                     : 'Loading...'}
@@ -327,7 +327,7 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                                 type="number"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
-                                className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
                                 placeholder="Enter amount"
                                 disabled={isLoading}
                             />
@@ -342,7 +342,6 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                                 type="text"
                                 value={slippageTolerance * 100}
                                 onChange={(e) => {
-                                    // Allow empty string or valid numbers
                                     const value = e.target.value;
                                     if (value === '') {
                                         setSlippageTolerance(0);
@@ -353,19 +352,19 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                                         }
                                     }
                                 }}
-                                className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
                                 placeholder="Enter slippage %"
                             />
                         </div>
 
                         {/* Price Information */}
                         {amount && !isNaN(parseFloat(amount)) && (
-                            <div className="mb-4 p-3 bg-gray-50 rounded">
+                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md shadow-sm">
                                 <div className="flex justify-between mb-2">
-                                    <span className="text-sm text-gray-500">
+                                    <span className="text-sm text-blue-700">
                                         {isSelling ? 'SOL You Will Receive' : 'SOL Cost'}
                                     </span>
-                                    <span className="font-medium">
+                                    <span className="font-medium text-blue-900">
                                         {((priceInfo?.totalCost ?? 0) / LAMPORTS_PER_SOL).toFixed(4)} SOL
                                     </span>
                                 </div>
@@ -374,15 +373,26 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
 
                         {/* Error Display */}
                         {error && (
-                            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded">
-                                <p className="text-sm">{error}</p>
+                            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-900 rounded-md shadow-sm">
+                                <div className="flex items-center">
+                                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                    <p className="text-sm font-medium">{error}</p>
+                                </div>
                             </div>
                         )}
 
                         {/* Transaction Status */}
                         {isLoading && (
-                            <div className="mb-4 p-3 bg-blue-50 text-blue-700 rounded">
-                                <p className="text-sm">Processing transaction...</p>
+                            <div className="mb-4 p-4 bg-blue-100 border border-blue-400 text-blue-900 rounded-md shadow-sm">
+                                <div className="flex items-center">
+                                    <svg className="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    <p className="text-sm font-medium">Processing transaction...</p>
+                                </div>
                             </div>
                         )}
 
@@ -404,13 +414,13 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
                     </div>
 
                     {/* Pool Information */}
-                    <div className="mt-6 p-3 bg-gray-50 rounded">
-                        <h3 className="text-sm font-medium text-gray-700 mb-2">Pool Information</h3>
+                    <div className="mt-6 p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
+                        <h3 className="text-sm font-medium text-gray-900 mb-2">Pool Information</h3>
                         <div className="flex justify-between">
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm text-gray-700">
                                 {isDexToken ? 'DEX Liquidity' : 'Pool Balance'}
                             </span>
-                            <span className="text-sm font-medium">
+                            <span className="text-sm font-medium text-gray-900">
                                 {isDexToken ? (
                                     `${token.liquidity?.toFixed(2) || 'Loading...'} SOL`
                                 ) : (

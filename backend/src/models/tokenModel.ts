@@ -4,15 +4,16 @@ import { logger } from '../utils/logger';
 export class TokenModel {
     static async getTokens() {
         try {
+            logger.info('Executing getTokens query');
             const result = await pool.query(`
-                SELECT t.*, ts.holder_count, ts.transaction_count, ts.last_price, 
-                       ts.market_cap, ts.volume_24h, ts.total_volume,
-                       tm.description
+                SELECT t.*, ts.price, ts.volume_24h, ts.liquidity,
+                       ts.holder_count, ts.transaction_count, ts.last_updated
                 FROM token_platform.tokens t
                 LEFT JOIN token_platform.token_stats ts ON t.id = ts.token_id
-                LEFT JOIN token_platform.token_metadata tm ON t.mint_address = tm.mint_address
                 ORDER BY t.created_at DESC
             `);
+            logger.info(`Retrieved ${result.rows.length} tokens from database`);
+            logger.debug('Token query results:', result.rows);
             return result.rows;
         } catch (error) {
             logger.error('Error in getTokens:', error);

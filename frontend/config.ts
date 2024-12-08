@@ -9,4 +9,6 @@ export const CLUSTER_URL = clusterApiUrl('devnet');
 export const connection = new Connection(CLUSTER_URL);
 
 // If you need to reference the program ID in multiple places
-export const BONDING_CURVE_PROGRAM_ID = 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw'; 
+export const BONDING_CURVE_PROGRAM_ID = 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw';
+
+export const API_BASE_URL = 'http://localhost:3001/api';

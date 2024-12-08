@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import axios from 'axios';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
+import { PriceService } from './PriceService';
 
 interface RaydiumPair {
     ammId: string;
@@ -35,16 +36,18 @@ interface TokenData {
     mintAddress: string;
     name: string;
     symbol: string;
-    supply: string;
-    decimals: number;
     poolAddress: string;
-    volume24h: number;
-    priceChange24h: number;
+    decimals?: number;
     price: number;
+    volume24h: number;
+    liquidity: number;
+    priceChange24h: number;
+    totalSupply?: number;
 }
 
 export class DexService {
     private static RAYDIUM_API = 'https://api.raydium.io/v2';
+    private static MAX_TOKENS = 20; // Limit to top 20 tokens
     private connection: Connection;
     private updateInterval: NodeJS.Timeout | null = null;
 
@@ -80,63 +83,29 @@ export class DexService {
     async getTopTokens(): Promise<TokenData[]> {
         try {
             const response = await axios.get(`${DexService.RAYDIUM_API}/main/pairs`);
+            const pairs: RaydiumPair[] = response.data;
 
-            // Validate API response
-            if (!response?.data?.data || !Array.isArray(response.data.data)) {
-                logger.error('Invalid Raydium API response:', response?.data);
-                return [];
-            }
+            // Sort by liquidity and take top 20
+            const topPairs = pairs
+                .sort((a, b) => b.liquidity - a.liquidity)
+                .slice(0, DexService.MAX_TOKENS);
 
-            // Extract and transform token data from pairs
-            const pairs: RaydiumPair[] = response.data.data;
-            const tokens: TokenData[] = pairs
-                // Filter criteria for quality tokens
-                .filter(pair => {
-                    // Null check each property before using
-                    return pair
-                        && pair.baseMint
-                        && pair.name
-                        && typeof pair.volume24h === 'number'
-                        && typeof pair.liquidity === 'number'
-                        && (pair.volume24h ?? 0) > 1000
-                        && (pair.liquidity ?? 0) > 10000
-                        && !pair.name.includes('UNKNOWN');
-                })
-                // Sort by volume
-                .sort((a, b) => (b.volume24h || 0) - (a.volume24h || 0))
-                // Transform to our format
-                .map(pair => ({
-                    mintAddress: pair.baseMint || '',
-                    name: (pair.name || '').split('-')[0].trim(),
-                    symbol: (pair.name || '').split('-')[0].trim(),
-                    supply: pair.baseVault || '',
-                    decimals: pair.baseDecimals || 0,
-                    poolAddress: pair.ammId || '',
-                    volume24h: pair.volume24h || 0,
-                    priceChange24h: pair.priceChange24h || 0,
-                    price: pair.basePrice || 0
-                }))
-                .slice(0, 50); // Take top 50 by volume
+            logger.info(`Fetched ${topPairs.length} top tokens from Raydium`);
 
-            if (!Array.isArray(tokens)) {
-                logger.error('Token transformation failed - not an array');
-                return [];
-            }
-
-            if (tokens.length > 0) {
-                try {
-                    await this.updateTokensInDatabase(tokens);
-                    logger.info(`Fetched ${tokens.length} quality tokens from Raydium`);
-                } catch (dbError) {
-                    logger.error('Database update failed:', dbError);
-                    // Continue even if DB update fails
-                }
-            }
-
-            return tokens;
+            return topPairs.map(pair => ({
+                mintAddress: pair.baseMint,
+                name: pair.name.split('-')[0].trim(), // Take the base token name
+                symbol: pair.name.split('-')[0].trim(),
+                poolAddress: pair.ammId,
+                decimals: pair.baseDecimals,
+                price: pair.basePrice,
+                volume24h: pair.volume24h,
+                liquidity: pair.liquidity,
+                priceChange24h: pair.priceChange24h
+            }));
         } catch (error) {
             logger.error('Error fetching top tokens:', error);
-            return [];
+            throw error;
         }
     }
 
@@ -170,7 +139,8 @@ export class DexService {
             }
 
             // Store in our database for price history
-            await this.recordPoolPrice(mintAddress, pool.price);
+            const priceService = PriceService.getInstance(this.connection);
+            await priceService.recordPriceHistory(mintAddress, pool.price);
 
             return {
                 poolAddress: pool.ammId,
@@ -184,92 +154,71 @@ export class DexService {
         }
     }
 
-    private async updateTokensInDatabase(tokens: TokenData[]) {
+    async updateTokensInDatabase(tokens: TokenData[]) {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
-            // First check if token_type column exists
-            const columnExists = await client.query(`
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'tokens' 
-                AND column_name = 'token_type'
+            // First ensure token_stats table exists
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS token_platform.token_stats (
+                    token_id INTEGER REFERENCES token_platform.tokens(id),
+                    price DECIMAL,
+                    volume_24h DECIMAL,
+                    price_change_24h DECIMAL,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (token_id)
+                );
             `);
 
-            // If column doesn't exist, add it
-            if (columnExists.rows.length === 0) {
-                await client.query(`
-                    ALTER TABLE token_platform.tokens 
-                    ADD COLUMN token_type VARCHAR(20) DEFAULT 'dex'
-                `);
-            }
-
-            // Update query to include price
-            const query = `
-                INSERT INTO token_platform.tokens (
-                    mint_address,
-                    name,
-                    symbol,
-                    token_type,
-                    total_supply,
-                    decimals,
-                    dex_pool_address,
-                    volume_24h,
-                    price_change_24h
-                ) VALUES ($1, $2, $3, 'dex', $4, $5, $6, $7, $8)
-                ON CONFLICT (mint_address) 
-                DO UPDATE SET
-                    volume_24h = EXCLUDED.volume_24h,
-                    price_change_24h = EXCLUDED.price_change_24h,
-                    dex_pool_address = EXCLUDED.dex_pool_address
-            `;
-
-            // Record tokens and their prices
-            await Promise.all(tokens.map(async token => {
-                await client.query(query, [
+            for (const token of tokens) {
+                // First insert/update the token
+                const tokenResult = await client.query(`
+                    INSERT INTO token_platform.tokens (
+                        mint_address, name, symbol, token_type, 
+                        total_supply, decimals, dex_pool_address
+                    ) VALUES ($1, $2, $3, 'dex', $4, $5, $6)
+                    ON CONFLICT (mint_address) 
+                    DO UPDATE SET
+                        name = EXCLUDED.name,
+                        symbol = EXCLUDED.symbol
+                    RETURNING id
+                `, [
                     token.mintAddress,
                     token.name,
                     token.symbol,
-                    token.supply || '0',
+                    token.totalSupply || 0,
                     token.decimals || 9,
-                    token.poolAddress,
-                    token.volume24h || 0,
-                    token.priceChange24h || 0
+                    token.poolAddress
                 ]);
 
-                // Also record the price history
-                if (token.price) {
-                    await PriceHistoryModel.recordPrice(
-                        token.mintAddress,
-                        token.price,
-                        token.supply ? Number(token.supply) : 0
-                    );
-                }
-            }));
+                const tokenId = tokenResult.rows[0].id;
+
+                // Then update stats
+                await client.query(`
+                    INSERT INTO token_platform.token_stats (
+                        token_id, price, volume_24h, price_change_24h
+                    ) VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (token_id) 
+                    DO UPDATE SET
+                        price = EXCLUDED.price,
+                        volume_24h = EXCLUDED.volume_24h,
+                        price_change_24h = EXCLUDED.price_change_24h,
+                        last_updated = CURRENT_TIMESTAMP
+                `, [
+                    tokenId,
+                    token.price,
+                    token.volume24h,
+                    token.priceChange24h
+                ]);
+            }
 
             await client.query('COMMIT');
-            logger.info(`Updated ${tokens.length} tokens in database`);
         } catch (error) {
             await client.query('ROLLBACK');
-            logger.error('Error updating tokens in database:', error);
             throw error;
         } finally {
             client.release();
         }
-    }
-
-    private async recordPoolPrice(mintAddress: string, price: number) {
-        await pool.query(`
-            INSERT INTO token_platform.price_history (
-                token_id,
-                price,
-                timestamp
-            ) VALUES (
-                (SELECT id FROM token_platform.tokens WHERE mint_address = $1),
-                $2,
-                NOW()
-            )
-        `, [mintAddress, price]);
     }
 }

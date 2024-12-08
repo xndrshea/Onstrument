@@ -1,16 +1,21 @@
 {
     "type": "commonjs",
     "scripts": {
-        "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:server\"",
+        "dev": "concurrently \"ts-node-dev --max-old-space-size=4096 --respawn --transpile-only --project backend/tsconfig.json backend/src/index.ts\" \"vite\"",
         "dev:frontend": "vite",
-        "dev:server": "nodemon --watch backend/src -e ts --exec ts-node backend/src/index.ts",
+        "dev:server": "nodemon --watch backend/src -e ts --exec \"node --max-old-space-size=4096 -r ts-node/register backend/src/index.ts\"",
         "build": "tsc && vite build",
         "preview": "vite preview",
         "start": "ts-node src/index.ts --network localhost",
         "build:server": "tsc -p backend/tsconfig.json",
         "db:init": "ts-node backend/src/scripts/initDb.ts",
         "deploy": "anchor deploy --provider.cluster localnet",
-        "test": "anchor test --provider.cluster localnet"
+        "test": "anchor test --provider.cluster localnet",
+        "migrate": "ts-node backend/src/scripts/migrateDb.ts",
+        "reset-db": "ts-node backend/src/scripts/migrateDb.ts --reset",
+        "migrate:source": "ts-node backend/src/scripts/migrations/addSourceColumn.ts",
+        "migrate:price-history": "ts-node backend/src/scripts/migrations/updatePriceHistory.ts",
+        "migrate:precision": "ts-node backend/src/scripts/migrations/updatePrecision.ts"
     },
     "dependencies": {
         "@chakra-ui/icons": "^2.2.4",
@@ -25,6 +30,7 @@
         "@solana/wallet-adapter-wallets": "^0.19.23",
         "@solana/web3.js": "^1.87.0",
         "@types/chart.js": "^2.9.41",
+        "@types/pg-query-stream": "^1.0.3",
         "@types/react-router-dom": "^5.3.3",
         "axios": "^1.7.7",
         "bs58": "^6.0.0",
@@ -37,6 +43,7 @@
         "helmet": "^7.1.0",
         "lightweight-charts": "^4.2.2",
         "pg": "^8.11.3",
+        "pg-query-stream": "^4.7.1",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-router-dom": "^7.0.1",
@@ -57,6 +64,7 @@
         "postcss": "^8.4.49",
         "tailwindcss": "^3.4.16",
         "ts-node": "^10.9.2",
+        "ts-node-dev": "^2.0.0",
         "tsconfig-paths": "^4.2.0",
         "typescript": "^5.3.3",
         "vite": "^5.0.8"

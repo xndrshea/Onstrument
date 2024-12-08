@@ -1,6 +1,8 @@
-import { createChart, ColorType, IChartApi, ISeriesApi, LineData } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineData, UTCTimestamp } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 import { TokenRecord } from '../../../shared/types/token';
+import { PriceService } from '../../services/priceService';
+import { connection } from '../../config';
 
 interface PriceChartProps {
     token: TokenRecord;
@@ -68,30 +70,51 @@ export function PriceChart({ token, width = 600, height = 300 }: PriceChartProps
 
         const fetchPriceHistory = async () => {
             try {
-                const response = await fetch(`/api/price-history/${token.mintAddress}`);
-                if (!response.ok) throw new Error('Failed to fetch price history');
+                const priceService = PriceService.getInstance(connection);
+                console.log('Fetching price history for token:', token.mintAddress);
+                const history = await priceService.getPriceHistory(token);
+                console.log('Raw price history:', history);
 
-                const history = await response.json();
-                const data: LineData[] = history.map((point: any) => ({
-                    // Convert seconds to milliseconds for the chart
-                    time: point.timestamp * 1000,
-                    value: Number(point.price)
-                }));
+                if (!history || !Array.isArray(history)) {
+                    console.warn('Invalid history data received:', history);
+                    return;
+                }
 
-                // Configure series for real-time data
-                series.current?.applyOptions({
-                    priceFormat: {
-                        type: 'price',
-                        precision: 9,
-                        minMove: 0.000000001,
-                    },
-                    lastValueVisible: true,
-                    priceLineVisible: true,
-                });
+                // Filter out any invalid data points with detailed logging
+                const data: LineData[] = history
+                    .filter(point => {
+                        const isValid = point &&
+                            typeof point.timestamp === 'number' &&
+                            typeof point.price === 'number' &&
+                            !isNaN(point.price) &&
+                            isFinite(point.price);
 
-                series.current?.setData(data);
+                        if (!isValid) {
+                            console.warn('Invalid price point:', point);
+                        }
+                        return isValid;
+                    })
+                    .map(point => ({
+                        time: point.timestamp as UTCTimestamp,
+                        value: Number(point.price)
+                    }));
+
+                console.log('Processed chart data:', data);
+
+                if (data.length > 0) {
+                    series.current?.setData(data);
+                } else {
+                    console.warn('No valid price history data available');
+                    // Optionally show user-friendly message
+                    if (series.current) {
+                        series.current.setData([]); // Clear the chart
+                    }
+                }
             } catch (error) {
                 console.error('Error fetching price history:', error);
+                if (series.current) {
+                    series.current.setData([]); // Clear the chart on error
+                }
             }
         };
 

@@ -21,7 +21,7 @@ export class DexService {
 
     async getTopTokens(): Promise<TokenRecord[]> {
         try {
-            const response = await fetch(`${API_BASE_URL}/dex/tokens`);
+            const response = await fetch(`${API_BASE_URL}/tokens?type=dex`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
