@@ -4,13 +4,14 @@ import { tokenService } from '../../services/tokenService'
 import { TokenRecord } from '../../../shared/types/token'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { Link } from 'react-router-dom'
+import { API_BASE_URL } from '../../config'
 
 interface TokenListProps {
     onCreateClick: () => void
 }
 
 const deduplicateTokens = (tokens: TokenRecord[]): TokenRecord[] => {
-    return Array.from(new Map(tokens.map(token => [token.mintAddress || token.mint_address, token])).values());
+    return Array.from(new Map(tokens.map(token => [token.mintAddress, token])).values());
 };
 
 export function TokenList({ onCreateClick }: TokenListProps) {
@@ -28,18 +29,22 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
-            const tokens = await tokenService.getAllTokens();
+            const response = await fetch(`${API_BASE_URL}/tokens?type=bonding_curve`);
+            if (!response.ok) {
+                throw new Error('HTTP error! status: ${response.status}');
+            }
+            const { tokens } = await response.json();
             if (!tokens) {
                 throw new Error('No data received from server');
             }
 
-            const validTokens = tokens.filter(token => {
+            const validTokens = tokens.filter((token: TokenRecord) => {
                 if (!token || typeof token !== 'object') {
                     console.warn('Invalid token object:', token);
                     return false;
                 }
 
-                const hasValidMint = Boolean(token.mintAddress || token.mint_address);
+                const hasValidMint = Boolean(token.mintAddress);
                 const hasValidName = Boolean(token.name);
                 const hasValidSymbol = Boolean(token.symbol);
 

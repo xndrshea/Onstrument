@@ -39,7 +39,7 @@ export function TokenDetailsPage() {
         const fetchToken = async () => {
             if (!mintAddress) return;
             try {
-                const tokens = await tokenService.getAllTokens();
+                const { tokens } = await tokenService.getAllTokens();
                 const token = tokens.find(t => t.mintAddress === mintAddress);
                 if (!token) throw new Error('Token not found');
                 setToken(token);

@@ -9,17 +9,31 @@ export class PriceHistoryModel {
         totalSupply: number        // What's the total supply after the trade?
     ) {
         try {
-            // Insert a new row into our price_history table
-            await pool.query(`
-                INSERT INTO token_platform.price_history 
-                (token_mint_address, price, total_supply, timestamp)
-                VALUES ($1, $2, $3, $4)
-            `, [
-                tokenMintAddress,
-                price,
-                totalSupply,
-                Math.floor(Date.now() / 1000) // Current time in seconds
-            ]);
+            const currentTimestamp = Math.floor(Date.now() / 1000);
+
+            // Add check for existing price at this timestamp
+            const existingPrice = await pool.query(`
+                SELECT price FROM token_platform.price_history 
+                WHERE token_mint_address = $1 
+                AND timestamp = to_timestamp($2)
+            `, [tokenMintAddress, currentTimestamp]);
+
+            // Only insert if price changed or no price exists
+            if (existingPrice.rows.length === 0 || existingPrice.rows[0].price !== price) {
+                logger.info(`Recording new price for ${tokenMintAddress}: ${price} SOL`);
+                await pool.query(`
+                    INSERT INTO token_platform.price_history 
+                    (token_mint_address, price, total_supply, timestamp)
+                    VALUES ($1, $2, $3, to_timestamp($4))
+                `, [
+                    tokenMintAddress,
+                    price,
+                    totalSupply,
+                    currentTimestamp
+                ]);
+            } else {
+                logger.info(`Skipping price record for ${tokenMintAddress} - no change`);
+            }
         } catch (error) {
             logger.error('Error recording price:', error);
             throw error;
@@ -29,9 +43,11 @@ export class PriceHistoryModel {
     // This function gets called when loading the price chart
     static async getPriceHistory(tokenMintAddress: string) {
         try {
-            // Get all price points for this token, ordered by time
             const result = await pool.query(`
-                SELECT timestamp, price, total_supply
+                SELECT 
+                    EXTRACT(EPOCH FROM timestamp)::integer as timestamp,
+                    price,
+                    total_supply
                 FROM token_platform.price_history
                 WHERE token_mint_address = $1
                 ORDER BY timestamp ASC

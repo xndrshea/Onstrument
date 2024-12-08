@@ -42,15 +42,16 @@ export class TokenService {
         }
     }
 
-    async getAllTokens(): Promise<TokenRecord[]> {
+    async getAllTokens(page = 1, limit = 50): Promise<{ tokens: TokenRecord[], pagination: any }> {
         try {
-            const response = await fetch(`${API_BASE_URL}/tokens`);
+            const response = await fetch(`${API_BASE_URL}/tokens?page=${page}&limit=${limit}&includeAll=true`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            return await response.json();
+            const data = await response.json();
+            return data;
         } catch (error) {
-            logger.error('Error fetching tokens:', error);
+            console.error('Error fetching tokens:', error);
             throw error;
         }
     }

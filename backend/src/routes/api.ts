@@ -5,6 +5,7 @@ import { pool } from '../db/pool';
 import { validateTokenData } from '../middleware/validation';
 import { logger } from '../utils/logger';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
+import { TokenSyncJob } from '../jobs/tokenSync';
 
 const router = express.Router();
 router.use(cors());
@@ -146,11 +147,34 @@ router.get('/tokens/:mintAddress', apiLimiter, async (req, res) => {
 // Add this new endpoint near your other token endpoints
 router.get('/tokens', apiLimiter, async (req, res) => {
     try {
-        const result = await pool.query(
-            `SELECT * FROM token_platform.tokens 
-             WHERE token_type = 'bonding_curve' 
-             ORDER BY created_at DESC`
-        );
+        const tokenType = req.query.type as string;
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const offset = (page - 1) * limit;
+
+        const query = tokenType
+            ? `SELECT * FROM token_platform.tokens 
+               WHERE token_type = $3
+               ORDER BY created_at DESC 
+               LIMIT $1 OFFSET $2`
+            : `SELECT * FROM token_platform.tokens 
+               ORDER BY created_at DESC 
+               LIMIT $1 OFFSET $2`;
+
+        const queryParams = tokenType
+            ? [limit, offset, tokenType]
+            : [limit, offset];
+
+        const result = await pool.query(query, queryParams);
+
+        // Get total count for pagination
+        const countQuery = tokenType
+            ? `SELECT COUNT(*) FROM token_platform.tokens 
+               WHERE token_type = $1`
+            : 'SELECT COUNT(*) FROM token_platform.tokens';
+
+        const totalCount = await pool.query(countQuery, tokenType ? [tokenType] : []);
+        const total = parseInt(totalCount.rows[0].count);
 
         const tokens = result.rows.map(token => ({
             id: token.id,
@@ -165,10 +189,19 @@ router.get('/tokens', apiLimiter, async (req, res) => {
             creatorId: token.creator_id,
             network: token.network,
             curveConfig: token.curve_config,
-            createdAt: token.created_at
+            createdAt: token.created_at,
+            token_type: token.token_type
         }));
 
-        res.json(tokens);
+        res.json({
+            tokens,
+            pagination: {
+                total,
+                page,
+                limit,
+                pages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         logger.error('Error fetching tokens:', error);
         res.status(500).json({ error: 'Failed to fetch tokens' });
@@ -190,11 +223,109 @@ router.post('/price-history', async (req, res) => {
 router.get('/price-history/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
+        console.log('Fetching price history for:', mintAddress);
+
         const history = await PriceHistoryModel.getPriceHistory(mintAddress);
-        res.json(history);
+        console.log('Raw history from DB:', history);
+
+        if (!history || !Array.isArray(history)) {
+            console.warn('Invalid history data from DB:', history);
+            return res.status(404).json({ error: 'No price history found' });
+        }
+
+        // Create a Map to handle duplicate timestamps
+        const timestampMap = new Map();
+
+        // Process each data point, keeping only the latest price for each timestamp
+        history.forEach(point => {
+            if (point && point.timestamp && point.price != null) {
+                const timestamp = Math.floor(new Date(point.timestamp).getTime() / 1000);
+                // Only update if this is a new timestamp or if it's more recent for the same timestamp
+                if (!timestampMap.has(timestamp) || point.timestamp > timestampMap.get(timestamp).originalTimestamp) {
+                    timestampMap.set(timestamp, {
+                        timestamp,
+                        price: Number(point.price),
+                        originalTimestamp: point.timestamp
+                    });
+                }
+            }
+        });
+
+        // Convert Map to array and sort by timestamp
+        const formattedHistory = Array.from(timestampMap.values())
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .map(({ timestamp, price }) => ({
+                timestamp,
+                price
+            }));
+
+        console.log('Formatted history:', formattedHistory);
+
+        if (formattedHistory.length === 0) {
+            return res.status(404).json({ error: 'No valid price history data' });
+        }
+
+        res.json(formattedHistory);
     } catch (error) {
         logger.error('Error fetching price history:', error);
-        res.status(500).json({ error: 'Failed to fetch price history' });
+        res.status(500).json({
+            error: 'Failed to fetch price history',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+router.get('/prices/:mintAddress', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+
+        const result = await pool.query(`
+            SELECT ts.price 
+            FROM token_platform.tokens t
+            JOIN token_platform.token_stats ts ON t.id = ts.token_id
+            WHERE t.mint_address = $1
+        `, [mintAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Token not found' });
+        }
+
+        res.json({ price: result.rows[0].price });
+    } catch (error) {
+        logger.error('Error fetching token price:', error);
+        res.status(500).json({ error: 'Failed to fetch price' });
+    }
+});
+
+// Add this endpoint to manually trigger a sync
+router.post('/dex/sync', apiLimiter, async (_req, res) => {
+    try {
+        await TokenSyncJob.getInstance().startSync();
+        res.json({ message: 'DEX sync triggered successfully' });
+    } catch (error) {
+        logger.error('Manual DEX sync failed:', error);
+        res.status(500).json({ error: 'Sync failed' });
+    }
+});
+
+// Add this endpoint to check sync status
+router.get('/dex/status', apiLimiter, async (_req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT COUNT(*) as count, 
+                   MAX(ts.last_updated) as last_sync
+            FROM token_platform.tokens t
+            JOIN token_platform.token_stats ts ON t.id = ts.token_id
+            WHERE t.token_type = 'dex'
+        `);
+
+        res.json({
+            dexTokenCount: parseInt(result.rows[0].count),
+            lastSync: result.rows[0].last_sync
+        });
+    } catch (error) {
+        logger.error('Error fetching DEX status:', error);
+        res.status(500).json({ error: 'Failed to fetch DEX status' });
     }
 });
 

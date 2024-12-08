@@ -19,7 +19,7 @@ export async function initDatabase() {
                 symbol VARCHAR(10) NOT NULL,
                 description TEXT,
                 metadata_uri TEXT,
-                total_supply NUMERIC NOT NULL,
+                total_supply NUMERIC,
                 decimals INTEGER DEFAULT 9,
                 curve_config JSONB DEFAULT '{"virtualSol": 0}',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -44,11 +44,24 @@ export async function initDatabase() {
             CREATE TABLE IF NOT EXISTS token_platform.price_history (
                 id SERIAL PRIMARY KEY,
                 token_mint_address VARCHAR(255) NOT NULL,
-                price DECIMAL(20, 9) NOT NULL,
-                total_supply DECIMAL(20, 9) NOT NULL,
-                timestamp BIGINT NOT NULL,
+                price DECIMAL(30, 9) NOT NULL,
+                total_supply DECIMAL(30, 9) NOT NULL,
+                timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                source VARCHAR(20) NOT NULL DEFAULT 'dex',
                 FOREIGN KEY (token_mint_address) REFERENCES token_platform.tokens(mint_address)
             );
+
+            -- Add source column to price_history if it doesn't exist
+            DO $$ 
+            BEGIN 
+                BEGIN
+                    ALTER TABLE token_platform.price_history 
+                    ADD COLUMN source VARCHAR(20) NOT NULL;
+                EXCEPTION 
+                    WHEN duplicate_column THEN 
+                        NULL;
+                END;
+            END $$;
 
             -- Create indexes if they don't exist
             CREATE INDEX IF NOT EXISTS idx_tokens_mint_address ON token_platform.tokens(mint_address);

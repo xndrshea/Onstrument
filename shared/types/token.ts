@@ -50,3 +50,16 @@ export interface TokenFormData {
     supply: number;
     virtualSol: number;
 }
+
+export interface DexToken {
+    mintAddress: string;
+    name: string;
+    symbol: string;
+    poolAddress: string;
+    decimals?: number;
+    price: number;
+    volume24h: number;
+    liquidity: number;
+    priceChange24h: number;
+    totalSupply?: number;
+}

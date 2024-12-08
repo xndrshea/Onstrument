@@ -7,6 +7,8 @@ import { BondingCurve } from '../../services/bondingCurve'
 import { PublicKey } from '@solana/web3.js'
 import { connection } from '../../config'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { PriceService } from '../../services/priceService'
+import { API_BASE_URL } from '../../config'
 
 export function MarketPage() {
     const wallet = useWallet();
@@ -16,6 +18,17 @@ export function MarketPage() {
     const [error, setError] = useState<string | null>(null)
     const [tokenType, setTokenType] = useState<'all' | 'bonding_curve' | 'dex'>('all')
 
+    const deduplicateTokens = (tokens: TokenRecord[]): TokenRecord[] => {
+        const seen = new Set();
+        return tokens.filter(token => {
+            if (seen.has(token.mintAddress)) {
+                return false;
+            }
+            seen.add(token.mintAddress);
+            return true;
+        });
+    };
+
     const fetchTokenPrices = async (validTokens: TokenRecord[]) => {
         const prices: Record<string, number> = {};
 
@@ -24,23 +37,20 @@ export function MarketPage() {
                 if (token.token_type === 'dex') {
                     const price = await dexService.getTokenPrice(token.mintAddress);
                     prices[token.mintAddress] = price;
-                } else if (wallet.connected && wallet.publicKey) {
-                    // Only try to fetch bonding curve prices if wallet is connected
-                    const bondingCurve = new BondingCurve(
-                        connection,
-                        wallet,
-                        new PublicKey(token.mintAddress),
-                        new PublicKey(token.curveAddress)
-                    );
-                    const quote = await bondingCurve.getPriceQuote(1, true);
-                    prices[token.mintAddress] = quote.price;
+                } else {
+                    const price = await PriceService.getInstance(connection).getPrice(token);
+                    prices[token.mintAddress] = price;
                 }
             } catch (error) {
-                console.error(`Error fetching price for ${token.symbol}:`, error);
+                console.warn(`Price fetch failed for ${token.symbol}:`, error);
+                // Don't set price to 0, keep previous price if exists
+                if (!prices[token.mintAddress]) {
+                    prices[token.mintAddress] = 0;
+                }
             }
         }));
 
-        setTokenPrices(prices);
+        setTokenPrices(prev => ({ ...prev, ...prices }));
     };
 
     const renderTokenPrice = (token: TokenRecord) => {
@@ -49,7 +59,7 @@ export function MarketPage() {
 
         return (
             <p className="text-sm">
-                Price: {price.toFixed(6)} SOL
+                Price: {price === 0 ? 'Not available' : `${price.toFixed(6)} SOL`}
             </p>
         );
     };
@@ -57,23 +67,16 @@ export function MarketPage() {
     const fetchAllTokens = async () => {
         try {
             setIsLoading(true);
-            const [customTokens, dexTokens] = await Promise.allSettled([
-                tokenService.getAllTokens(),
-                dexService.getTopTokens()
-            ]);
+            const { tokens } = await tokenService.getAllTokens();
 
-            const validTokens = [
-                ...(customTokens.status === 'fulfilled' ? customTokens.value : []),
-                ...(dexTokens.status === 'fulfilled' ? dexTokens.value : [])
-            ];
-
-            if (validTokens.length === 0) {
+            if (!tokens || tokens.length === 0) {
                 setError('No tokens available at the moment');
-            } else {
-                setTokens(validTokens);
-                await fetchTokenPrices(validTokens);
-                setError(null);
+                return;
             }
+
+            setTokens(tokens);
+            await fetchTokenPrices(tokens);
+            setError(null);
         } catch (error) {
             setError('Failed to fetch tokens');
             console.error('Error fetching tokens:', error);
@@ -87,11 +90,13 @@ export function MarketPage() {
     }, []);
 
     useEffect(() => {
-        const interval = setInterval(() => {
+        const interval = setInterval(async () => {
             if (tokens.length > 0) {
-                fetchTokenPrices(tokens);
+                console.log(`Updating prices for ${tokens.length} tokens...`);
+                await fetchTokenPrices(tokens);
+                console.log('Price update complete');
             }
-        }, 10000); // Update every 10 seconds
+        }, 10000);
 
         return () => clearInterval(interval);
     }, [tokens]);
@@ -100,6 +105,22 @@ export function MarketPage() {
         if (tokenType === 'all') return true
         return token.token_type === tokenType
     })
+
+    const triggerManualSync = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/dex/sync`, {
+                method: 'POST'
+            });
+            if (!response.ok) {
+                throw new Error('Sync failed');
+            }
+            // Refetch tokens after sync
+            await fetchAllTokens();
+        } catch (error) {
+            console.error('Manual sync failed:', error);
+            setError('Failed to sync tokens');
+        }
+    };
 
     if (isLoading) return <div className="p-4">Loading...</div>
     if (error) return <div className="p-4 text-red-500">{error}</div>
