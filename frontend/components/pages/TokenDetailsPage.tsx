@@ -82,7 +82,7 @@ export function TokenDetailsPage() {
                         </div>
 
                         <div className="bg-[#232427] rounded-lg p-4">
-                            <TradingInterface token={token} onTradeComplete={() => { }} />
+                            <TradingInterface token={token} />
                         </div>
                     </div>
                 </div>

@@ -6,7 +6,6 @@ export class PriceHistoryModel {
     static async recordPrice(
         tokenMintAddress: string,  // Which token?
         price: number,             // What's the new price?
-        totalSupply: number        // What's the total supply after the trade?
     ) {
         try {
             const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -23,12 +22,11 @@ export class PriceHistoryModel {
                 logger.info(`Recording new price for ${tokenMintAddress}: ${price} SOL`);
                 await pool.query(`
                     INSERT INTO token_platform.price_history 
-                    (token_mint_address, price, total_supply, timestamp)
-                    VALUES ($1, $2, $3, to_timestamp($4))
+                    (token_mint_address, price, timestamp)
+                    VALUES ($1, $2, to_timestamp($3))
                 `, [
                     tokenMintAddress,
                     price,
-                    totalSupply,
                     currentTimestamp
                 ]);
             } else {
@@ -46,8 +44,7 @@ export class PriceHistoryModel {
             const result = await pool.query(`
                 SELECT 
                     EXTRACT(EPOCH FROM timestamp)::integer as timestamp,
-                    price,
-                    total_supply
+                    price
                 FROM token_platform.price_history
                 WHERE token_mint_address = $1
                 ORDER BY timestamp ASC

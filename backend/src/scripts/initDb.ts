@@ -6,6 +6,16 @@ export async function initDatabase() {
     try {
         await client.query('BEGIN');
 
+        // Drop existing tables if they exist
+        await client.query(`
+            DROP TABLE IF EXISTS 
+                token_platform.raydium_tokens,
+                token_platform.custom_tokens,
+                token_platform.price_history,
+                token_platform.trade_history,
+                token_platform.token_stats CASCADE;
+        `);
+
         // Create schema
         await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform;`);
 
@@ -22,7 +32,7 @@ export async function initDatabase() {
             );
         `);
 
-        // Custom tokens table
+        // Custom tokens table with curve_config
         await client.query(`
             CREATE TABLE token_platform.custom_tokens (
                 id SERIAL PRIMARY KEY,
@@ -33,6 +43,7 @@ export async function initDatabase() {
                 decimals INTEGER DEFAULT 9,
                 description TEXT,
                 metadata_uri TEXT,
+                curve_config JSONB,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -40,12 +51,10 @@ export async function initDatabase() {
         // Price history table (for both types)
         await client.query(`
             CREATE TABLE token_platform.price_history (
-                id SERIAL PRIMARY KEY,
-                mint_address VARCHAR(255) NOT NULL,
-                price DECIMAL(30, 9) NOT NULL,
-                total_supply DECIMAL(30, 9),
-                timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-                token_type VARCHAR(10) NOT NULL CHECK (token_type IN ('raydium', 'custom'))
+                mint_address TEXT NOT NULL,
+                price DECIMAL NOT NULL,
+                timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (mint_address, timestamp)
             );
         `);
 
@@ -86,8 +95,10 @@ export async function initDatabase() {
         `);
 
         await client.query('COMMIT');
+        logger.info('Database initialized successfully');
     } catch (error) {
         await client.query('ROLLBACK');
+        logger.error('Failed to initialize database:', error);
         throw error;
     } finally {
         client.release();
@@ -97,9 +108,12 @@ export async function initDatabase() {
 // Add this to run the script directly
 if (require.main === module) {
     initDatabase()
-        .then(() => process.exit(0))
+        .then(() => {
+            logger.info('Database initialization completed');
+            process.exit(0);
+        })
         .catch(error => {
-            console.error('Failed to initialize database:', error);
+            logger.error('Database initialization failed:', error);
             process.exit(1);
         });
 }

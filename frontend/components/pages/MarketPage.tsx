@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react'
 import { TokenRecord } from '../../../shared/types/token'
 import { tokenService } from '../../services/tokenService'
-import { dexService } from '../../services/dexService'
 import { Link } from 'react-router-dom'
-import { BondingCurve } from '../../services/bondingCurve'
+import { useWallet } from '@solana/wallet-adapter-react'
+import { priceClient } from '../../services/priceClient'
+import { dexService } from '../../services/dexService'
 import { PublicKey } from '@solana/web3.js'
 import { connection } from '../../config'
-import { useWallet } from '@solana/wallet-adapter-react'
-import { PriceService } from '../../services/priceService'
-import { API_BASE_URL } from '../../config'
-import { WebSocketService } from '../../services/websocketService'
+import { BondingCurve } from '../../services/bondingCurve'
 
 export function MarketPage() {
     const wallet = useWallet();
@@ -17,7 +15,7 @@ export function MarketPage() {
     const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({})
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [tokenType, setTokenType] = useState<'all' | 'bonding_curve' | 'dex'>('all')
+    const [tokenType, setTokenType] = useState<'all' | 'custom' | 'dex'>('all')
 
     const deduplicateTokens = (tokens: TokenRecord[]): TokenRecord[] => {
         const seen = new Set();
@@ -32,37 +30,20 @@ export function MarketPage() {
 
     const fetchTokenPrices = async (validTokens: TokenRecord[]) => {
         const prices: Record<string, number> = {};
-
         await Promise.all(validTokens.map(async (token) => {
             try {
-                if (token.token_type === 'dex') {
-                    const price = await dexService.getTokenPrice(token.mintAddress);
-                    prices[token.mintAddress] = price;
-                } else {
-                    const price = await PriceService.getInstance(connection).getPrice(token);
-                    prices[token.mintAddress] = price;
-                }
+                const price = token.tokenType === 'dex'
+                    ? (await dexService.getPoolInfo(token.mintAddress)).price
+                    : token.curveAddress
+                        ? (await new BondingCurve(connection, wallet, new PublicKey(token.mintAddress), new PublicKey(token.curveAddress)).getPriceQuote(1, true)).price
+                        : 0;
+                prices[token.mintAddress] = price;
             } catch (error) {
                 console.warn(`Price fetch failed for ${token.symbol}:`, error);
-                // Don't set price to 0, keep previous price if exists
-                if (!prices[token.mintAddress]) {
-                    prices[token.mintAddress] = 0;
-                }
+                prices[token.mintAddress] = 0;
             }
         }));
-
-        setTokenPrices(prev => ({ ...prev, ...prices }));
-    };
-
-    const renderTokenPrice = (token: TokenRecord) => {
-        const price = tokenPrices[token.mintAddress];
-        if (price === undefined) return null;
-
-        return (
-            <p className="text-sm">
-                Price: {price === 0 ? 'Not available' : `${price.toFixed(6)} SOL`}
-            </p>
-        );
+        setTokenPrices(prices);
     };
 
     const fetchAllTokens = async () => {
@@ -91,48 +72,32 @@ export function MarketPage() {
     }, []);
 
     useEffect(() => {
-        const wsService = WebSocketService.getInstance();
-        const priceUpdateHandlers = new Map<string, (data: any) => void>();
+        const unsubscribers = tokens.map(token =>
+            priceClient.subscribeToPrice(token.mintAddress, (price) => {
+                setTokenPrices(prev => ({
+                    ...prev,
+                    [token.mintAddress]: price
+                }));
+            })
+        );
 
-        tokens.forEach(token => {
-            const handler = (data: any) => {
-                if (data.type === 'price') {
-                    setTokenPrices(prev => ({
-                        ...prev,
-                        [token.mintAddress]: data.price
-                    }));
-                }
-            };
-            wsService.subscribe(token.mintAddress, handler);
-            priceUpdateHandlers.set(token.mintAddress, handler);
-        });
-
-        return () => {
-            priceUpdateHandlers.forEach((handler, mintAddress) => {
-                wsService.unsubscribe(mintAddress, handler);
-            });
-        };
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe());
     }, [tokens]);
 
     const filteredTokens = tokens.filter(token => {
         if (tokenType === 'all') return true
-        return token.token_type === tokenType
-    })
+        return token.tokenType === tokenType
+    });
 
-    const triggerManualSync = async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/dex/sync`, {
-                method: 'POST'
-            });
-            if (!response.ok) {
-                throw new Error('Sync failed');
-            }
-            // Refetch tokens after sync
-            await fetchAllTokens();
-        } catch (error) {
-            console.error('Manual sync failed:', error);
-            setError('Failed to sync tokens');
-        }
+    const renderTokenPrice = (token: TokenRecord) => {
+        const price = tokenPrices[token.mintAddress];
+        if (price === undefined) return null;
+
+        return (
+            <p className="text-sm">
+                Price: {price === 0 ? 'Not available' : `${price.toFixed(6)} SOL`}
+            </p>
+        );
     };
 
     if (isLoading) return <div className="p-4">Loading...</div>
@@ -149,7 +114,7 @@ export function MarketPage() {
                         onChange={(e) => setTokenType(e.target.value as any)}
                     >
                         <option value="all">All Tokens</option>
-                        <option value="bonding_curve">Custom Tokens</option>
+                        <option value="custom">Custom Tokens</option>
                         <option value="dex">DEX Tokens</option>
                     </select>
                 </div>
@@ -167,7 +132,7 @@ export function MarketPage() {
                                     <p className="text-sm text-gray-400">{token.symbol}</p>
                                 </div>
                                 <span className="text-xs px-2 py-1 rounded bg-gray-700">
-                                    {token.token_type === 'dex' ? 'DEX' : 'Custom'}
+                                    {token.tokenType === 'dex' ? 'DEX' : 'Custom'}
                                 </span>
                             </div>
                             {renderTokenPrice(token)}
