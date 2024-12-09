@@ -3,6 +3,7 @@ import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { Liquidity, Market, Token } from '@raydium-io/raydium-sdk';
 import { connection } from '../config';
 import { WebSocketService } from './websocketService';
+import { logger } from '../utils/logger';
 
 const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -19,7 +20,7 @@ interface PriceSubscriber {
 }
 
 export class DexService {
-    private static instance: DexService | null = null;
+    private static instance: DexService;
     private connection: Connection;
     private wsService: WebSocketService;
     private priceSubscribers: PriceSubscriber[] = [];
@@ -82,7 +83,7 @@ export class DexService {
             const tokens = await response.json();
 
             // Subscribe to all top tokens
-            tokens.forEach(token => this.wsService.subscribe(token.mintAddress));
+            tokens.forEach((token: TokenRecord) => this.wsService.subscribe(token.mintAddress));
 
             return tokens;
         } catch (error) {
@@ -159,4 +160,24 @@ export class DexService {
             throw error;
         }
     }
+
+    private async createTradeTransaction({
+        poolAddress,
+        mintAddress,
+        amount,
+        isSelling,
+        slippageTolerance
+    }: {
+        poolAddress: PublicKey;
+        mintAddress: PublicKey;
+        amount: number;
+        isSelling: boolean;
+        slippageTolerance: number;
+    }): Promise<string> {
+        // For now, return a placeholder transaction ID
+        return `tx_${Date.now()}`;
+    }
 }
+
+// Export a singleton instance
+export const dexService = DexService.getInstance();

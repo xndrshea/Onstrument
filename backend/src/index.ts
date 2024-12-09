@@ -30,19 +30,47 @@ async function startServer() {
         }
         logger.info('Database initialized successfully')
 
-        // Create the app first
+        // Create Express app
         const app = createApp()
 
         // Create HTTP server
         const server = new Server(app)
 
-        // Initialize WebSocket server
-        const wss = new WebSocket.Server({ server })
+        // Initialize WebSocket server with path
+        const wss = new WebSocket.Server({
+            server,
+            path: '/ws'  // Specify the path explicitly
+        })
+
+        // Initialize WebSocket service
         const wsService = WebSocketService.getInstance()
         wsService.initialize(wss)
+
+        // Handle WebSocket connection
+        wss.on('connection', (ws, req) => {
+            logger.info(`New WebSocket connection from ${req.socket.remoteAddress}`)
+
+            ws.on('message', (message) => {
+                try {
+                    const data = JSON.parse(message.toString())
+                    wsService.handleMessage(data)
+                } catch (error) {
+                    logger.error('Error handling WebSocket message:', error)
+                }
+            })
+
+            ws.on('error', (error) => {
+                logger.error('WebSocket connection error:', error)
+            })
+
+            ws.on('close', () => {
+                logger.info('WebSocket connection closed')
+            })
+        })
+
         logger.info('WebSocket server initialized')
 
-        // Start listening
+        // Start server
         server.listen(PORT, () => {
             logger.info(`Server is running and listening on port ${PORT}`)
             logger.info(`API endpoints available at http://localhost:${PORT}/api`)
@@ -57,21 +85,8 @@ async function startServer() {
 
     } catch (error) {
         logger.error('Failed to start server:', error)
-        if (error instanceof Error) {
-            logger.error(error.stack)
-        }
         process.exit(1)
     }
 }
-
-// Add process error handlers
-process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception:', error)
-    process.exit(1)
-})
-
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason)
-})
 
 startServer() 

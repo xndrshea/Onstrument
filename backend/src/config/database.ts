@@ -32,20 +32,38 @@ export async function initializeDatabase() {
         const client = await pool.connect()
         logger.info('Attempting database connection...')
 
+        // Check for all required tables
         const tablesExist = await client.query(`
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'token_platform' 
-                AND table_name = 'tokens'
-            ) AS tokens_exist,
+                AND table_name = 'raydium_tokens'
+            ) AS raydium_tokens_exist,
+            EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'token_platform' 
+                AND table_name = 'custom_tokens'
+            ) AS custom_tokens_exist,
             EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'token_platform' 
                 AND table_name = 'price_history'
-            ) AS price_history_exist;
+            ) AS price_history_exist,
+            EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'token_platform' 
+                AND table_name = 'trade_history'
+            ) AS trade_history_exist,
+            EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'token_platform' 
+                AND table_name = 'token_stats'
+            ) AS token_stats_exist;
         `)
 
-        if (!tablesExist.rows[0].tokens_exist || !tablesExist.rows[0].price_history_exist) {
+        const allTablesExist = Object.values(tablesExist.rows[0]).every(exists => exists);
+
+        if (!allTablesExist) {
             logger.info('Some tables missing, starting initialization...')
             await initDatabase()
         } else {
@@ -55,7 +73,7 @@ export async function initializeDatabase() {
         client.release()
         return true
     } catch (error: any) {
-        logger.error('Database connection failed:', {
+        logger.error('Database initialization error:', {
             error: error.message,
             code: error.code,
             detail: error.detail

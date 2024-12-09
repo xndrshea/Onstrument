@@ -4,6 +4,9 @@ import { logger } from '../utils/logger';
 import { pool } from '../config/database';
 
 export class WebSocketService extends EventEmitter {
+    public on!: (event: string, listener: (...args: any[]) => void) => this;
+    public emit!: (event: string, ...args: any[]) => boolean;
+
     private static instance: WebSocketService;
     private ws: WebSocket | null = null;
     private reconnectTimeout: NodeJS.Timeout | null = null;
@@ -47,7 +50,7 @@ export class WebSocketService extends EventEmitter {
         });
     }
 
-    private async handleMessage(message: any) {
+    public async handleMessage(message: any) {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');

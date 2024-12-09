@@ -1,4 +1,6 @@
-export class WebSocketService {
+import { EventEmitter } from 'events';
+
+export class WebSocketService extends EventEmitter {
     private static instance: WebSocketService;
     private ws: WebSocket | null = null;
     private subscribers: Map<string, Set<(data: any) => void>> = new Map();
@@ -6,6 +8,7 @@ export class WebSocketService {
     private readonly RECONNECT_DELAY = 5000;
 
     private constructor() {
+        super();
         this.connect();
     }
 
@@ -52,12 +55,7 @@ export class WebSocketService {
         }, this.RECONNECT_DELAY);
     }
 
-    subscribe(mintAddress: string, callback: (data: any) => void) {
-        if (!this.subscribers.has(mintAddress)) {
-            this.subscribers.set(mintAddress, new Set());
-        }
-        this.subscribers.get(mintAddress)!.add(callback);
-
+    public subscribe(mintAddress: string) {
         if (this.ws?.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
                 type: 'subscribe',
