@@ -1,7 +1,9 @@
 import { createApp } from './app'
 import { logger } from './utils/logger'
 import { initializeDatabase } from './config/database'
-import { TokenSyncJob } from './jobs/tokenSync'
+import { WebSocketService } from './services/websocketService'
+import { Server } from 'http'
+import WebSocket from 'ws'
 
 const PORT = process.env.PORT || 3001
 
@@ -31,17 +33,21 @@ async function startServer() {
         // Create the app first
         const app = createApp()
 
-        // Start listening before initializing token sync
-        const server = app.listen(PORT, () => {
-            logger.info(`Server is now running and listening on port ${PORT}`)
-            logger.info(`API endpoints available at http://localhost:${PORT}/api`)
-        })
+        // Create HTTP server
+        const server = new Server(app)
 
-        // Initialize token sync job after server is listening
-        logger.info('Starting token sync job...')
-        const tokenSync = TokenSyncJob.getInstance()
-        await tokenSync.start()
-        logger.info('Token sync job started successfully')
+        // Initialize WebSocket server
+        const wss = new WebSocket.Server({ server })
+        const wsService = WebSocketService.getInstance()
+        wsService.initialize(wss)
+        logger.info('WebSocket server initialized')
+
+        // Start listening
+        server.listen(PORT, () => {
+            logger.info(`Server is running and listening on port ${PORT}`)
+            logger.info(`API endpoints available at http://localhost:${PORT}/api`)
+            logger.info(`WebSocket server available at ws://localhost:${PORT}/ws`)
+        })
 
         // Add error handling for the server
         server.on('error', (error: Error) => {

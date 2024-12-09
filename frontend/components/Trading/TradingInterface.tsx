@@ -7,13 +7,13 @@ import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { dexService } from '../../services/dexService'
 import { BN } from '@project-serum/anchor'
+import { WebSocketService } from '../../services/websocketService'
 
 interface TradingInterfaceProps {
     token: TokenRecord
-    onTradeComplete: () => void
 }
 
-export function TradingInterface({ token, onTradeComplete }: TradingInterfaceProps) {
+export function TradingInterface({ token }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
     const { publicKey, connected } = wallet
@@ -29,6 +29,8 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
     const [priceInfo, setPriceInfo] = useState<{ price: number; totalCost: number } | null>(null)
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05); // Default 5%
     const [spotPrice, setSpotPrice] = useState<number | null>(null);
+    const [trades, setTrades] = useState<TradeHistory[]>([]);
+    const wsService = WebSocketService.getInstance();
 
     // Add token type check
     const isDexToken = token.token_type === 'dex';
@@ -103,37 +105,26 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
 
     // Add new effect to fetch spot price
     useEffect(() => {
-        const fetchSpotPrice = async () => {
+        // Initial fetch
+        const fetchInitialData = async () => {
             if (isDexToken) {
-                try {
-                    const price = await dexService.getTokenPrice(token.mintAddress);
-                    setSpotPrice(price);
-                    setError(null);
-                } catch (error: any) {
-                    console.error('Error fetching DEX price:', error);
-                    setError(error.message || 'Failed to fetch price');
-                }
-            } else if (bondingCurve) {
-                try {
-                    // Try to get price quote with a small amount first
-                    const result = await bondingCurve.getPriceQuote(0.1, !isSelling);
-                    setSpotPrice(result.price);
-                    setError(null);
-                } catch (error: any) {
-                    console.error('Error fetching spot price:', error);
-                    // Don't show error if it's just initialization
-                    if (!error.message?.includes('could not find account')) {
-                        setError('Price quote unavailable');
-                    }
-                    setSpotPrice(null);
-                }
+                const dexService = DexService.getInstance();
+                const price = await dexService.getTokenPrice(token.mintAddress);
+                setSpotPrice(price);
             }
         };
+        fetchInitialData();
 
-        fetchSpotPrice();
-        const interval = setInterval(fetchSpotPrice, 10000);
-        return () => clearInterval(interval);
-    }, [bondingCurve, isDexToken, token.mintAddress, isSelling]);
+        // WebSocket subscription
+        if (isDexToken) {
+            const unsubscribe = wsService.subscribe(token.mintAddress, (data) => {
+                setSpotPrice(data.price);
+                setPriceInfo(prev => prev ? { ...prev, price: data.price } : null);
+                setTrades(prev => [data.trade, ...prev].slice(0, 50));
+            });
+            return () => unsubscribe();
+        }
+    }, [isDexToken, token.mintAddress]);
 
     // Separate price quote calculation
     useEffect(() => {
@@ -221,7 +212,6 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
             }
 
             await updateBalances();
-            onTradeComplete();
             setAmount('');
         } catch (error: any) {
             console.error('Transaction error:', error);
@@ -255,6 +245,15 @@ export function TradingInterface({ token, onTradeComplete }: TradingInterfacePro
         }
         localStorage.setItem(`trade_isSelling_${token.mintAddress}`, isSelling.toString());
     }, [amount, isSelling, token.mintAddress]);
+
+    useEffect(() => {
+        const handleTrade = (trade: TradeHistory) => {
+            setTrades(prev => [trade, ...prev].slice(0, 50));
+        };
+
+        wsService.subscribe(token.mintAddress, handleTrade);
+        return () => wsService.unsubscribe(token.mintAddress, handleTrade);
+    }, [token.mintAddress]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">
