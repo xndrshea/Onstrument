@@ -9,6 +9,7 @@ import { connection } from '../../config'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { PriceService } from '../../services/priceService'
 import { API_BASE_URL } from '../../config'
+import { WebSocketService } from '../../services/websocketService'
 
 export function MarketPage() {
     const wallet = useWallet();
@@ -90,15 +91,27 @@ export function MarketPage() {
     }, []);
 
     useEffect(() => {
-        const interval = setInterval(async () => {
-            if (tokens.length > 0) {
-                console.log(`Updating prices for ${tokens.length} tokens...`);
-                await fetchTokenPrices(tokens);
-                console.log('Price update complete');
-            }
-        }, 10000);
+        const wsService = WebSocketService.getInstance();
+        const priceUpdateHandlers = new Map<string, (data: any) => void>();
 
-        return () => clearInterval(interval);
+        tokens.forEach(token => {
+            const handler = (data: any) => {
+                if (data.type === 'price') {
+                    setTokenPrices(prev => ({
+                        ...prev,
+                        [token.mintAddress]: data.price
+                    }));
+                }
+            };
+            wsService.subscribe(token.mintAddress, handler);
+            priceUpdateHandlers.set(token.mintAddress, handler);
+        });
+
+        return () => {
+            priceUpdateHandlers.forEach((handler, mintAddress) => {
+                wsService.unsubscribe(mintAddress, handler);
+            });
+        };
     }, [tokens]);
 
     const filteredTokens = tokens.filter(token => {
