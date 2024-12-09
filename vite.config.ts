@@ -12,15 +12,6 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false
             }
-        },
-        fs: {
-            strict: false
-        }
-    },
-    resolve: {
-        alias: {
-            stream: 'stream-browserify',
-            buffer: 'buffer'
         }
     }
 })

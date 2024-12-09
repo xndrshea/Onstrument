@@ -4,11 +4,12 @@ import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocketService';
 import { DexService } from '../services/dexService';
 import { PriceService } from '../services/PriceService';
-import { Connection } from '@solana/web3.js';
+import { Connection, clusterApiUrl } from '@solana/web3.js';
 
 const router = Router();
 const wsService = WebSocketService.getInstance();
-const dexService = DexService.getInstance(new Connection(process.env.RPC_ENDPOINT!));
+const connection = new Connection(clusterApiUrl('devnet'));
+const dexService = DexService.getInstance(connection);
 const priceService = PriceService.getInstance();
 
 // Get all tokens (both Raydium and custom)
