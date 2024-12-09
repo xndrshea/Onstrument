@@ -16,21 +16,35 @@ const priceService = PriceService.getInstance();
 router.get('/tokens', async (req, res) => {
     try {
         const { type = 'all' } = req.query;
+        console.log('Received token request with type:', type);
+
         let query = '';
 
-        if (type === 'raydium') {
+        if (type === 'dex') {
             query = `
-                SELECT rt.*, ts.price, ts.volume_24h, ts.liquidity
+                SELECT 
+                    rt.*,
+                    ts.volume_24h,
+                    ts.liquidity,
+                    'dex' as token_type,
+                    NULL as curve_address,
+                    NULL as curve_config
                 FROM token_platform.raydium_tokens rt
-                JOIN token_platform.token_stats ts ON rt.mint_address = ts.mint_address
-                ORDER BY ts.volume_24h DESC
+                LEFT JOIN token_platform.token_stats ts ON rt.mint_address = ts.mint_address
+                ORDER BY ts.volume_24h DESC NULLS LAST
             `;
         } else if (type === 'custom') {
             query = `
-                SELECT ct.*, ts.price, ts.volume_24h
+                SELECT 
+                    ct.*,
+                    ts.volume_24h,
+                    ts.liquidity,
+                    'custom' as token_type,
+                    ct.curve_address,
+                    ct.curve_config
                 FROM token_platform.custom_tokens ct
-                JOIN token_platform.token_stats ts ON ct.mint_address = ts.mint_address
-                ORDER BY ts.volume_24h DESC
+                LEFT JOIN token_platform.token_stats ts ON ct.mint_address = ts.mint_address
+                ORDER BY ts.volume_24h DESC NULLS LAST
             `;
         } else {
             query = `
@@ -38,37 +52,39 @@ router.get('/tokens', async (req, res) => {
                     COALESCE(rt.mint_address, ct.mint_address) as mint_address,
                     COALESCE(rt.name, ct.name) as name,
                     COALESCE(rt.symbol, ct.symbol) as symbol,
-                    ts.price,
                     ts.volume_24h,
                     ts.liquidity,
                     CASE 
-                        WHEN rt.mint_address IS NOT NULL THEN 'raydium'
+                        WHEN rt.mint_address IS NOT NULL THEN 'dex'
                         ELSE 'custom'
-                    END as token_type
-                FROM token_platform.token_stats ts
-                LEFT JOIN token_platform.raydium_tokens rt ON rt.mint_address = ts.mint_address
-                LEFT JOIN token_platform.custom_tokens ct ON ct.mint_address = ts.mint_address
-                ORDER BY ts.volume_24h DESC
+                    END as token_type,
+                    ct.curve_address,
+                    ct.curve_config,
+                    rt.pool_address,
+                    rt.decimals as dex_decimals,
+                    ct.decimals as custom_decimals
+                FROM (
+                    SELECT mint_address FROM token_platform.raydium_tokens
+                    UNION
+                    SELECT mint_address FROM token_platform.custom_tokens
+                ) tokens
+                LEFT JOIN token_platform.raydium_tokens rt ON tokens.mint_address = rt.mint_address
+                LEFT JOIN token_platform.custom_tokens ct ON tokens.mint_address = ct.mint_address
+                LEFT JOIN token_platform.token_stats ts ON tokens.mint_address = ts.mint_address
+                ORDER BY ts.volume_24h DESC NULLS LAST
             `;
         }
 
         const result = await pool.query(query);
-        res.json(result.rows);
+        console.log('Query executed successfully, found', result.rows.length, 'tokens');
+        res.json({ tokens: result.rows });
     } catch (error) {
-        logger.error('Error fetching tokens:', error);
-        res.status(500).json({ error: 'Failed to fetch tokens' });
-    }
-});
-
-// Get token price
-router.get('/prices/:mintAddress', async (req, res) => {
-    try {
-        const { mintAddress } = req.params;
-        const price = await priceService.getTokenPrice(mintAddress);
-        res.json({ price });
-    } catch (error) {
-        logger.error('Error fetching token price:', error);
-        res.status(500).json({ error: 'Failed to fetch price' });
+        console.error('Detailed error in /tokens route:', error);
+        res.status(500).json({
+            error: 'Failed to fetch tokens',
+            details: error instanceof Error ? error.message : 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
+        });
     }
 });
 
@@ -125,6 +141,60 @@ router.post('/trades', async (req, res) => {
     } catch (error) {
         logger.error('Error recording trade:', error);
         res.status(500).json({ error: 'Failed to record trade' });
+    }
+});
+
+// Add this after your existing routes
+router.post('/tokens', async (req, res) => {
+    try {
+        const {
+            mintAddress,
+            curveAddress,
+            name,
+            symbol,
+            description,
+            metadataUri,
+            totalSupply,
+            decimals,
+            curveConfig
+        } = req.body;
+
+        // Insert into custom_tokens table
+        const result = await pool.query(`
+            INSERT INTO token_platform.custom_tokens (
+                mint_address,
+                curve_address,
+                name,
+                symbol,
+                decimals,
+                description,
+                metadata_uri
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+        `, [
+            mintAddress,
+            curveAddress,
+            name,
+            symbol,
+            decimals || 6,
+            description,
+            metadataUri
+        ]);
+
+        // Initialize token stats
+        await pool.query(`
+            INSERT INTO token_platform.token_stats (
+                mint_address,
+                price,
+                volume_24h,
+                liquidity
+            ) VALUES ($1, $2, $3, $4)
+        `, [mintAddress, 0, 0, 0]);
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error creating token:', error);
+        res.status(500).json({ error: 'Failed to create token' });
     }
 });
 

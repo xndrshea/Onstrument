@@ -27,19 +27,20 @@ export interface createTokenParams {
 export type Network = 'mainnet' | 'devnet';
 
 export interface TokenRecord {
-    id: number;
     mintAddress: string;
-    curveAddress: string;
     name: string;
     symbol: string;
-    description: string;
-    metadataUri: string | null;
-    totalSupply: BN;
+    tokenType: 'custom' | 'dex';
+    description?: string;
+    metadataUri?: string;
+    totalSupply?: BN;
     decimals: number;
-    curveConfig: curveConfig;
-    createdAt: Date;
-    token_type: 'bonding_curve' | 'dex';
+    curveAddress?: string;
+    curveConfig?: curveConfig;
+    poolAddress?: string;
+    volume24h?: number;
     liquidity?: number;
+    createdAt?: string;
 }
 
 export interface TokenFormData {

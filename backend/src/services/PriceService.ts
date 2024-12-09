@@ -3,13 +3,7 @@ import { pool } from '../config/database';
 import { logger } from '../utils/logger';
 
 export class PriceService {
-    private static instance: PriceService | null = null;
-    private priceCache: Map<string, {
-        price: number;
-        timestamp: number;
-        tokenType: 'raydium' | 'custom';
-    }> = new Map();
-    private readonly CACHE_DURATION = 60 * 1000; // 60 seconds
+    private static instance: PriceService;
     private wsService: WebSocketService;
 
     private constructor() {
@@ -25,93 +19,17 @@ export class PriceService {
     }
 
     private setupWebSocketListeners() {
-        this.wsService.on('trade', (data) => {
-            this.priceCache.set(data.mintAddress, {
-                price: data.price,
-                timestamp: Date.now(),
-                tokenType: 'raydium'
-            });
+        this.wsService.on('trade', async (data) => {
+            await this.recordPrice(data.mintAddress, data.price, data.tokenType);
         });
     }
 
-    async getTokenPrice(mintAddress: string): Promise<number> {
-        // Check cache first
-        const cached = this.priceCache.get(mintAddress);
-        if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
-            return cached.price;
-        }
-
-        // If not in cache, check database
-        const result = await pool.query(`
-            SELECT price, 
-                   CASE 
-                       WHEN EXISTS (SELECT 1 FROM token_platform.raydium_tokens WHERE mint_address = $1) THEN 'raydium'
-                       ELSE 'custom'
-                   END as token_type
-            FROM token_platform.token_stats
-            WHERE mint_address = $1
-        `, [mintAddress]);
-
-        if (!result.rows[0]) {
-            throw new Error('Token price not found');
-        }
-
-        // Subscribe to WebSocket updates for Raydium tokens
-        if (result.rows[0].token_type === 'raydium') {
-            this.wsService.subscribeToToken(mintAddress);
-        }
-
-        // Update cache
-        this.priceCache.set(mintAddress, {
-            price: result.rows[0].price,
-            timestamp: Date.now(),
-            tokenType: result.rows[0].token_type
-        });
-
-        return result.rows[0].price;
-    }
-
-    async getPriceHistory(mintAddress: string, timeframe: '24h' | '7d' | '30d' = '24h'): Promise<Array<{ timestamp: number; price: number }>> {
-        const timeframeMap = {
-            '24h': 'interval \'1 hour\'',
-            '7d': 'interval \'4 hours\'',
-            '30d': 'interval \'1 day\''
-        };
-
-        const result = await pool.query(`
-            SELECT 
-                time_bucket($2, timestamp) AS time,
-                FIRST(price, timestamp) as price
-            FROM token_platform.price_history
-            WHERE mint_address = $1
-            AND timestamp > NOW() - $3::interval
-            GROUP BY time
-            ORDER BY time ASC
-        `, [
-            mintAddress,
-            timeframeMap[timeframe],
-            timeframe
-        ]);
-
-        return result.rows.map(row => ({
-            timestamp: row.time.getTime(),
-            price: parseFloat(row.price)
-        }));
-    }
-
-    async updatePrice(mintAddress: string, price: number, tokenType: 'raydium' | 'custom') {
+    // Only used for recording historical prices
+    async recordPrice(mintAddress: string, price: number, tokenType: 'raydium' | 'custom') {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
-            // Update current price
-            await client.query(`
-                UPDATE token_platform.token_stats 
-                SET price = $2, last_updated = CURRENT_TIMESTAMP
-                WHERE mint_address = $1
-            `, [mintAddress, price]);
-
-            // Record price history
             await client.query(`
                 INSERT INTO token_platform.price_history 
                 (mint_address, price, timestamp, token_type)
@@ -120,21 +38,27 @@ export class PriceService {
 
             await client.query('COMMIT');
 
-            // Update cache and notify WebSocket clients
-            this.priceCache.set(mintAddress, {
-                price,
-                timestamp: Date.now(),
-                tokenType
-            });
-
-            if (tokenType === 'raydium') {
-                this.wsService.emit('price', { mintAddress, price });
-            }
+            // Notify WebSocket clients about the new historical price point
+            this.wsService.emit('price_history_update', { mintAddress, price });
         } catch (error) {
             await client.query('ROLLBACK');
             throw error;
         } finally {
             client.release();
         }
+    }
+
+    // Only used for historical price data
+    async getPriceHistory(mintAddress: string, timeframe: '24h' | '7d' | '30d'): Promise<any[]> {
+        const intervalMap = { '24h': '1 day', '7d': '7 days', '30d': '30 days' };
+
+        const result = await pool.query(`
+            SELECT EXTRACT(EPOCH FROM timestamp) as time, price as value
+            FROM token_platform.price_history
+            WHERE mint_address = $1 AND timestamp > NOW() - $2::interval
+            ORDER BY timestamp ASC
+        `, [mintAddress, intervalMap[timeframe]]);
+
+        return result.rows;
     }
 }

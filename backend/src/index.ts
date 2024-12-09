@@ -17,6 +17,8 @@ if (!process.env.NODE_OPTIONS?.includes('--max-old-space-size')) {
     process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} --max-old-space-size=${memory}`
 }
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173'];
+
 async function startServer() {
     try {
         logger.info('Starting server initialization...')
@@ -39,7 +41,13 @@ async function startServer() {
         // Initialize WebSocket server with path
         const wss = new WebSocket.Server({
             server,
-            path: '/ws'  // Specify the path explicitly
+            path: '/ws',
+            verifyClient: (info, cb) => {
+                // Allow all connections in development
+                const isAllowed = process.env.NODE_ENV === 'development' ||
+                    !!(info.origin && allowedOrigins.includes(info.origin));
+                cb(isAllowed);
+            }
         })
 
         // Initialize WebSocket service

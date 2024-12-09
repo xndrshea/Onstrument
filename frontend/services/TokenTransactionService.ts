@@ -62,7 +62,7 @@ export class TokenTransactionService {
                 decimals: TOKEN_DECIMALS,
                 curveConfig: params.curveConfig,
                 createdAt: new Date(),
-                token_type: 'bonding_curve'
+                token_type: 'custom'
             };
 
             // Save to database through tokenService

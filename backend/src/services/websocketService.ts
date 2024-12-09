@@ -69,8 +69,8 @@ export class WebSocketService extends EventEmitter {
                 // Update price history
                 await client.query(`
                     INSERT INTO token_platform.price_history (
-                        mint_address, price, timestamp, token_type
-                    ) VALUES ($1, $2, to_timestamp($3), 'raydium')
+                        mint_address, price, timestamp
+                    ) VALUES ($1, $2, to_timestamp($3))
                 `, [marketId, price, timestamp]);
 
                 // Update token stats

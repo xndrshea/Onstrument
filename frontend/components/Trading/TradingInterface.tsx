@@ -5,9 +5,16 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { TokenRecord } from '../../../shared/types/token'
 import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
-import { dexService } from '../../services/dexService'
 import { BN } from '@project-serum/anchor'
-import { WebSocketService } from '../../services/websocketService'
+import { priceClient } from '../../services/priceClient'
+import { dexService } from '../../services/dexService'
+
+interface TradeHistory {
+    side: 'buy' | 'sell';
+    amount: number;
+    price: number;
+    timestamp: number;
+}
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -30,10 +37,9 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05); // Default 5%
     const [spotPrice, setSpotPrice] = useState<number | null>(null);
     const [trades, setTrades] = useState<TradeHistory[]>([]);
-    const wsService = WebSocketService.getInstance();
 
     // Add token type check
-    const isDexToken = token.token_type === 'dex';
+    const isDexToken = token.tokenType === 'dex';
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -54,77 +60,160 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         }
     }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet]);
 
+    // Add this near the top of the component after state declarations
+    useEffect(() => {
+        // Verify token address and network
+        console.log('Current connection endpoint:', connection.rpcEndpoint);
+        console.log('Token details:', {
+            mintAddress: token.mintAddress,
+            symbol: token.symbol,
+            tokenType: token.tokenType,
+            curveAddress: token.curveAddress
+        });
+
+        // Verify wallet
+        if (publicKey) {
+            console.log('Connected wallet:', publicKey.toString());
+        }
+    }, [connection, token, publicKey]);
+
     // Fetch balances and price
     const updateBalances = async () => {
         if (!publicKey) return;
 
         try {
+            // Verify the token mint account exists
+            const mintInfo = await connection.getAccountInfo(new PublicKey(token.mintAddress));
+            if (!mintInfo) {
+                console.error('Token mint account not found!');
+                setError('Invalid token mint address');
+                return;
+            }
+            console.log('Token mint account found:', {
+                space: mintInfo.data.length,
+                owner: mintInfo.owner.toString()
+            });
+
             const ata = await getAssociatedTokenAddress(
                 new PublicKey(token.mintAddress),
                 publicKey
             );
+            console.log('Looking for ATA at:', ata.toString());
 
-            // Check if ATA exists first
+            // Get all token accounts owned by the user
+            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+                publicKey,
+                { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
+            );
+
+            console.log('All user token accounts:',
+                tokenAccounts.value.map(ta => ({
+                    mint: ta.account.data.parsed.info.mint,
+                    address: ta.pubkey.toString(),
+                    amount: ta.account.data.parsed.info.tokenAmount.amount
+                }))
+            );
+
+            console.log('Updating balances for token:', token.mintAddress);
             const ataInfo = await connection.getAccountInfo(ata);
-
             const solBal = await connection.getBalance(publicKey);
             setSolBalance(solBal / LAMPORTS_PER_SOL);
 
             // Only fetch token balance if ATA exists
             if (ataInfo) {
                 const tokenAccountInfo = await connection.getTokenAccountBalance(ata);
+                console.log('User token balance:', tokenAccountInfo.value.amount);
                 setUserBalance(BigInt(tokenAccountInfo.value.amount));
             } else {
+                console.log('No ATA found, setting balance to 0');
                 setUserBalance(BigInt(0));
             }
 
-            if (!isDexToken && bondingCurve) {
+            // Fetch pool balance with detailed logging
+            if (isDexToken) {
+                console.log('Fetching DEX pool info');
+                try {
+                    const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
+                    const poolBalance = (token.liquidity || 0) * TOKEN_DECIMAL_MULTIPLIER;
+                    console.log('DEX pool balance:', poolBalance);
+                    setBondingCurveBalance(BigInt(poolBalance));
+                } catch (error) {
+                    console.error('DEX pool info error:', error);
+                    setBondingCurveBalance(BigInt(0));
+                }
+            } else if (bondingCurve) {
+                console.log('Fetching bonding curve pool info');
                 try {
                     const [tokenVault] = PublicKey.findProgramAddressSync(
                         [Buffer.from("token_vault"), new PublicKey(token.mintAddress).toBuffer()],
                         bondingCurve.program.programId
                     );
-                    const vaultInfo = await connection.getAccountInfo(tokenVault);
+                    console.log('Token vault address:', tokenVault.toString());
 
+                    const vaultInfo = await connection.getAccountInfo(tokenVault);
                     if (vaultInfo) {
                         const vaultBalance = await connection.getTokenAccountBalance(tokenVault);
+                        console.log('Vault balance:', vaultBalance.value.amount);
                         setBondingCurveBalance(BigInt(vaultBalance.value.amount));
                     } else {
+                        console.log('No vault found, setting balance to 0');
                         setBondingCurveBalance(BigInt(0));
                     }
-                } catch (vaultError) {
-                    console.warn('Error fetching vault balance:', vaultError);
+                } catch (error) {
+                    console.error('Bonding curve pool info error:', error);
                     setBondingCurveBalance(BigInt(0));
                 }
             }
         } catch (error) {
-            console.error('Error updating balances:', error);
+            console.error('Balance update error:', error);
             setError('Failed to fetch balances');
         }
     };
 
-    // Add new effect to fetch spot price
+    // Replace the WebSocket effect with this:
     useEffect(() => {
-        // Initial fetch
-        const fetchInitialData = async () => {
-            if (isDexToken) {
-                const dexService = DexService.getInstance();
-                const price = await dexService.getTokenPrice(token.mintAddress);
-                setSpotPrice(price);
+        const updateCurrentPrice = async () => {
+            try {
+                if (isDexToken) {
+                    console.log('Fetching DEX pool info for:', token.mintAddress);
+                    const poolInfo = await dexService.getPoolInfo(token.mintAddress);
+                    console.log('DEX pool info received:', poolInfo);
+                    setSpotPrice(poolInfo.price);
+                } else if (bondingCurve) {
+                    console.log('Fetching bonding curve price for:', token.mintAddress);
+                    try {
+                        const quote = await bondingCurve.getPriceQuote(1, true);
+                        console.log('Bonding curve quote received:', quote);
+                        setSpotPrice(quote.price);
+                    } catch (error: any) {
+                        console.error('Detailed bonding curve error:', {
+                            error,
+                            message: error.message,
+                            stack: error.stack
+                        });
+                        if (error.message.includes('not found')) {
+                            console.log('New token detected, setting initial price to 0');
+                            setSpotPrice(0);
+                        } else {
+                            setError(`Price fetch error: ${error.message}`);
+                        }
+                    }
+                }
+            } catch (error: any) {
+                console.error('Price update error:', {
+                    error,
+                    message: error.message,
+                    stack: error.stack
+                });
+                setError(`Failed to update price: ${error.message}`);
+                setSpotPrice(0);
             }
         };
-        fetchInitialData();
 
-        // WebSocket subscription
-        if (isDexToken) {
-            const unsubscribe = wsService.subscribe(token.mintAddress, (data) => {
-                setSpotPrice(data.price);
-                setPriceInfo(prev => prev ? { ...prev, price: data.price } : null);
-                setTrades(prev => [data.trade, ...prev].slice(0, 50));
-            });
-            return () => unsubscribe();
-        }
-    }, [isDexToken, token.mintAddress]);
+        updateCurrentPrice();
+        const interval = setInterval(updateCurrentPrice, 5000);
+        return () => clearInterval(interval);
+    }, [isDexToken, token.mintAddress, bondingCurve]);
 
     // Separate price quote calculation
     useEffect(() => {
@@ -135,24 +224,32 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             }
 
             try {
-                if (isDexToken) {
-                    const price = await dexService.getTokenPrice(token.mintAddress);
-                    const totalCost = price * parseFloat(amount);
-                    setPriceInfo({ price, totalCost });
+                if (isDexToken && spotPrice !== null) {
+                    const totalCost = spotPrice * parseFloat(amount);
+                    setPriceInfo({ price: spotPrice, totalCost });
                 } else if (bondingCurve) {
-                    const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling);
-                    setPriceInfo(quote);
+                    try {
+                        const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling);
+                        setPriceInfo(quote);
+                        setError(null);
+                    } catch (error: any) {
+                        console.error('Price quote error:', error);
+                        setPriceInfo(null);
+                        // Only set error if it's not a "not found" error for new tokens
+                        if (!error.message.includes('not found')) {
+                            setError(error.message);
+                        }
+                    }
                 }
-                setError(null);
             } catch (error: any) {
                 console.error('Error fetching price quote:', error);
                 setPriceInfo(null);
-                setError(error.message || 'Failed to fetch price quote');
+                setError(error.message);
             }
         };
 
         updatePriceQuote();
-    }, [amount, isSelling, bondingCurve, isDexToken, token.mintAddress]);
+    }, [amount, isSelling, bondingCurve, isDexToken, spotPrice]);
 
     // Handle transaction
     const handleTransaction = async () => {
@@ -166,7 +263,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
             const parsedAmount = new BN(parseFloat(amount) * (10 ** TOKEN_DECIMALS));
 
             if (isDexToken) {
-                // Handle DEX trading
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
                     amount: parsedAmount,
@@ -174,7 +270,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                     slippageTolerance
                 });
             } else if (bondingCurve && priceInfo) {
-                // Existing bonding curve logic
                 if (isSelling) {
                     const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
                     await bondingCurve.sell({
@@ -192,23 +287,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                         maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
                     });
                 }
-            }
-
-            // Record price history for both types
-            const newPrice = isDexToken
-                ? await dexService.getTokenPrice(token.mintAddress)
-                : (await bondingCurve?.getPriceQuote(1, !isSelling))?.price;
-
-            if (newPrice) {
-                await fetch('/api/price-history', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        tokenMintAddress: token.mintAddress,
-                        price: newPrice,
-                        totalSupply: Number(token.totalSupply.toString()) / (10 ** token.decimals)
-                    })
-                });
             }
 
             await updateBalances();
@@ -245,15 +323,6 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         }
         localStorage.setItem(`trade_isSelling_${token.mintAddress}`, isSelling.toString());
     }, [amount, isSelling, token.mintAddress]);
-
-    useEffect(() => {
-        const handleTrade = (trade: TradeHistory) => {
-            setTrades(prev => [trade, ...prev].slice(0, 50));
-        };
-
-        wsService.subscribe(token.mintAddress, handleTrade);
-        return () => wsService.unsubscribe(token.mintAddress, handleTrade);
-    }, [token.mintAddress]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">

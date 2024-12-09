@@ -5,6 +5,7 @@ import { TokenRecord } from '../../../shared/types/token'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { Link } from 'react-router-dom'
 import { API_BASE_URL } from '../../config'
+import { priceClient } from '../../services/priceClient'
 
 interface TokenListProps {
     onCreateClick: () => void
@@ -21,6 +22,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+    const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
 
     const refreshTokens = () => {
         fetchTokens()
@@ -29,32 +31,35 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/tokens?type=bonding_curve`);
+            console.log('Fetching tokens from:', `${API_BASE_URL}/tokens?type=custom`);
+            const response = await fetch(`${API_BASE_URL}/tokens?type=custom`);
+            console.log('Token fetch response status:', response.status);
+
             if (!response.ok) {
-                throw new Error('HTTP error! status: ${response.status}');
+                const errorData = await response.json();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
             }
-            const { tokens } = await response.json();
-            if (!tokens) {
+
+            const data = await response.json();
+            console.log('Token fetch response data:', data);
+
+            if (!data.tokens) {
                 throw new Error('No data received from server');
             }
 
-            const validTokens = tokens.filter((token: TokenRecord) => {
-                if (!token || typeof token !== 'object') {
-                    console.warn('Invalid token object:', token);
-                    return false;
-                }
+            const normalizedTokens = data.tokens.map((token: TokenRecord & { mint_address?: string }) => ({
+                ...token,
+                mintAddress: token.mintAddress || token.mint_address,
+                curveAddress: token.curveAddress,
+                createdAt: token.createdAt,
+                totalSupply: token.totalSupply,
+                tokenType: token.tokenType,
+            }));
 
-                const hasValidMint = Boolean(token.mintAddress);
-                const hasValidName = Boolean(token.name);
-                const hasValidSymbol = Boolean(token.symbol);
-
-                return hasValidMint && hasValidName && hasValidSymbol;
-            });
-
-            setTokens(deduplicateTokens(validTokens));
+            setTokens(deduplicateTokens(normalizedTokens));
             setError(null);
         } catch (error) {
-            console.error('Error fetching tokens:', error);
+            console.error('Detailed error fetching tokens:', error);
             setError(error instanceof Error ? error.message : 'An unexpected error occurred');
             setTokens([]);
         } finally {
@@ -66,6 +71,19 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         fetchTokens();
     }, [connection]);
 
+    useEffect(() => {
+        const unsubscribers = tokens.map(token =>
+            priceClient.subscribeToPrice(token.mintAddress, (price) => {
+                setTokenPrices(prev => ({
+                    ...prev,
+                    [token.mintAddress]: price
+                }));
+            })
+        );
+
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+    }, [tokens]);
+
     const calculateMarketCap = (token: TokenRecord) => {
         return 'N/A';
     };
@@ -73,6 +91,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     // Add this function to sort tokens
     const sortedTokens = useMemo(() => {
         if (!tokens.length) return [];
+        console.log('Tokens before sorting:', tokens);
         return [...tokens].sort((a, b) => {
             const dateA = new Date(a.createdAt || 0).getTime();
             const dateB = new Date(b.createdAt || 0).getTime();
@@ -114,33 +133,39 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             </div>
             {tokens.length > 0 ? (
                 <div className="token-grid">
-                    {tokens.map(token => (
-                        <Link
-                            to={`/token/${token.mintAddress}`}
-                            key={token.mintAddress}
-                            className="token-card"
-                        >
-                            <h3>{token.name || 'Unnamed Token'}</h3>
-                            <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
-                            <p className="token-description">{token.description || 'No description available'}</p>
-                            <p className="token-mint">
-                                Mint: {token.mintAddress ?
-                                    `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
-                                    'N/A'}
-                            </p>
-                            <p className="token-date">
-                                {token.createdAt ?
-                                    new Date(token.createdAt).toLocaleDateString() :
-                                    'N/A'}
-                            </p>
-                            <p className="token-market-cap">
-                                Market Cap: {calculateMarketCap(token)}
-                            </p>
-                            <p className="token-supply">
-                                Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
-                            </p>
-                        </Link>
-                    ))}
+                    {sortedTokens.map(token => {
+                        if (!token.mintAddress) {
+                            console.warn('Token missing mintAddress:', token);
+                            return null;
+                        }
+                        return (
+                            <Link
+                                to={`/token/${token.mintAddress}`}
+                                key={token.mintAddress}
+                                className="token-card"
+                            >
+                                <h3>{token.name || 'Unnamed Token'}</h3>
+                                <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
+                                <p className="token-description">{token.description || 'No description available'}</p>
+                                <p className="token-mint">
+                                    Mint: {token.mintAddress ?
+                                        `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
+                                        'N/A'}
+                                </p>
+                                <p className="token-date">
+                                    {token.createdAt ?
+                                        new Date(token.createdAt).toLocaleDateString() :
+                                        'N/A'}
+                                </p>
+                                <p className="token-market-cap">
+                                    Market Cap: {calculateMarketCap(token)}
+                                </p>
+                                <p className="token-supply">
+                                    Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
+                                </p>
+                            </Link>
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="no-tokens">
