@@ -54,6 +54,14 @@ export const priceClient = {
                     reconnectTimer = setTimeout(connect, 2000);
                 }
             };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                isConnecting = false;
+                if (!isIntentionalClose) {
+                    reconnectTimer = setTimeout(connect, 2000);
+                }
+            };
         };
 
         connect();

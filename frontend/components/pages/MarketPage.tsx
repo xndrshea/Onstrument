@@ -19,15 +19,12 @@ export function MarketPage() {
             setIsLoading(true);
             const response = await tokenService.getAllTokens(currentPage, TOKENS_PER_PAGE);
 
-            if (!response.tokens || response.tokens.length === 0) {
-                setError('No tokens available at the moment');
-                return;
-            }
+            console.log('API Response:', response);
 
-            setTokens(response.tokens);
+            setTokens(response.tokens || []);
             setTotalPages(response.pagination?.total
                 ? Math.ceil(response.pagination.total / TOKENS_PER_PAGE)
-                : Math.ceil(response.tokens.length / TOKENS_PER_PAGE));
+                : 1);
             setError(null);
         } catch (error) {
             setError('Failed to fetch tokens');
@@ -42,8 +39,10 @@ export function MarketPage() {
     }, [currentPage, tokenType]);
 
     const filteredTokens = tokens.filter(token => {
-        if (tokenType === 'all') return true
-        return token.tokenType === tokenType
+        if (tokenType === 'all') return true;
+        if (tokenType === 'custom') return token.tokenType === 'custom';
+        if (tokenType === 'dex') return token.tokenType === 'pool';
+        return true;
     });
 
     const handlePageChange = (newPage: number) => {

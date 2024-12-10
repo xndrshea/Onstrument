@@ -6,6 +6,7 @@ import { HeliusWebSocketService } from '../services/heliusWebSocketService';
 import { Connection, clusterApiUrl } from '@solana/web3.js';
 import rateLimit from 'express-rate-limit';
 import { config } from '../config/env';
+import { PriceHistoryModel } from '../models/priceHistoryModel';
 
 const router = Router();
 
@@ -30,92 +31,146 @@ const limiter = rateLimit({
 // Apply rate limiting to all routes
 router.use(limiter);
 
-// Get all tokens (both Raydium and custom)
+// Get all tokens
 router.get('/tokens', async (req, res) => {
     try {
-        const { type = 'all' } = req.query;
-        console.log('Received token request with type:', type);
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const offset = (page - 1) * limit;
 
-        let query = '';
+        logger.info('Fetching tokens with params:', { page, limit, offset });
 
-        if (type === 'dex') {
-            query = `
-                SELECT 
-                    rt.*,
-                    ts.volume_24h,
-                    ts.liquidity,
-                    'dex' as token_type,
-                    NULL as curve_address,
-                    NULL as curve_config
-                FROM token_platform.raydium_tokens rt
-                LEFT JOIN token_platform.token_stats ts ON rt.mint_address = ts.mint_address
-                ORDER BY ts.volume_24h DESC NULLS LAST
-            `;
-        } else if (type === 'custom') {
-            query = `
-                SELECT 
-                    ct.*,
-                    ts.volume_24h,
-                    ts.liquidity,
-                    'custom' as token_type,
-                    ct.curve_address,
-                    ct.curve_config
-                FROM token_platform.custom_tokens ct
-                LEFT JOIN token_platform.token_stats ts ON ct.mint_address = ts.mint_address
-                ORDER BY ts.volume_24h DESC NULLS LAST
-            `;
-        } else {
-            query = `
-                SELECT 
-                    COALESCE(rt.mint_address, ct.mint_address) as mint_address,
-                    COALESCE(rt.name, ct.name) as name,
-                    COALESCE(rt.symbol, ct.symbol) as symbol,
-                    ts.volume_24h,
-                    ts.liquidity,
-                    CASE 
-                        WHEN rt.mint_address IS NOT NULL THEN 'dex'
-                        ELSE 'custom'
-                    END as token_type,
-                    ct.curve_address,
-                    ct.curve_config,
-                    rt.pool_address,
-                    rt.decimals as dex_decimals,
-                    ct.decimals as custom_decimals
-                FROM (
-                    SELECT mint_address FROM token_platform.raydium_tokens
-                    UNION
-                    SELECT mint_address FROM token_platform.custom_tokens
-                ) tokens
-                LEFT JOIN token_platform.raydium_tokens rt ON tokens.mint_address = rt.mint_address
-                LEFT JOIN token_platform.custom_tokens ct ON tokens.mint_address = ct.mint_address
-                LEFT JOIN token_platform.token_stats ts ON tokens.mint_address = ts.mint_address
-                ORDER BY ts.volume_24h DESC NULLS LAST
-            `;
+        // Get custom tokens
+        const customTokensQuery = `
+            SELECT 
+                ct.mint_address,
+                ct.name,
+                ct.symbol,
+                ct.decimals,
+                ct.description,
+                ct.metadata_url,
+                ct.curve_address,
+                ct.curve_config,
+                cts.supply as total_supply,
+                cts.price,
+                cts.volume_24h_usd as volume_24h,
+                'custom' as token_type,
+                ct.created_at
+            FROM token_platform.custom_tokens ct
+            LEFT JOIN token_platform.custom_token_states cts 
+            ON ct.mint_address = cts.mint_address
+        `;
+
+        // Get pool tokens
+        const poolTokensQuery = `
+            SELECT 
+                t.mint_address,
+                t.name,
+                t.symbol,
+                t.decimals,
+                t.metadata_url,
+                NULL as description,
+                NULL as curve_address,
+                NULL as curve_config,
+                NULL as total_supply,
+                ps.price,
+                ps.volume_24h_usd as volume_24h,
+                'pool' as token_type,
+                t.created_at
+            FROM token_platform.tokens t
+            LEFT JOIN token_platform.pool_states ps 
+            ON t.mint_address = ps.pool_address
+            WHERE EXISTS (
+                SELECT 1 
+                FROM token_platform.price_history price_hist 
+                WHERE price_hist.token_address = t.mint_address
+                LIMIT 1
+            )
+        `;
+
+        // Get total count
+        const countQuery = `
+            SELECT 
+                (SELECT COUNT(*) FROM token_platform.custom_tokens) +
+                (SELECT COUNT(*) FROM token_platform.tokens t 
+                 WHERE EXISTS (
+                     SELECT 1 
+                     FROM token_platform.price_history ph 
+                     WHERE ph.mint_address = t.mint_address
+                     LIMIT 1
+                 )
+                ) as total
+        `;
+
+        try {
+            const [customTokens, poolTokens, totalCount] = await Promise.all([
+                pool.query(customTokensQuery),
+                pool.query(poolTokensQuery),
+                pool.query(countQuery)
+            ]);
+
+            logger.info('Query results:', {
+                customTokensCount: customTokens.rows.length,
+                poolTokensCount: poolTokens.rows.length,
+                total: totalCount.rows[0]?.total
+            });
+
+            // Combine results and apply pagination after combining
+            const allTokens = [...customTokens.rows, ...poolTokens.rows]
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .slice(offset, offset + limit);
+
+            const total = parseInt(totalCount.rows[0]?.total || '0');
+
+            res.json({
+                tokens: allTokens,
+                pagination: {
+                    total,
+                    page,
+                    limit,
+                    pages: Math.ceil(total / limit)
+                }
+            });
+        } catch (dbError) {
+            logger.error('Database query error:', dbError);
+            throw dbError;
         }
-
-        const result = await pool.query(query);
-        console.log('Query executed successfully, found', result.rows.length, 'tokens');
-        res.json({ tokens: result.rows });
     } catch (error) {
-        console.error('Detailed error in /tokens route:', error);
+        logger.error('Error in /tokens route:', error);
         res.status(500).json({
             error: 'Failed to fetch tokens',
-            details: error instanceof Error ? error.message : 'Unknown error',
-            stack: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
+            details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
         });
     }
 });
 
-// Get price history
+// For Lightweight Charts
 router.get('/price-history/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
-        const { timeframe = '24h' } = req.query;
-        const history = await heliusService.getPriceHistory(mintAddress, timeframe as '24h' | '7d' | '30d');
+        const history = await PriceHistoryModel.getPriceHistory(mintAddress);
         res.json(history);
     } catch (error) {
         logger.error('Error fetching price history:', error);
         res.status(500).json({ error: 'Failed to fetch price history' });
+    }
+});
+
+// For TradingView Advanced
+router.get('/ohlcv/:mintAddress', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        const { from, to, resolution } = req.query;
+        const candles = await PriceHistoryModel.getOHLCV(
+            mintAddress,
+            resolution as string,
+            Number(from),
+            Number(to)
+        );
+        res.json(candles);
+    } catch (error) {
+        logger.error('Error fetching OHLCV:', error);
+        res.status(500).json({ error: 'Failed to fetch OHLCV data' });
     }
 });
 
@@ -182,13 +237,18 @@ router.post('/tokens', async (req, res) => {
 
         // Initialize token stats
         await pool.query(`
-            INSERT INTO token_platform.token_stats (
+            INSERT INTO token_platform.custom_token_states (
                 mint_address,
+                supply,
+                reserve,
                 price,
-                volume_24h,
-                liquidity
-            ) VALUES ($1, $2, $3, $4)
-        `, [mintAddress, 0, 0, 0]);
+                last_slot,
+                volume_24h_usd
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+        `, [mintAddress, totalSupply || 0, 0, 0, 0, 0]);
+
+        // Initialize first price point
+        await PriceHistoryModel.recordPrice(mintAddress, 0);
 
         res.status(201).json(result.rows[0]);
     } catch (error) {

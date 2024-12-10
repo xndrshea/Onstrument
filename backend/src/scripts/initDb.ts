@@ -59,6 +59,8 @@ export async function initDatabase() {
                 pool_address VARCHAR(255) PRIMARY KEY,
                 base_reserve DECIMAL(30, 9) NOT NULL,
                 quote_reserve DECIMAL(30, 9) NOT NULL,
+                base_volume DECIMAL(30, 9) NOT NULL,
+                quote_volume DECIMAL(30, 9) NOT NULL,
                 last_slot BIGINT NOT NULL,
                 price DECIMAL(30, 9) NOT NULL,
                 tvl_usd DECIMAL(30, 2),
@@ -85,13 +87,15 @@ export async function initDatabase() {
             CREATE TABLE token_platform.price_history (
                 id SERIAL PRIMARY KEY,
                 token_address VARCHAR(255) NOT NULL,
-                token_type VARCHAR(10) NOT NULL CHECK (token_type IN ('pool', 'custom')),
-                price DECIMAL(30, 9) NOT NULL,
-                base_reserve DECIMAL(30, 9),
-                quote_reserve DECIMAL(30, 9),
-                supply DECIMAL(30, 9),
-                slot BIGINT NOT NULL,
-                timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+                time BIGINT NOT NULL,           -- Unix timestamp in seconds
+                price NUMERIC(40, 18) NOT NULL,  -- For lightweight-charts (current)
+                -- Fields for future TradingView Advanced support
+                open NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
+                high NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
+                low NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
+                close NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
+                volume NUMERIC(40, 18) DEFAULT 0,
+                CONSTRAINT unique_token_time UNIQUE (token_address, time)
             );
         `);
 

@@ -52,10 +52,11 @@ export function PriceChart({ token, width = 600, height = 300 }: PriceChartProps
             try {
                 const history = await priceClient.getPriceHistory(token.mintAddress);
                 if (series.current && history?.length > 0) {
-                    series.current.setData(history.map(point => ({
-                        time: Math.floor(point.time) as UTCTimestamp,
-                        value: Number(point.value)
-                    })));
+                    const formattedData = history.map(point => ({
+                        time: point.time as UTCTimestamp,
+                        value: point.value
+                    }));
+                    series.current.setData(formattedData);
                 }
             } catch (error) {
                 console.error('Error fetching price history:', error);
@@ -64,15 +65,16 @@ export function PriceChart({ token, width = 600, height = 300 }: PriceChartProps
 
         fetchAndUpdatePrices();
 
-        // Subscribe to real-time updates
-        const unsubscribe = priceClient.subscribeToPrice(token.mintAddress, (price) => {
+        const updatePrice = (price: number) => {
             if (series.current) {
                 series.current.update({
                     time: (Date.now() / 1000) as UTCTimestamp,
                     value: price
                 });
             }
-        });
+        };
+
+        const unsubscribe = priceClient.subscribeToPrice(token.mintAddress, updatePrice);
 
         return unsubscribe;
     }, [token.mintAddress]);
