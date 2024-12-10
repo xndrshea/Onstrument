@@ -119,7 +119,7 @@ export async function initDatabase() {
         await client.query(`
             CREATE INDEX idx_pools_base_mint ON token_platform.pools(base_mint);
             CREATE INDEX idx_pools_quote_mint ON token_platform.pools(quote_mint);
-            CREATE INDEX idx_price_history_token ON token_platform.price_history(token_address, timestamp);
+            CREATE INDEX idx_price_history_token ON token_platform.price_history(token_address, time);
             CREATE INDEX idx_trades_token ON token_platform.trades(token_address, timestamp);
             CREATE INDEX idx_pool_states_last_slot ON token_platform.pool_states(last_slot);
             CREATE INDEX idx_custom_states_last_slot ON token_platform.custom_token_states(last_slot);
