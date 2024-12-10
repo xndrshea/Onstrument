@@ -86,7 +86,7 @@ export function MarketPage() {
                                     <p className="text-sm text-gray-400">{token.symbol}</p>
                                 </div>
                                 <span className="text-xs px-2 py-1 rounded bg-gray-700">
-                                    {token.tokenType === 'dex' ? 'DEX' : 'Custom'}
+                                    {token.tokenType === 'pool' ? 'DEX' : 'Custom'}
                                 </span>
                             </div>
                         </Link>

@@ -39,7 +39,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
     const [trades, setTrades] = useState<TradeHistory[]>([]);
 
     // Add token type check
-    const isDexToken = token.tokenType === 'dex';
+    const isDexToken = token.tokenType === 'pool';
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
