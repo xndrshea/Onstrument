@@ -71,19 +71,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         fetchTokens();
     }, [connection]);
 
-    useEffect(() => {
-        const unsubscribers = tokens.map(token =>
-            priceClient.subscribeToPrice(token.mintAddress, (price) => {
-                setTokenPrices(prev => ({
-                    ...prev,
-                    [token.mintAddress]: price
-                }));
-            })
-        );
-
-        return () => unsubscribers.forEach(unsubscribe => unsubscribe());
-    }, [tokens]);
-
     const calculateMarketCap = (token: TokenRecord) => {
         return 'N/A';
     };

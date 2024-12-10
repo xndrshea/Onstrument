@@ -32,7 +32,7 @@ export class DexService {
         }
 
         // Ensure we're subscribed to updates
-        this.wsService.subscribeToToken(mintAddress);
+        this.wsService.emit('subscribe', { mintAddress });
 
         return result.rows[0].price;
     }

@@ -4,6 +4,7 @@ import { initializeDatabase } from './config/database'
 import { WebSocketService } from './services/websocketService'
 import { Server } from 'http'
 import WebSocket from 'ws'
+import cors from 'cors'
 
 const PORT = process.env.PORT || 3001
 
@@ -35,6 +36,16 @@ async function startServer() {
         // Create Express app
         const app = createApp()
 
+        // CORS setup with WebSocket support
+        app.use(cors({
+            origin: allowedOrigins,
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization'],
+            // Allow WebSocket upgrade
+            optionsSuccessStatus: 200
+        }))
+
         // Create HTTP server
         const server = new Server(app)
 
@@ -61,7 +72,7 @@ async function startServer() {
             ws.on('message', (message) => {
                 try {
                     const data = JSON.parse(message.toString())
-                    wsService.handleMessage(data)
+                    wsService.handleMessage(data, ws)
                 } catch (error) {
                     logger.error('Error handling WebSocket message:', error)
                 }

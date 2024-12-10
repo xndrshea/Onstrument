@@ -1,3 +1,4 @@
+import cors from 'cors';
 import { Router } from 'express';
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
@@ -5,12 +6,32 @@ import { WebSocketService } from '../services/websocketService';
 import { DexService } from '../services/dexService';
 import { PriceService } from '../services/PriceService';
 import { Connection, clusterApiUrl } from '@solana/web3.js';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
+
+// Add CORS middleware
+router.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 const wsService = WebSocketService.getInstance();
 const connection = new Connection(clusterApiUrl('devnet'));
 const dexService = DexService.getInstance(connection);
 const priceService = PriceService.getInstance();
+
+// Add this before your routes
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.'
+});
+
+// Apply rate limiting to all routes
+router.use(limiter);
 
 // Get all tokens (both Raydium and custom)
 router.get('/tokens', async (req, res) => {

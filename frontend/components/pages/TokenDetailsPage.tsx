@@ -7,6 +7,7 @@ import { tokenService } from '../../services/tokenService';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { BondingCurve } from '../../services/bondingCurve';
 import { PublicKey } from '@solana/web3.js';
+import { priceClient } from '../../services/priceClient';
 
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
@@ -37,21 +38,25 @@ export function TokenDetailsPage() {
 
     useEffect(() => {
         const fetchToken = async () => {
-            if (!mintAddress) return;
             try {
                 const { tokens } = await tokenService.getAllTokens();
                 const token = tokens.find(t => t.mintAddress === mintAddress);
-                if (!token) throw new Error('Token not found');
-                setToken(token);
-            } catch (err) {
-                setError('Failed to load token details');
-                console.error(err);
+                if (token) {
+                    setToken(token);
+                } else {
+                    setError('Token not found');
+                }
+            } catch (error) {
+                console.error('Error fetching token:', error);
+                setError(error instanceof Error ? error.message : 'Failed to fetch token details');
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchToken();
+        if (mintAddress) {
+            fetchToken();
+        }
     }, [mintAddress]);
 
     if (loading) return <div className="p-4 text-white">Loading...</div>;
