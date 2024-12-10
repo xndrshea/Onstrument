@@ -32,13 +32,32 @@ export async function initializeDatabase() {
         const client = await pool.connect()
         logger.info('Attempting database connection...')
 
-        // Check for all required tables
+        // First, check if schema exists
+        const schemaExists = await client.query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.schemata 
+                WHERE schema_name = 'token_platform'
+            );
+        `)
+
+        if (!schemaExists.rows[0].exists) {
+            logger.info('Schema does not exist, running full initialization...')
+            await initDatabase()
+            return true
+        }
+
+        // Then check for all required tables
         const tablesExist = await client.query(`
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'token_platform' 
-                AND table_name = 'raydium_tokens'
-            ) AS raydium_tokens_exist,
+                AND table_name = 'pools'
+            ) AS pools_exist,
+            EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'token_platform' 
+                AND table_name = 'pool_states'
+            ) AS pool_states_exist,
             EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'token_platform' 
@@ -52,19 +71,14 @@ export async function initializeDatabase() {
             EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'token_platform' 
-                AND table_name = 'trade_history'
-            ) AS trade_history_exist,
-            EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'token_platform' 
-                AND table_name = 'token_stats'
-            ) AS token_stats_exist;
+                AND table_name = 'trades'
+            ) AS trades_exist;
         `)
 
-        const allTablesExist = Object.values(tablesExist.rows[0]).every(exists => exists);
+        const allTablesExist = Object.values(tablesExist.rows[0]).every(exists => exists)
 
         if (!allTablesExist) {
-            logger.info('Some tables missing, starting initialization...')
+            logger.info('Some tables missing, running full initialization...')
             await initDatabase()
         } else {
             logger.info('All database tables exist, skipping initialization')

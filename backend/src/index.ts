@@ -23,83 +23,37 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://local
 async function startServer() {
     try {
         logger.info('Starting server initialization...')
-        logger.info(`Memory limit set to: ${process.env.NODE_OPTIONS}`)
 
-        // Initialize database
-        logger.info('Initializing database...')
+        // Initialize database first
         const dbInitialized = await initializeDatabase()
         if (!dbInitialized) {
-            throw new Error('Database initialization failed')
+            logger.error('Database initialization failed')
+            process.exit(1)
         }
         logger.info('Database initialized successfully')
 
-        // Create Express app
+        // Create Express app and server
         const app = createApp()
-
-        // CORS setup with WebSocket support
-        app.use(cors({
-            origin: allowedOrigins,
-            credentials: true,
-            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization'],
-            // Allow WebSocket upgrade
-            optionsSuccessStatus: 200
-        }))
-
-        // Create HTTP server
         const server = new Server(app)
 
-        // Initialize WebSocket server with path
+        // Initialize WebSocket server
         const wss = new WebSocket.Server({
             server,
-            path: '/ws',
-            verifyClient: (info, cb) => {
-                // Allow all connections in development
-                const isAllowed = process.env.NODE_ENV === 'development' ||
-                    !!(info.origin && allowedOrigins.includes(info.origin));
-                cb(isAllowed);
-            }
+            path: '/ws'
         })
 
-        // Initialize WebSocket service
-        const heliusService = HeliusWebSocketService.getInstance()
-        heliusService.initialize(wss)
+        // Only initialize HeliusWebSocketService after database is ready
+        try {
+            const heliusService = HeliusWebSocketService.getInstance()
+            await heliusService.initialize(wss)
+            logger.info('HeliusWebSocketService initialized successfully')
+        } catch (error) {
+            logger.error('Failed to initialize HeliusWebSocketService:', error)
+            throw error
+        }
 
-        // Handle WebSocket connection
-        wss.on('connection', (ws, req) => {
-            logger.info(`New WebSocket connection from ${req.socket.remoteAddress}`)
-
-            ws.on('message', (message) => {
-                try {
-                    const data = JSON.parse(message.toString())
-                    heliusService.handleMessage(data, ws)
-                } catch (error) {
-                    logger.error('Error handling WebSocket message:', error)
-                }
-            })
-
-            ws.on('error', (error) => {
-                logger.error('WebSocket connection error:', error)
-            })
-
-            ws.on('close', () => {
-                logger.info('WebSocket connection closed')
-            })
-        })
-
-        logger.info('WebSocket server initialized')
-
-        // Start server
         server.listen(PORT, () => {
-            logger.info(`Server is running and listening on port ${PORT}`)
-            logger.info(`API endpoints available at http://localhost:${PORT}/api`)
-            logger.info(`WebSocket server available at ws://localhost:${PORT}/ws`)
-        })
-
-        // Add error handling for the server
-        server.on('error', (error: Error) => {
-            logger.error('Server error:', error)
-            process.exit(1)
+            logger.info(`Server running on port ${PORT}`)
         })
 
     } catch (error) {
