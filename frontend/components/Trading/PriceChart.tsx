@@ -53,8 +53,8 @@ export function PriceChart({ token, width = 600, height = 300 }: PriceChartProps
                 const history = await priceClient.getPriceHistory(token.mintAddress);
                 if (series.current && history?.length > 0) {
                     series.current.setData(history.map(point => ({
-                        time: point.time as Time,
-                        value: point.value
+                        time: Math.floor(point.time) as UTCTimestamp,
+                        value: Number(point.value)
                     })));
                 }
             } catch (error) {

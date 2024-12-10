@@ -69,10 +69,20 @@ export class TokenService {
 
     async getAllTokens(page = 1, limit = 50): Promise<{ tokens: TokenRecord[], pagination: any }> {
         try {
-            const response = await fetch(`${API_BASE_URL}/tokens?page=${page}&limit=${limit}`);
+            const response = await fetch(`${API_BASE_URL}/tokens?page=${page}&limit=${limit}`, {
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
             if (!response.ok) {
+                if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Please try again later.');
+                }
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
+
             const data = await response.json();
             return {
                 tokens: data.tokens.map(this.transformToken),
