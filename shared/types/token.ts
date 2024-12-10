@@ -30,7 +30,7 @@ export interface TokenRecord {
     mintAddress: string;
     name: string;
     symbol: string;
-    tokenType: 'custom' | 'dex';
+    tokenType: 'pool' | 'custom';
     description?: string;
     metadataUri?: string;
     totalSupply?: BN;
@@ -38,8 +38,12 @@ export interface TokenRecord {
     curveAddress?: string;
     curveConfig?: curveConfig;
     poolAddress?: string;
+    baseReserve?: BN;
+    quoteReserve?: BN;
+    lastSlot?: number;
     volume24h?: number;
     liquidity?: number;
+    price?: number;
     createdAt?: string;
 }
 

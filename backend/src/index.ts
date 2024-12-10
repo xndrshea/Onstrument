@@ -1,7 +1,7 @@
 import { createApp } from './app'
 import { logger } from './utils/logger'
 import { initializeDatabase } from './config/database'
-import { WebSocketService } from './services/websocketService'
+import { HeliusWebSocketService } from './services/heliusWebSocketService'
 import { Server } from 'http'
 import WebSocket from 'ws'
 import cors from 'cors'
@@ -62,8 +62,8 @@ async function startServer() {
         })
 
         // Initialize WebSocket service
-        const wsService = WebSocketService.getInstance()
-        wsService.initialize(wss)
+        const heliusService = HeliusWebSocketService.getInstance()
+        heliusService.initialize(wss)
 
         // Handle WebSocket connection
         wss.on('connection', (ws, req) => {
@@ -72,7 +72,7 @@ async function startServer() {
             ws.on('message', (message) => {
                 try {
                     const data = JSON.parse(message.toString())
-                    wsService.handleMessage(data, ws)
+                    heliusService.handleMessage(data, ws)
                 } catch (error) {
                     logger.error('Error handling WebSocket message:', error)
                 }

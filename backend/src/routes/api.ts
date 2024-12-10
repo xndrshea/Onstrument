@@ -2,11 +2,10 @@ import cors from 'cors';
 import { Router } from 'express';
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
-import { WebSocketService } from '../services/websocketService';
-import { DexService } from '../services/dexService';
-import { PriceService } from '../services/PriceService';
+import { HeliusWebSocketService } from '../services/heliusWebSocketService';
 import { Connection, clusterApiUrl } from '@solana/web3.js';
 import rateLimit from 'express-rate-limit';
+import { config } from '../config/env';
 
 const router = Router();
 
@@ -18,10 +17,8 @@ router.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-const wsService = WebSocketService.getInstance();
-const connection = new Connection(clusterApiUrl('devnet'));
-const dexService = DexService.getInstance(connection);
-const priceService = PriceService.getInstance();
+const heliusService = HeliusWebSocketService.getInstance();
+const connection = new Connection(config.HELIUS_RPC_URL);
 
 // Add this before your routes
 const limiter = rateLimit({
@@ -114,7 +111,7 @@ router.get('/price-history/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
         const { timeframe = '24h' } = req.query;
-        const history = await priceService.getPriceHistory(mintAddress, timeframe as '24h' | '7d' | '30d');
+        const history = await heliusService.getPriceHistory(mintAddress, timeframe as '24h' | '7d' | '30d');
         res.json(history);
     } catch (error) {
         logger.error('Error fetching price history:', error);
@@ -127,7 +124,7 @@ router.get('/trades/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
         const { limit = '50' } = req.query;
-        const trades = await dexService.getTradeHistory(mintAddress, parseInt(limit as string));
+        const trades = await heliusService.getTradeHistory(mintAddress, parseInt(limit as string));
         res.json(trades);
     } catch (error) {
         logger.error('Error fetching trade history:', error);
@@ -138,30 +135,11 @@ router.get('/trades/:mintAddress', async (req, res) => {
 // WebSocket status
 router.get('/ws/status', async (_req, res) => {
     try {
-        const status = wsService.getStatus();
+        const status = heliusService.getStatus();
         res.json(status);
     } catch (error) {
         logger.error('Error fetching WebSocket status:', error);
         res.status(500).json({ error: 'Failed to fetch WebSocket status' });
-    }
-});
-
-// Record new trade
-router.post('/trades', async (req, res) => {
-    try {
-        const { mintAddress, price, amount, side, signature, walletAddress } = req.body;
-        await dexService.handleTransaction({
-            mintAddress,
-            price,
-            amount,
-            side,
-            signature,
-            walletAddress
-        });
-        res.status(201).json({ success: true });
-    } catch (error) {
-        logger.error('Error recording trade:', error);
-        res.status(500).json({ error: 'Failed to record trade' });
     }
 });
 

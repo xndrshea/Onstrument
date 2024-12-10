@@ -6,96 +6,123 @@ export async function initDatabase() {
     try {
         await client.query('BEGIN');
 
-        // Drop existing tables if they exist
-        await client.query(`
-            DROP TABLE IF EXISTS 
-                token_platform.raydium_tokens,
-                token_platform.custom_tokens,
-                token_platform.price_history,
-                token_platform.trade_history,
-                token_platform.token_stats CASCADE;
-        `);
+        // Drop everything for a clean slate
+        await client.query(`DROP SCHEMA IF EXISTS token_platform CASCADE;`);
+        await client.query(`CREATE SCHEMA token_platform;`);
 
-        // Create schema
-        await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform;`);
-
-        // Raydium tokens table
+        // Pools table (for DEX pools)
         await client.query(`
-            CREATE TABLE token_platform.raydium_tokens (
+            CREATE TABLE token_platform.pools (
                 id SERIAL PRIMARY KEY,
-                mint_address VARCHAR(255) NOT NULL UNIQUE,
-                pool_address VARCHAR(255) NOT NULL,
-                name VARCHAR(255) NOT NULL,
-                symbol VARCHAR(20) NOT NULL,
-                decimals INTEGER DEFAULT 9,
+                pool_address VARCHAR(255) NOT NULL UNIQUE,
+                base_mint VARCHAR(255) NOT NULL,
+                quote_mint VARCHAR(255) NOT NULL,
+                base_decimals INTEGER NOT NULL,
+                quote_decimals INTEGER NOT NULL,
+                pool_type VARCHAR(20) NOT NULL CHECK (pool_type IN ('raydium', 'orca')),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
-        // Custom tokens table with curve_config
+        // Custom tokens with bonding curves
         await client.query(`
             CREATE TABLE token_platform.custom_tokens (
-                id SERIAL PRIMARY KEY,
-                mint_address VARCHAR(255) NOT NULL UNIQUE,
+                mint_address VARCHAR(255) PRIMARY KEY,
                 curve_address VARCHAR(255) NOT NULL,
                 name VARCHAR(255) NOT NULL,
                 symbol VARCHAR(20) NOT NULL,
                 decimals INTEGER DEFAULT 9,
                 description TEXT,
-                metadata_uri TEXT,
-                curve_config JSONB,
+                metadata_url TEXT,
+                curve_config JSONB NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
-        // Price history table (for both types)
+        // Token metadata table (for DEX tokens)
+        await client.query(`
+            CREATE TABLE token_platform.tokens (
+                mint_address VARCHAR(255) PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                symbol VARCHAR(20) NOT NULL,
+                decimals INTEGER NOT NULL,
+                metadata_url TEXT,
+                image_url TEXT,
+                verified BOOLEAN DEFAULT false,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Real-time pool state
+        await client.query(`
+            CREATE TABLE token_platform.pool_states (
+                pool_address VARCHAR(255) PRIMARY KEY,
+                base_reserve DECIMAL(30, 9) NOT NULL,
+                quote_reserve DECIMAL(30, 9) NOT NULL,
+                last_slot BIGINT NOT NULL,
+                price DECIMAL(30, 9) NOT NULL,
+                tvl_usd DECIMAL(30, 2),
+                volume_24h_usd DECIMAL(30, 2) DEFAULT 0,
+                last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Custom token states
+        await client.query(`
+            CREATE TABLE token_platform.custom_token_states (
+                mint_address VARCHAR(255) PRIMARY KEY,
+                supply DECIMAL(30, 9) NOT NULL,
+                reserve DECIMAL(30, 9) NOT NULL,
+                price DECIMAL(30, 9) NOT NULL,
+                last_slot BIGINT NOT NULL,
+                volume_24h_usd DECIMAL(30, 2) DEFAULT 0,
+                last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Price history (for both DEX and custom tokens)
         await client.query(`
             CREATE TABLE token_platform.price_history (
-                mint_address TEXT NOT NULL,
-                price DECIMAL NOT NULL,
-                timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (mint_address, timestamp)
-            );
-        `);
-
-        // Trade history table
-        await client.query(`
-            CREATE TABLE token_platform.trade_history (
                 id SERIAL PRIMARY KEY,
-                mint_address VARCHAR(255) NOT NULL,
+                token_address VARCHAR(255) NOT NULL,
+                token_type VARCHAR(10) NOT NULL CHECK (token_type IN ('pool', 'custom')),
                 price DECIMAL(30, 9) NOT NULL,
-                amount DECIMAL(30, 9) NOT NULL,
-                side VARCHAR(4) NOT NULL CHECK (side IN ('buy', 'sell')),
-                wallet_address VARCHAR(255) NOT NULL,
-                signature VARCHAR(255) NOT NULL UNIQUE,
-                timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-                token_type VARCHAR(10) NOT NULL CHECK (token_type IN ('raydium', 'custom'))
+                base_reserve DECIMAL(30, 9),
+                quote_reserve DECIMAL(30, 9),
+                supply DECIMAL(30, 9),
+                slot BIGINT NOT NULL,
+                timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
-        // Token stats table
+        // Trade history (for both DEX and custom tokens)
         await client.query(`
-            CREATE TABLE token_platform.token_stats (
-                mint_address VARCHAR(255) PRIMARY KEY,
+            CREATE TABLE token_platform.trades (
+                signature VARCHAR(255) PRIMARY KEY,
+                token_address VARCHAR(255) NOT NULL,
+                token_type VARCHAR(10) NOT NULL CHECK (token_type IN ('pool', 'custom')),
+                wallet_address VARCHAR(255) NOT NULL,
+                side VARCHAR(4) NOT NULL CHECK (side IN ('buy', 'sell')),
+                amount DECIMAL(30, 9) NOT NULL,
+                total DECIMAL(30, 9) NOT NULL,
                 price DECIMAL(30, 9) NOT NULL,
-                volume_24h DECIMAL(30, 9) NOT NULL DEFAULT 0,
-                liquidity DECIMAL(30, 9),
-                holder_count INTEGER,
-                price_change_24h DECIMAL(10, 2),
-                last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                slot BIGINT NOT NULL,
+                timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
         // Create indexes
         await client.query(`
-            CREATE INDEX idx_price_history_mint_time ON token_platform.price_history(mint_address, timestamp);
-            CREATE INDEX idx_trade_history_mint_time ON token_platform.trade_history(mint_address, timestamp);
-            CREATE INDEX idx_raydium_tokens_mint ON token_platform.raydium_tokens(mint_address);
-            CREATE INDEX idx_custom_tokens_mint ON token_platform.custom_tokens(mint_address);
+            CREATE INDEX idx_pools_base_mint ON token_platform.pools(base_mint);
+            CREATE INDEX idx_pools_quote_mint ON token_platform.pools(quote_mint);
+            CREATE INDEX idx_price_history_token ON token_platform.price_history(token_address, timestamp);
+            CREATE INDEX idx_trades_token ON token_platform.trades(token_address, timestamp);
+            CREATE INDEX idx_pool_states_last_slot ON token_platform.pool_states(last_slot);
+            CREATE INDEX idx_custom_states_last_slot ON token_platform.custom_token_states(last_slot);
         `);
 
         await client.query('COMMIT');
-        logger.info('Database initialized successfully');
+        logger.info('Database initialized successfully with Helius schema and custom token support');
     } catch (error) {
         await client.query('ROLLBACK');
         logger.error('Failed to initialize database:', error);
