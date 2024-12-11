@@ -11,7 +11,7 @@ export class HeliusManager extends EventEmitter {
     private raydiumProcessor: RaydiumProcessor;
     private bondingCurveProcessor: BondingCurveProcessor;
     private messageCount: number = 0;
-    private readonly RATE_LIMIT = 20; // total messages
+    private readonly RATE_LIMIT = 30; // total messages
     private reconnectTimeout: NodeJS.Timeout | null = null;
     private lastHeartbeat: number = Date.now();
 
@@ -94,14 +94,20 @@ export class HeliusManager extends EventEmitter {
 
     private async handleMessage(data: WebSocket.Data): Promise<void> {
         try {
-            this.lastHeartbeat = Date.now();
-            // Check total rate limit
+            // Check rate limit before processing any message
             if (this.messageCount >= this.RATE_LIMIT) {
-                logger.info(`Rate limit reached: ${this.messageCount} messages processed`);
+                logger.info(`Maximum message limit (${this.RATE_LIMIT}) reached. Closing connection.`);
+                this.ws?.close();
                 return;
             }
 
             const messageObj = JSON.parse(data.toString());
+            logger.debug('Received message:', {
+                method: messageObj.method,
+                programId: messageObj.params?.result?.value?.account?.owner,
+                type: messageObj.params?.type
+            });
+
             if (messageObj.method === "programNotification") {
                 const programId = messageObj.params.result.value.account.owner;
                 const buffer = Buffer.from(messageObj.params.result.value.account.data[0], 'base64');
@@ -110,7 +116,11 @@ export class HeliusManager extends EventEmitter {
                 // Check if it's any of the Raydium programs
                 if (Object.values(config.RAYDIUM_PROGRAMS).includes(programId)) {
                     this.messageCount++;
-                    logger.info(`Processing Raydium message ${this.messageCount}/${this.RATE_LIMIT}`);
+                    logger.info(`Processing Raydium message ${this.messageCount}/${this.RATE_LIMIT} from program ${programId}`, {
+                        programId,
+                        programType: Object.entries(config.RAYDIUM_PROGRAMS).find(([_, id]) => id === programId)?.[0],
+                        bufferLength: buffer.length
+                    });
                     await this.raydiumProcessor.processEvent(buffer, accountKey, programId);
                 } else if (programId === config.BONDING_CURVE_PROGRAM_ID) {
                     this.messageCount++;
