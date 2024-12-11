@@ -1,70 +1,139 @@
 import { BaseProcessor, PriceUpdate } from './baseProcessor';
 import { logger } from '../../../utils/logger';
 import { config } from '../../../config/env';
+import { Liquidity } from '@raydium-io/raydium-sdk';
 
 export class RaydiumProcessor extends BaseProcessor {
-    async processEvent(buffer: Buffer, poolId: string, programId: string): Promise<void> {
-        logger.info('Raydium Processor received event:', {
-            poolId,
-            programId,
-            bufferLength: buffer.length,
-            bufferPreview: buffer.slice(0, 32).toString('hex')
-        });
-
+    async processEvent(buffer: Buffer, accountKey: string, programId: string): Promise<void> {
         try {
-            let update: PriceUpdate | null = null;
+            logger.info('Received Raydium event:', {
+                programId,
+                accountKey,
+                bufferLength: buffer.length
+            });
 
             switch (programId) {
                 case config.RAYDIUM_PROGRAMS.STANDARD_AMM:
-                    logger.info('Processing Standard AMM event');
-                    update = this.processStandardAMM(buffer, poolId);
+                    try {
+                        const poolState = Liquidity.getStateLayout(4).decode(buffer);
+
+                        const formatNumber = (num: string, decimals: number) => {
+                            return (Number(num) / Math.pow(10, decimals)).toLocaleString();
+                        };
+
+                        const baseDecimals = Number(poolState.baseDecimal);
+                        const quoteDecimals = Number(poolState.quoteDecimal);
+
+                        const poolInfo = {
+                            baseVault: poolState.baseVault?.toString(),
+                            quoteVault: poolState.quoteVault?.toString(),
+                            baseBalance: formatNumber(poolState.baseDecimal?.toString() || '0', baseDecimals),
+                            quoteBalance: formatNumber(poolState.quoteDecimal?.toString() || '0', quoteDecimals),
+                            status: poolState.status?.toString()
+                        };
+
+                        logger.info('Standard AMM Pool Summary:', {
+                            poolId: accountKey,
+                            ...poolInfo
+                        });
+
+                    } catch (e: any) {
+                        logger.error('Failed to decode Standard AMM', {
+                            error: e.message,
+                            bufferLength: buffer.length
+                        });
+                    }
                     break;
+
                 case config.RAYDIUM_PROGRAMS.LEGACY_AMM:
-                    update = this.processLegacyAMM(buffer, poolId);
+                    try {
+                        const poolState = Liquidity.getStateLayout(4).decode(buffer);
+
+                        // Calculate actual volumes in human-readable format
+                        const baseDecimals = Number(poolState.baseDecimal);
+                        const quoteDecimals = Number(poolState.quoteDecimal);
+
+                        const formatNumber = (num: string, decimals: number) => {
+                            return (Number(num) / Math.pow(10, decimals)).toLocaleString();
+                        };
+
+                        const poolInfo = {
+                            // Token Information
+                            baseMint: poolState.baseMint?.toString(),
+                            quoteMint: poolState.quoteMint?.toString(),
+
+                            // Pool Statistics
+                            status: poolState.status?.toString(),
+                            depth: poolState.depth?.toString(),
+
+
+                            // Trading Volume (in actual token amounts)
+                            baseVolume: {
+                                in: formatNumber(poolState.swapBaseInAmount?.toString() || '0', baseDecimals),
+                                out: formatNumber(poolState.swapBaseOutAmount?.toString() || '0', baseDecimals),
+                            },
+                            quoteVolume: {
+                                in: formatNumber(poolState.swapQuoteInAmount?.toString() || '0', quoteDecimals),
+                                out: formatNumber(poolState.swapQuoteOutAmount?.toString() || '0', quoteDecimals),
+                            },
+
+                            // Fee Information
+                            swapFeeRate: `${(Number(poolState.swapFeeNumerator) / Number(poolState.swapFeeDenominator) * 100).toFixed(2)}%`,
+                            tradeFeeRate: `${(Number(poolState.tradeFeeNumerator) / Number(poolState.tradeFeeDenominator) * 100).toFixed(2)}%`,
+                        };
+
+                        logger.info('Legacy AMM Pool Summary:', {
+                            poolId: accountKey,
+                            ...poolInfo
+                        });
+
+                    } catch (e: any) {
+                        logger.error('Failed to decode Legacy AMM', {
+                            error: e.message,
+                            bufferLength: buffer.length
+                        });
+                    }
                     break;
+
                 case config.RAYDIUM_PROGRAMS.CLMM:
-                    update = this.processCLMM(buffer, poolId);
+                    try {
+                        const poolState = Liquidity.getStateLayout(4).decode(buffer);
+
+                        // Format pool state into human readable format
+                        const poolInfo = {
+                            tokens: {
+                                base: {
+                                    decimal: poolState.baseDecimal?.toString(),
+                                    vault: poolState.baseVault?.toString()
+                                },
+                                quote: {
+                                    decimal: poolState.quoteDecimal?.toString(),
+                                    vault: poolState.quoteVault?.toString()
+                                }
+                            },
+                            metrics: {
+                                status: poolState.status?.toString(),
+                                depth: poolState.depth?.toString()
+                            }
+                        };
+
+                        logger.info('CLMM Pool Summary:', {
+                            poolId: accountKey,
+                            ...poolInfo
+                        });
+
+                        // TODO: Calculate price using CLMM specific formula
+                    } catch (e: any) {
+                        logger.error('Failed to decode CLMM', {
+                            error: e.message,
+                            bufferLength: buffer.length
+                        });
+                    }
                     break;
-                default:
-                    logger.warn(`Unknown Raydium program: ${programId}`);
-                    return;
             }
-
-            if (update) {
-                logger.info('Processed price update:', update);
-                await this.queuePriceUpdate(update);
-            }
-        } catch (error) {
-            logger.error(`Error processing Raydium event: ${error}`);
+        } catch (error: any) {
+            logger.error('Error in RaydiumProcessor:', { error: error.message });
         }
-    }
-
-    private processStandardAMM(buffer: Buffer, poolId: string): PriceUpdate | null {
-        if (buffer.length !== 752) return null;
-
-        const baseReserve = buffer.readBigUInt64LE(192);
-        const quoteReserve = buffer.readBigUInt64LE(200);
-
-        if (baseReserve > 0 && quoteReserve > 0) {
-            return {
-                mintAddress: poolId,
-                price: Number(quoteReserve) / Number(baseReserve),
-                timestamp: Date.now(),
-                source: 'raydium_standard',
-                volume: Number(quoteReserve)
-            };
-        }
-        return null;
-    }
-
-    // Add implementations for other AMM types
-    private processLegacyAMM(buffer: Buffer, poolId: string): PriceUpdate | null {
-        // Implement legacy AMM parsing
-        return null;
-    }
-
-    private processCLMM(buffer: Buffer, poolId: string): PriceUpdate | null {
-        // Implement CLMM parsing
-        return null;
     }
 }
+
