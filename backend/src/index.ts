@@ -1,7 +1,7 @@
 import { createApp } from './app'
 import { logger } from './utils/logger'
 import { initializeDatabase } from './config/database'
-import { HeliusWebSocketService } from './services/heliusWebSocketService'
+import { HeliusManager } from './services/price/websocket/heliusManager'
 import { Server } from 'http'
 import WebSocket from 'ws'
 import cors from 'cors'
@@ -44,8 +44,8 @@ async function startServer() {
 
         // Only initialize HeliusWebSocketService after database is ready
         try {
-            const heliusService = HeliusWebSocketService.getInstance()
-            await heliusService.initialize(wss)
+            const heliusManager = HeliusManager.getInstance()
+            await heliusManager.initialize(wss)
             logger.info('HeliusWebSocketService initialized successfully')
         } catch (error) {
             logger.error('Failed to initialize HeliusWebSocketService:', error)

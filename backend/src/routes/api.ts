@@ -2,15 +2,18 @@ import cors from 'cors';
 import { Router } from 'express';
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
-import { HeliusWebSocketService } from '../services/heliusWebSocketService';
-import { Connection, clusterApiUrl } from '@solana/web3.js';
+import { HeliusManager } from '../services/price/websocket/heliusManager';
+import { Connection } from '@solana/web3.js';
 import rateLimit from 'express-rate-limit';
 import { config } from '../config/env';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
+import { RaydiumProcessor } from '../services/price/processors/raydiumProcessor';
+import { BondingCurveProcessor } from '../services/price/processors/bondingCurveProcessor';
+import { PriceUpdateQueue } from '../services/price/queue/priceUpdateQueue';
 
 const router = Router();
 
-// Add CORS middleware
+// CORS and rate limiting setup
 router.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -18,20 +21,101 @@ router.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-const heliusService = HeliusWebSocketService.getInstance();
+const heliusService = HeliusManager.getInstance();
 const connection = new Connection(config.HELIUS_RPC_URL);
+const priceQueue = PriceUpdateQueue.getInstance();
 
-// Add this before your routes
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: 'Too many requests from this IP, please try again later.'
 });
 
-// Apply rate limiting to all routes
 router.use(limiter);
 
-// Get all tokens
+// System status monitoring endpoint
+router.get('/system/status', async (_req, res) => {
+    try {
+        const status = {
+            websocket: heliusService.getStatus(),
+            processors: {
+                raydium: RaydiumProcessor.getStatus(),
+                bondingCurve: BondingCurveProcessor.getStatus()
+            },
+            queue: priceQueue.getMetrics()
+        };
+
+        res.json(status);
+    } catch (error) {
+        logger.error('Error fetching system status:', error);
+        res.status(500).json({ error: 'Failed to fetch system status' });
+    }
+});
+
+// Token creation endpoint
+router.post('/tokens', async (req, res) => {
+    try {
+        const {
+            mintAddress,
+            curveAddress,
+            name,
+            symbol,
+            description,
+            metadataUri,
+            totalSupply,
+            decimals,
+            curveConfig
+        } = req.body;
+
+        // Database operations
+        const result = await pool.query(`
+            INSERT INTO token_platform.custom_tokens (
+                mint_address,
+                curve_address,
+                name,
+                symbol,
+                decimals,
+                description,
+                metadata_uri
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+        `, [
+            mintAddress,
+            curveAddress,
+            name,
+            symbol,
+            decimals || 6,
+            description,
+            metadataUri
+        ]);
+
+        await pool.query(`
+            INSERT INTO token_platform.custom_token_states (
+                mint_address,
+                supply,
+                reserve,
+                price,
+                last_slot,
+                volume_24h_usd
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+        `, [mintAddress, totalSupply || 0, 0, 0, 0, 0]);
+
+        // Initialize price history
+        await PriceHistoryModel.recordPrice(mintAddress, 0);
+
+        // Initialize processor subscription for bonding curve tokens
+        if (curveAddress) {
+            await heliusService.subscribeToAccount(curveAddress);
+        }
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error creating token:', error);
+        res.status(500).json({ error: 'Failed to create token' });
+    }
+});
+
+// Existing endpoints remain unchanged
 router.get('/tokens', async (req, res) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
@@ -179,8 +263,23 @@ router.get('/trades/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
         const { limit = '50' } = req.query;
-        const trades = await heliusService.getTradeHistory(mintAddress, parseInt(limit as string));
-        res.json(trades);
+
+        const trades = await pool.query(`
+            SELECT 
+                signature,
+                wallet_address,
+                side,
+                amount,
+                total,
+                price,
+                timestamp
+            FROM token_platform.trades 
+            WHERE token_address = $1 
+            ORDER BY timestamp DESC 
+            LIMIT $2
+        `, [mintAddress, parseInt(limit as string)]);
+
+        res.json(trades.rows);
     } catch (error) {
         logger.error('Error fetching trade history:', error);
         res.status(500).json({ error: 'Failed to fetch trades' });
@@ -195,65 +294,6 @@ router.get('/ws/status', async (_req, res) => {
     } catch (error) {
         logger.error('Error fetching WebSocket status:', error);
         res.status(500).json({ error: 'Failed to fetch WebSocket status' });
-    }
-});
-
-// Add this after your existing routes
-router.post('/tokens', async (req, res) => {
-    try {
-        const {
-            mintAddress,
-            curveAddress,
-            name,
-            symbol,
-            description,
-            metadataUri,
-            totalSupply,
-            decimals,
-            curveConfig
-        } = req.body;
-
-        // Insert into custom_tokens table
-        const result = await pool.query(`
-            INSERT INTO token_platform.custom_tokens (
-                mint_address,
-                curve_address,
-                name,
-                symbol,
-                decimals,
-                description,
-                metadata_uri
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING *
-        `, [
-            mintAddress,
-            curveAddress,
-            name,
-            symbol,
-            decimals || 6,
-            description,
-            metadataUri
-        ]);
-
-        // Initialize token stats
-        await pool.query(`
-            INSERT INTO token_platform.custom_token_states (
-                mint_address,
-                supply,
-                reserve,
-                price,
-                last_slot,
-                volume_24h_usd
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-        `, [mintAddress, totalSupply || 0, 0, 0, 0, 0]);
-
-        // Initialize first price point
-        await PriceHistoryModel.recordPrice(mintAddress, 0);
-
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        logger.error('Error creating token:', error);
-        res.status(500).json({ error: 'Failed to create token' });
     }
 });
 
