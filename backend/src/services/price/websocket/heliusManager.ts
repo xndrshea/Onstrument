@@ -7,13 +7,15 @@ import { BondingCurveProcessor } from '../processors/bondingCurveProcessor';
 
 export class HeliusManager extends EventEmitter {
     private static instance: HeliusManager;
-    private ws: WebSocket | null = null;
+    private messageCount: number = 0;
+    private readonly MAX_MESSAGES = 1000;
+    private wsClient: WebSocket | null = null;
+    private wss!: WebSocket.Server;
     private raydiumProcessor: RaydiumProcessor;
     private bondingCurveProcessor: BondingCurveProcessor;
-    private messageCount: number = 0;
-    private readonly RATE_LIMIT = 30; // total messages
-    private reconnectTimeout: NodeJS.Timeout | null = null;
     private lastHeartbeat: number = Date.now();
+    private lastReconnectAttempt: number = 0;
+    private readonly RECONNECT_INTERVAL = 5000; // 5 seconds
 
     private constructor() {
         super();
@@ -29,6 +31,7 @@ export class HeliusManager extends EventEmitter {
     }
 
     async initialize(wss: WebSocket.Server): Promise<void> {
+        this.wss = wss;
         this.setupWebSocketServer(wss);
         await this.connect();
     }
@@ -53,24 +56,24 @@ export class HeliusManager extends EventEmitter {
     }
 
     private async connect(): Promise<void> {
-        this.ws = new WebSocket(config.HELIUS_WEBSOCKET_URL);
+        this.wsClient = new WebSocket(config.HELIUS_WEBSOCKET_URL);
 
-        this.ws.on('open', () => {
+        this.wsClient.on('open', () => {
             logger.info('Connected to Helius WebSocket');
             this.subscribeToPrograms();
         });
 
-        this.ws.on('message', (data) => this.handleMessage(data));
+        this.wsClient.on('message', (data) => this.handleMessage(data));
 
         // Standard WebSocket error handling
-        this.ws.on('close', () => {
+        this.wsClient.on('close', () => {
             logger.warn('Helius WebSocket connection closed');
-            this.reconnectTimeout = setTimeout(() => this.connect(), 5000);
+            this.reconnect();
         });
 
-        this.ws.on('error', (error) => {
+        this.wsClient.on('error', (error) => {
             logger.error('Helius WebSocket error:', error);
-            this.ws?.close();
+            this.wsClient?.close();
         });
     }
 
@@ -87,26 +90,23 @@ export class HeliusManager extends EventEmitter {
                 method: "programSubscribe",
                 params: [programId, { encoding: "base64" }]
             };
-            this.ws?.send(JSON.stringify(subscribeMessage));
+            this.wsClient?.send(JSON.stringify(subscribeMessage));
             logger.info(`Subscribed to program: ${programId}`);
         });
     }
 
-    private async handleMessage(data: WebSocket.Data): Promise<void> {
-        try {
-            // Check rate limit before processing any message
-            if (this.messageCount >= this.RATE_LIMIT) {
-                logger.info(`Maximum message limit (${this.RATE_LIMIT}) reached. Shutting down.`);
-                this.ws?.close();
-                process.exit(0); // Completely exit the program
-                return;
-            }
+    private async handleMessage(data: any) {
+        this.messageCount++;
 
+        try {
             const messageObj = JSON.parse(data.toString());
-            logger.debug('Received message:', {
+
+            // Add MORE logging
+            logger.info('Received Helius message:', {
                 method: messageObj.method,
                 programId: messageObj.params?.result?.value?.account?.owner,
-                type: messageObj.params?.type
+                accountKey: messageObj.params?.result?.value?.pubkey,
+                dataLength: messageObj.params?.result?.value?.account?.data?.[0]?.length
             });
 
             if (messageObj.method === "programNotification") {
@@ -116,16 +116,14 @@ export class HeliusManager extends EventEmitter {
 
                 // Check if it's any of the Raydium programs
                 if (Object.values(config.RAYDIUM_PROGRAMS).includes(programId)) {
-                    this.messageCount++;
-                    logger.info(`Processing Raydium message ${this.messageCount}/${this.RATE_LIMIT} from program ${programId}`, {
+                    logger.info(`Processing Raydium message ${this.messageCount}/${this.MAX_MESSAGES} from program ${programId}`, {
                         programId,
                         programType: Object.entries(config.RAYDIUM_PROGRAMS).find(([_, id]) => id === programId)?.[0],
                         bufferLength: buffer.length
                     });
                     await this.raydiumProcessor.processEvent(buffer, accountKey, programId);
                 } else if (programId === config.BONDING_CURVE_PROGRAM_ID) {
-                    this.messageCount++;
-                    logger.info(`Processing Bonding Curve message ${this.messageCount}/${this.RATE_LIMIT}`);
+                    logger.info(`Processing Bonding Curve message ${this.messageCount}/${this.MAX_MESSAGES}`);
                     await this.bondingCurveProcessor.processEvent(buffer, accountKey, programId);
                 }
             }
@@ -134,9 +132,29 @@ export class HeliusManager extends EventEmitter {
         }
     }
 
+    private async reconnect() {
+        const now = Date.now();
+        if (now - this.lastReconnectAttempt < this.RECONNECT_INTERVAL) {
+            return; // Prevent rapid reconnection attempts
+        }
+
+        this.lastReconnectAttempt = now;
+        try {
+            if (this.wsClient?.readyState === WebSocket.OPEN) {
+                this.wsClient.close();
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for close
+            await this.connect(); // Use connect instead of initialize
+            logger.info('Successfully reconnected to Helius WebSocket');
+        } catch (error) {
+            logger.error('Failed to reconnect:', error);
+            setTimeout(() => this.reconnect(), this.RECONNECT_INTERVAL);
+        }
+    }
+
     public async subscribeToAccount(accountAddress: string): Promise<void> {
         try {
-            await this.ws?.send(JSON.stringify({
+            await this.wsClient?.send(JSON.stringify({
                 jsonrpc: '2.0',
                 id: Date.now(),
                 method: 'accountSubscribe',
@@ -152,10 +170,11 @@ export class HeliusManager extends EventEmitter {
         }
     }
 
-    public getStatus(): { isConnected: boolean; lastHeartbeat: number } {
+    public getStatus() {
         return {
-            isConnected: this.ws?.readyState === WebSocket.OPEN,
-            lastHeartbeat: this.lastHeartbeat
+            connected: this.wsClient?.readyState === WebSocket.OPEN,
+            messageCount: this.messageCount,
+            maxMessages: this.MAX_MESSAGES
         };
     }
 }

@@ -8,20 +8,12 @@ export class TokenModel {
             const result = await pool.query(`
                 SELECT 
                     t.*,
-                    ct.curve_address,
-                    ts.price, 
-                    ts.volume_24h,
-                    ts.liquidity,
-                    ts.holder_count, 
-                    ts.transaction_count, 
-                    ts.last_updated
+                    ct.curve_address
                 FROM token_platform.tokens t
-                LEFT JOIN token_platform.token_stats ts ON t.mint_address = ts.mint_address
                 LEFT JOIN token_platform.custom_tokens ct ON t.mint_address = ct.mint_address
                 ORDER BY t.created_at DESC
             `);
             logger.info(`Retrieved ${result.rows.length} tokens from database`);
-            logger.debug('Token query results:', result.rows);
             return result.rows;
         } catch (error) {
             logger.error('Error in getTokens:', error);
@@ -32,10 +24,8 @@ export class TokenModel {
     static async getTokenByMintAddress(mintAddress: string) {
         try {
             const result = await pool.query(`
-                SELECT t.*, ts.holder_count, ts.transaction_count, ts.last_price, 
-                       ts.market_cap, ts.volume_24h, ts.total_volume
+                SELECT t.*
                 FROM token_platform.tokens t
-                LEFT JOIN token_platform.token_stats ts ON t.id = ts.token_id
                 WHERE t.mint_address = $1
             `, [mintAddress]);
             return result.rows[0] || null;
@@ -71,12 +61,6 @@ export class TokenModel {
                 tokenData.network,
                 tokenData.curveConfig
             ]);
-
-            // Initialize token stats
-            await client.query(`
-                INSERT INTO token_platform.token_stats (token_id)
-                VALUES ($1)
-            `, [tokenResult.rows[0].id]);
 
             await client.query('COMMIT');
             return tokenResult.rows[0];

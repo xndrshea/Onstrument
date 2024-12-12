@@ -68,8 +68,12 @@ export class TokenService {
     }
 
     async getAllTokens(page = 1, limit = 50): Promise<{ tokens: TokenRecord[], pagination: any }> {
+        const url = `${API_BASE_URL}/market/tokens?page=${page}&limit=${limit}`;
+        console.log('Attempting to fetch from:', url);
+        console.log('API_BASE_URL:', API_BASE_URL);
+
         try {
-            const response = await fetch(`${API_BASE_URL}/tokens?page=${page}&limit=${limit}`, {
+            const response = await fetch(url, {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json'
