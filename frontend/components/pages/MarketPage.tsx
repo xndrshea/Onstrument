@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { TokenRecord } from '../../../shared/types/token'
-import { tokenService } from '../../services/tokenService'
 import { Link } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { API_BASE_URL } from '../../config'
 
 export function MarketPage() {
     const wallet = useWallet();
@@ -17,18 +17,40 @@ export function MarketPage() {
     const fetchTokens = async () => {
         try {
             setIsLoading(true);
-            const response = await tokenService.getAllTokens(currentPage, TOKENS_PER_PAGE);
+            console.log('Fetching market tokens, page:', currentPage);
 
-            console.log('API Response:', response);
+            const url = new URL(`${API_BASE_URL}/market/tokens`);
+            url.searchParams.append('page', currentPage.toString());
+            url.searchParams.append('limit', TOKENS_PER_PAGE.toString());
+            if (tokenType !== 'all') {
+                url.searchParams.append('type', tokenType);
+            }
 
-            setTokens(response.tokens || []);
-            setTotalPages(response.pagination?.total
-                ? Math.ceil(response.pagination.total / TOKENS_PER_PAGE)
+            const response = await fetch(url.toString());
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.details || errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Market tokens response:', data);
+
+            setTokens(data.tokens.map((token: any) => ({
+                ...token,
+                mintAddress: token.mintAddress || token.mint_address,
+                tokenType: token.tokenType || token.token_type,
+                price: token.price || 0,
+                volume24h: token.volume24h || 0
+            })));
+
+            setTotalPages(data.pagination?.total
+                ? Math.ceil(data.pagination.total / TOKENS_PER_PAGE)
                 : 1);
             setError(null);
         } catch (error) {
-            setError('Failed to fetch tokens');
-            console.error('Error fetching tokens:', error);
+            console.error('Error fetching market tokens:', error);
+            setError(error instanceof Error ? error.message : 'Failed to fetch tokens');
         } finally {
             setIsLoading(false);
         }
@@ -38,12 +60,8 @@ export function MarketPage() {
         fetchTokens();
     }, [currentPage, tokenType]);
 
-    const filteredTokens = tokens.filter(token => {
-        if (tokenType === 'all') return true;
-        if (tokenType === 'custom') return token.tokenType === 'custom';
-        if (tokenType === 'dex') return token.tokenType === 'pool';
-        return true;
-    });
+    // No need for filteredTokens anymore as filtering is done on the server
+    const displayTokens = tokens;
 
     const handlePageChange = (newPage: number) => {
         setCurrentPage(newPage);
@@ -73,7 +91,7 @@ export function MarketPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredTokens.map(token => (
+                    {displayTokens.map(token => (
                         <Link
                             key={token.mintAddress}
                             to={`/token/${token.mintAddress}`}
@@ -87,6 +105,10 @@ export function MarketPage() {
                                 <span className="text-xs px-2 py-1 rounded bg-gray-700">
                                     {token.tokenType === 'pool' ? 'DEX' : 'Custom'}
                                 </span>
+                            </div>
+                            <div className="mt-2 text-sm">
+                                <p>Price: ${token.price?.toFixed(6) || '0.00'}</p>
+                                <p>24h Volume: ${token.volume24h?.toFixed(2) || '0.00'}</p>
                             </div>
                         </Link>
                     ))}

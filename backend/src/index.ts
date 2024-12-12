@@ -53,7 +53,13 @@ async function startServer() {
         }
 
         server.listen(PORT, () => {
-            logger.info(`Server running on port ${PORT}`)
+            logger.info(`Server running on port ${PORT}`);
+            logger.info('Active routes:', app._router.stack
+                .filter((r: any) => r.route)
+                .map((r: any) => ({
+                    path: r.route.path,
+                    methods: Object.keys(r.route.methods)
+                })));
         })
 
     } catch (error) {

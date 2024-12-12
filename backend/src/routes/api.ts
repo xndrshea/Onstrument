@@ -62,21 +62,19 @@ router.post('/tokens', async (req, res) => {
             symbol,
             description,
             metadataUri,
-            totalSupply,
-            decimals,
             curveConfig
         } = req.body;
 
-        // Database operations
+        // Simple insertion into custom_tokens only
         const result = await pool.query(`
             INSERT INTO token_platform.custom_tokens (
                 mint_address,
                 curve_address,
                 name,
                 symbol,
-                decimals,
                 description,
-                metadata_uri
+                metadata_url,
+                curve_config
             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
         `, [
@@ -84,29 +82,10 @@ router.post('/tokens', async (req, res) => {
             curveAddress,
             name,
             symbol,
-            decimals || 6,
             description,
-            metadataUri
+            metadataUri,
+            curveConfig
         ]);
-
-        await pool.query(`
-            INSERT INTO token_platform.custom_token_states (
-                mint_address,
-                supply,
-                reserve,
-                price,
-                last_slot,
-                volume_24h_usd
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-        `, [mintAddress, totalSupply || 0, 0, 0, 0, 0]);
-
-        // Initialize price history
-        await PriceHistoryModel.recordPrice(mintAddress, 0);
-
-        // Initialize processor subscription for bonding curve tokens
-        if (curveAddress) {
-            await heliusService.subscribeToAccount(curveAddress);
-        }
 
         res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -115,116 +94,82 @@ router.post('/tokens', async (req, res) => {
     }
 });
 
-// Existing endpoints remain unchanged
+// Keep existing /tokens endpoint for TokenList component
 router.get('/tokens', async (req, res) => {
+    try {
+        logger.info('Fetching custom tokens');
+        const result = await pool.query(`
+            SELECT * FROM token_platform.custom_tokens
+            ORDER BY created_at DESC
+        `);
+
+        const tokens = result.rows.map(token => ({
+            mintAddress: token.mint_address,
+            curveAddress: token.curve_address,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            description: token.description,
+            metadataUri: token.metadata_url,
+            curveConfig: token.curve_config,
+            createdAt: token.created_at
+        }));
+
+        res.json({ tokens });
+    } catch (error) {
+        logger.error('Database error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Add new endpoint for market page
+router.get('/market/tokens', async (req, res) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
         const offset = (page - 1) * limit;
+        const type = (req.query.type as string) || 'all';
 
-        logger.info('Fetching tokens with params:', { page, limit, offset });
-
-        // Get custom tokens
-        const customTokensQuery = `
-            SELECT 
-                ct.mint_address,
-                ct.name,
-                ct.symbol,
-                ct.decimals,
-                ct.description,
-                ct.metadata_url,
-                ct.curve_address,
-                ct.curve_config,
-                cts.supply as total_supply,
-                cts.price,
-                cts.volume_24h_usd as volume_24h,
-                'custom' as token_type,
-                ct.created_at
-            FROM token_platform.custom_tokens ct
-            LEFT JOIN token_platform.custom_token_states cts 
-            ON ct.mint_address = cts.mint_address
-        `;
-
-        // Get pool tokens
-        const poolTokensQuery = `
-            SELECT 
-                t.mint_address,
-                t.name,
-                t.symbol,
-                t.decimals,
-                t.metadata_url,
-                NULL as description,
-                NULL as curve_address,
-                NULL as curve_config,
-                NULL as total_supply,
-                ps.price,
-                ps.volume_24h_usd as volume_24h,
-                'pool' as token_type,
-                t.created_at
-            FROM token_platform.tokens t
-            LEFT JOIN token_platform.pool_states ps 
-            ON t.mint_address = ps.pool_address
-            WHERE EXISTS (
-                SELECT 1 
-                FROM token_platform.price_history price_hist 
-                WHERE price_hist.token_address = t.mint_address
-                LIMIT 1
+        const query = `
+            WITH combined_tokens AS (
+                SELECT 
+                    t.mint_address,
+                    t.name,
+                    t.symbol,
+                    t.decimals,
+                    t.metadata_url,
+                    ct.curve_address,
+                    t.created_at,
+                    'pool' as token_type
+                FROM token_platform.tokens t
+                LEFT JOIN token_platform.custom_tokens ct ON t.mint_address = ct.mint_address
+                ${type === 'custom' ? 'WHERE 1=0' : ''}
+                
+                UNION ALL
+                
+                SELECT 
+                    ct.mint_address,
+                    ct.name,
+                    ct.symbol,
+                    ct.decimals,
+                    ct.metadata_url,
+                    ct.curve_address,
+                    ct.created_at,
+                    'custom' as token_type
+                FROM token_platform.custom_tokens ct
+                ${type === 'dex' ? 'WHERE 1=0' : ''}
             )
+            SELECT * FROM combined_tokens
+            ORDER BY created_at DESC
+            LIMIT $1 OFFSET $2
         `;
 
-        // Get total count
-        const countQuery = `
-            SELECT 
-                (SELECT COUNT(*) FROM token_platform.custom_tokens) +
-                (SELECT COUNT(*) FROM token_platform.tokens t 
-                 WHERE EXISTS (
-                     SELECT 1 
-                     FROM token_platform.price_history ph 
-                     WHERE ph.mint_address = t.mint_address
-                     LIMIT 1
-                 )
-                ) as total
-        `;
+        const result = await pool.query(query, [limit, offset]);
+        res.json({ tokens: result.rows });
 
-        try {
-            const [customTokens, poolTokens, totalCount] = await Promise.all([
-                pool.query(customTokensQuery),
-                pool.query(poolTokensQuery),
-                pool.query(countQuery)
-            ]);
-
-            logger.info('Query results:', {
-                customTokensCount: customTokens.rows.length,
-                poolTokensCount: poolTokens.rows.length,
-                total: totalCount.rows[0]?.total
-            });
-
-            // Combine results and apply pagination after combining
-            const allTokens = [...customTokens.rows, ...poolTokens.rows]
-                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                .slice(offset, offset + limit);
-
-            const total = parseInt(totalCount.rows[0]?.total || '0');
-
-            res.json({
-                tokens: allTokens,
-                pagination: {
-                    total,
-                    page,
-                    limit,
-                    pages: Math.ceil(total / limit)
-                }
-            });
-        } catch (dbError) {
-            logger.error('Database query error:', dbError);
-            throw dbError;
-        }
     } catch (error) {
-        logger.error('Error in /tokens route:', error);
-        res.status(500).json({
-            error: 'Failed to fetch tokens',
-            details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
-        });
+        logger.error('Market tokens error:', error);
+        res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
 });
 
