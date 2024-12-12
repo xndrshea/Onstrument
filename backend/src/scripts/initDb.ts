@@ -45,12 +45,11 @@ export async function initDatabase() {
                 id SERIAL PRIMARY KEY,
                 token_address VARCHAR(255) NOT NULL,
                 time BIGINT NOT NULL,           -- Unix timestamp in seconds
-                price NUMERIC(40, 18) NOT NULL,  -- For lightweight-charts (current)
-                -- Fields for future TradingView Advanced support
-                open NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
-                high NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
-                low NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
-                close NUMERIC(40, 18) GENERATED ALWAYS AS (price) STORED,
+                price NUMERIC(40, 18) NOT NULL,  -- Current price
+                open NUMERIC(40, 18) NOT NULL,   -- Opening price for the period
+                high NUMERIC(40, 18) NOT NULL,   -- Highest price in period
+                low NUMERIC(40, 18) NOT NULL,    -- Lowest price in period
+                close NUMERIC(40, 18) NOT NULL,  -- Closing price (same as current price)
                 volume NUMERIC(40, 18) DEFAULT 0,
                 CONSTRAINT unique_token_time UNIQUE (token_address, time)
             );

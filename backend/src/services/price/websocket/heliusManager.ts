@@ -96,8 +96,9 @@ export class HeliusManager extends EventEmitter {
         try {
             // Check rate limit before processing any message
             if (this.messageCount >= this.RATE_LIMIT) {
-                logger.info(`Maximum message limit (${this.RATE_LIMIT}) reached. Closing connection.`);
+                logger.info(`Maximum message limit (${this.RATE_LIMIT}) reached. Shutting down.`);
                 this.ws?.close();
+                process.exit(0); // Completely exit the program
                 return;
             }
 
@@ -129,7 +130,7 @@ export class HeliusManager extends EventEmitter {
                 }
             }
         } catch (error) {
-            logger.error('Error processing Helius message:', error);
+            logger.error('Error handling message:', error);
         }
     }
 
