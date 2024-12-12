@@ -14,35 +14,29 @@ export class PriceHistoryModel {
 
             // First, check if we already have a candle for this minute
             const existingCandle = await pool.query(`
-                SELECT price, high, low, volume 
+                SELECT price, high, low, open, volume 
                 FROM token_platform.price_history
                 WHERE token_address = $1 AND time = $2
             `, [tokenMintAddress, periodStart]);
 
             if (existingCandle.rows.length > 0) {
-                // Update existing candle:
-                // - Keep original price as open (via generated column)
-                // - Update high if new price is higher
-                // - Update low if new price is lower
-                // - Set new price (becomes close via generated column)
-                // - Accumulate volume
+                // Update existing candle
                 await pool.query(`
                     UPDATE token_platform.price_history 
                     SET 
-                        price = $3,  -- This becomes both current price and close via generated column
-                        high = GREATEST($3, high),  -- Use GREATEST for simpler high calculation
-                        low = LEAST($3, low),       -- Use LEAST for simpler low calculation
+                        price = $3,
+                        close = $3,
+                        high = GREATEST($3, high),
+                        low = LEAST($3, low),
                         volume = volume + $4
                     WHERE token_address = $1 AND time = $2
                 `, [tokenMintAddress, periodStart, price, volume]);
             } else {
-                // Create new candle:
-                // - Price becomes open, high, low, and close via generated columns
-                // - Start tracking volume
+                // Create new candle
                 await pool.query(`
                     INSERT INTO token_platform.price_history 
-                    (token_address, time, price, high, low, volume)
-                    VALUES ($1, $2, $3, $3, $3, $4)
+                    (token_address, time, price, open, high, low, close, volume)
+                    VALUES ($1, $2, $3, $3, $3, $3, $3, $4)
                 `, [tokenMintAddress, periodStart, price, volume]);
             }
         } catch (error) {
