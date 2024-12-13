@@ -4,32 +4,15 @@ import { initializeDatabase } from './config/database'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { Server } from 'http'
 import WebSocket from 'ws'
-import cors from 'cors'
 
 const PORT = process.env.PORT || 3001
-
-// Set more conservative memory limits
-const MIN_MEMORY = 512  // 512MB minimum
-const MAX_MEMORY = 2048 // 2GB maximum
-
-// Check and set memory limits
-if (!process.env.NODE_OPTIONS?.includes('--max-old-space-size')) {
-    const memory = Math.min(Math.max(parseInt(process.env.MEMORY_LIMIT_MB || MAX_MEMORY.toString()), MIN_MEMORY), MAX_MEMORY)
-    process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} --max-old-space-size=${memory}`
-}
-
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173'];
 
 async function startServer() {
     try {
         logger.info('Starting server initialization...')
 
         // Initialize database first
-        const dbInitialized = await initializeDatabase()
-        if (!dbInitialized) {
-            logger.error('Database initialization failed')
-            process.exit(1)
-        }
+        await initializeDatabase()
         logger.info('Database initialized successfully')
 
         // Create Express app and server
@@ -42,7 +25,7 @@ async function startServer() {
             path: '/ws'
         })
 
-        // Only initialize HeliusWebSocketService after database is ready
+        // Initialize HeliusWebSocketService
         try {
             const heliusManager = HeliusManager.getInstance()
             await heliusManager.initialize(wss)
@@ -53,13 +36,7 @@ async function startServer() {
         }
 
         server.listen(PORT, () => {
-            logger.info(`Server running on port ${PORT}`);
-            logger.info('Active routes:', app._router.stack
-                .filter((r: any) => r.route)
-                .map((r: any) => ({
-                    path: r.route.path,
-                    methods: Object.keys(r.route.methods)
-                })));
+            logger.info(`Server running on port ${PORT}`)
         })
 
     } catch (error) {

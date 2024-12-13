@@ -3,7 +3,6 @@ export interface PriceUpdate {
     price: number;
     volume?: number;
     timestamp: number;
-    source: 'raydium_standard' | 'raydium_legacy' | 'raydium_clmm' | 'bonding_curve';
 }
 
 export interface BatchProcessingResult {

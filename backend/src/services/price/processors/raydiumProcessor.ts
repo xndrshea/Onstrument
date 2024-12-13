@@ -3,12 +3,13 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { Liquidity } from '@raydium-io/raydium-sdk';
-import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 import { pool } from '../../../config/database';
 import { NATIVE_SOL_MINT } from '../../../constants';
-import { PriceUpdate } from '../queue/types';
 import { Metaplex } from '@metaplex-foundation/js';
 import { TokenListProvider, ENV } from '@solana/spl-token-registry';
+import { PriceUpdateQueue } from '../queue/priceUpdateQueue';
+import { getMint } from '@solana/spl-token';
+
 
 interface TokenMetadata {
     name: string;
@@ -49,6 +50,8 @@ export class RaydiumProcessor extends BaseProcessor {
 
     private async processStandardAMM(buffer: Buffer, accountKey: string): Promise<void> {
         try {
+            logger.info('Starting processStandardAMM', { accountKey });
+
             const poolState = Liquidity.getStateLayout(4).decode(buffer);
 
             // Add MORE logging
@@ -118,8 +121,30 @@ export class RaydiumProcessor extends BaseProcessor {
                 return;
             }
 
-            // Process the price update
-            await this.processTokenPrice(tokenToTrack, tokenDecimals, price, volume, 'raydium_standard');
+            // First ensure the token exists
+            await this.ensureTokenExists(tokenToTrack);
+            // Then record the price update which also saves token info
+            await this.recordPriceUpdate(tokenToTrack, price, volume);
+
+            logger.info('SOL pair validation:', {
+                baseMint: poolState.baseMint?.toString(),
+                quoteMint: poolState.quoteMint?.toString(),
+                isSolBase,
+                isSolQuote,
+                passed: isSolBase || isSolQuote
+            });
+
+            logger.info('Price calculation inputs:', {
+                baseReserve,
+                quoteReserve,
+                isSolBase
+            });
+
+            logger.info('Price calculation result:', {
+                price,
+                volume,
+                isValid: isFinite(price) && price > 0
+            });
 
         } catch (error) {
             logger.error('Error processing Standard AMM:', error);
@@ -195,20 +220,17 @@ export class RaydiumProcessor extends BaseProcessor {
                 isSolBase,
                 totalBaseVolume,
                 totalQuoteVolume,
-                price,
-                source: 'raydium_legacy'
+                price
             });
 
-            // Add to queue even if volume is 0 (as long as we can calculate a price)
-            if (isFinite(price) && price > 0) {
-                await this.queue.add({
-                    mintAddress: tokenToTrack,
-                    price,
-                    volume: Math.max(totalBaseVolume, totalQuoteVolume),
-                    timestamp: Date.now(),
-                    source: 'raydium_legacy'
-                });
-            }
+            // First ensure the token exists
+            await this.ensureTokenExists(tokenToTrack);
+            // Then record the price update which also saves token info
+            await this.recordPriceUpdate(
+                tokenToTrack,
+                price,
+                Math.max(totalBaseVolume, totalQuoteVolume)
+            );
 
             // Legacy AMM also gives us trade information
             if (baseVolume.in > 0 || quoteVolume.in > 0) {
@@ -239,43 +261,10 @@ export class RaydiumProcessor extends BaseProcessor {
             logger.info('CLMM Raw Data:', {
                 accountKey,
                 bufferLength: buffer.length,
-                bufferPreview: buffer.slice(0, 100).toString('hex'), // First 100 bytes as hex
+                bufferPreview: buffer.subarray(0, 100).toString('hex'), // First 100 bytes as hex
             });
         } catch (error) {
             logger.error('Error processing CLMM:', error);
-        }
-    }
-
-    private async processTokenPrice(
-        tokenMintAddress: string,
-        decimals: number,
-        price: number,
-        volume: number,
-        source: PriceUpdate['source']
-    ): Promise<void> {
-        try {
-            logger.info('Starting processTokenPrice:', {
-                tokenMintAddress,
-                decimals,
-                price,
-                volume,
-                source
-            });
-
-            // First ensure the token exists
-            const tokenResult = await this.ensureTokenExists(tokenMintAddress, decimals);
-            logger.info('Token ensure result:', { tokenMintAddress, tokenResult });
-
-            // Then record the price update
-            const priceResult = await this.recordPriceUpdate(tokenMintAddress, price, volume, source);
-            logger.info('Price update result:', { tokenMintAddress, price, priceResult });
-
-        } catch (error) {
-            logger.error('Error in processTokenPrice:', {
-                error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-                tokenMintAddress
-            });
         }
     }
 
@@ -289,101 +278,57 @@ export class RaydiumProcessor extends BaseProcessor {
         }
     }
 
-    private async ensureTokenExists(mintAddress: string, decimals: number): Promise<void> {
+    private async ensureTokenExists(mintAddress: string): Promise<boolean> {
         if (!mintAddress) {
             logger.error('Invalid mint address provided');
-            return;
+            return false;
         }
 
         try {
-            // Add more detailed logging
-            logger.info('Ensuring token exists:', {
-                mintAddress,
-                decimals,
-                callSite: new Error().stack?.split('\n')[2] // Get caller info
-            });
-
-            // Check if token exists in database with better error handling
+            // First check if token exists
             const existingToken = await pool.query(`
                 SELECT * FROM token_platform.tokens 
                 WHERE mint_address = $1
-            `, [mintAddress]).catch(err => {
-                logger.error('Database query failed:', {
-                    error: err.message,
-                    query: 'SELECT token',
-                    mintAddress
-                });
-                throw err;
-            });
+            `, [mintAddress]);
 
             if (existingToken.rows.length > 0) {
-                logger.info('Token already exists:', {
-                    mintAddress,
-                    tokenData: existingToken.rows[0]
-                });
-                return;
+                return true;
             }
 
-            // Fetch metadata with timeout and retry
-            logger.info('Fetching metadata for new token:', { mintAddress });
-            const metadata = await Promise.race([
-                this.getTokenMetadata(mintAddress).catch(err => {
-                    logger.error('Metadata fetch failed:', {
-                        error: err.message,
-                        mintAddress,
-                        stack: err.stack
-                    });
-                    return null;
-                }),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error(`Metadata fetch timeout after ${METADATA_TIMEOUT_MS}ms`)), METADATA_TIMEOUT_MS)
-                )
-            ]);
+            // If we get here, we need to create the token
+            const connection = new Connection(config.HELIUS_RPC_URL);
+            const mintInfo = await getMint(connection, new PublicKey(mintAddress));
+            const decimals = mintInfo.decimals;
 
-            logger.info('Metadata fetch result:', {
-                mintAddress,
-                metadata,
-                success: !!metadata
+            // Now fetch metadata
+            const metadata = await this.getTokenMetadata(mintAddress);
+            if (!metadata) {
+                logger.error('Failed to fetch token metadata:', { mintAddress });
+                return false;
+            }
+
+            await this.saveToken({
+                mint_address: mintAddress,
+                name: metadata.name || 'Unknown Token',
+                symbol: metadata.symbol || 'UNKNOWN',
+                decimals: decimals,
+                image_url: metadata.image || '',
+                verified: false
             });
 
-            // Insert with better error handling
-            const result = await pool.query(`
-                INSERT INTO token_platform.tokens 
-                (mint_address, name, symbol, decimals, image_url, verified)
-                VALUES ($1, $2, $3, $4, $5, false)
-                ON CONFLICT (mint_address) DO UPDATE 
-                SET updated_at = NOW()
-                RETURNING *
-            `, [
+            logger.info('Successfully created new token:', {
                 mintAddress,
-                (metadata as TokenMetadata)?.name || 'Unknown Token',
-                (metadata as TokenMetadata)?.symbol || 'UNKNOWN',
-                decimals,
-                (metadata as TokenMetadata)?.image || ''
-            ]).catch(err => {
-                logger.error('Token insertion failed:', {
-                    error: err.message,
-                    mintAddress,
-                    metadata
-                });
-                throw err;
+                name: metadata.name,
+                symbol: metadata.symbol
             });
 
-            logger.info('Token operation completed:', {
-                mintAddress,
-                operation: result.rows[0] ? 'inserted' : 'updated',
-                token: result.rows[0]
-            });
-
+            return true;
         } catch (error) {
             logger.error('Error in ensureTokenExists:', {
                 error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-                mintAddress,
-                decimals
+                mintAddress
             });
-            // Don't throw - let processing continue
-            return;
+            return false;
         }
     }
 
@@ -391,49 +336,62 @@ export class RaydiumProcessor extends BaseProcessor {
         mintAddress: string,
         price: number,
         volume: number,
-        source: PriceUpdate['source']
     ): Promise<void> {
         try {
-            logger.info('Starting price recording process:', {
+            // Ensure token exists in database
+            const tokenExists = await this.ensureTokenExists(mintAddress);
+
+            if (!tokenExists) {
+                logger.error('Failed to ensure token exists, skipping price update:', {
+                    mintAddress,
+                    price,
+                    volume
+                });
+                return;
+            }
+
+            // Queue the price update
+            const queue = PriceUpdateQueue.getInstance();
+            await queue.addUpdate({
                 mintAddress,
                 price,
                 volume,
-                source
+                timestamp: Math.floor(Date.now() / 1000),
             });
 
-            await PriceHistoryModel.recordPrice(mintAddress, price, volume);
-            logger.info('Successfully recorded price in history:', {
-                mintAddress,
-                price,
-                volume
-            });
-
-            await this.queuePriceUpdate({
-                mintAddress,
-                price,
-                volume,
-                timestamp: Date.now(),
-                source
-            });
-            logger.info('Successfully queued price update:', {
-                mintAddress,
-                price
-            });
         } catch (error) {
             logger.error('Error in recordPriceUpdate:', {
-                error,
-                errorType: (error as Error).constructor.name,
-                message: (error as Error).message,
+                error: error instanceof Error ? error.message : String(error),
                 mintAddress,
                 price,
-                volume
+                volume,
             });
         }
     }
 
     private async getTokenMetadata(mintAddress: string): Promise<TokenMetadata | null> {
         try {
-            // Try token list first (faster and more reliable)
+            // 1. Try Metaplex first (on-chain data)
+            try {
+                const mintPubkey = new PublicKey(mintAddress);
+                const token = await this.metaplex.nfts().findByMint({ mintAddress: mintPubkey });
+
+                if (token) {
+                    return {
+                        name: token.name,
+                        symbol: token.symbol,
+                        image: token.json?.image || '',
+                        uri: token.uri || ''
+                    };
+                }
+            } catch (metaplexError) {
+                logger.debug('Metaplex metadata fetch failed, trying token list', {
+                    mintAddress,
+                    error: metaplexError
+                });
+            }
+
+            // 2. Try Solana Token List (off-chain data)
             const provider = await new TokenListProvider().resolve();
             const tokenList = provider.filterByChainId(ENV.MainnetBeta).getList();
             const token = tokenList.find(t => t.address === mintAddress);
@@ -442,25 +400,58 @@ export class RaydiumProcessor extends BaseProcessor {
                 return {
                     name: token.name,
                     symbol: token.symbol,
-                    uri: '',
-                    image: token.logoURI || ''
+                    image: token.logoURI || '',
+                    uri: ''
                 };
             }
 
-            // Only try Metaplex as fallback
-            const mint = new PublicKey(mintAddress);
-            const metadata = await this.metaplex.nfts().findByMint({ mintAddress: mint });
-
+            // 3. Fallback to basic info
             return {
-                name: metadata.name,
-                symbol: metadata.symbol,
-                uri: metadata.uri,
-                image: metadata.json?.image || ''
+                name: `Unknown Token ${mintAddress.slice(0, 4)}...${mintAddress.slice(-4)}`,
+                symbol: 'UNKNOWN',
+                image: '',
+                uri: ''
             };
+
         } catch (error) {
-            logger.error('Error fetching token metadata:', { mintAddress, error: (error as Error).message });
+            logger.error('Error fetching token metadata:', {
+                error: error instanceof Error ? error.message : String(error),
+                mintAddress
+            });
             return null;
         }
+    }
+
+    private async saveToken(tokenData: {
+        mint_address: string,
+        name: string,
+        symbol: string,
+        decimals: number,
+        metadata_url?: string,
+        image_url?: string,
+        verified: boolean
+    }): Promise<void> {
+        await pool.query(`
+            INSERT INTO token_platform.tokens 
+            (mint_address, name, symbol, decimals, metadata_url, image_url, verified)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (mint_address) DO UPDATE 
+            SET 
+                name = EXCLUDED.name,
+                symbol = EXCLUDED.symbol,
+                decimals = EXCLUDED.decimals,
+                metadata_url = EXCLUDED.metadata_url,
+                image_url = EXCLUDED.image_url,
+                verified = EXCLUDED.verified
+        `, [
+            tokenData.mint_address,
+            tokenData.name,
+            tokenData.symbol,
+            tokenData.decimals,
+            tokenData.metadata_url || null,
+            tokenData.image_url || null,
+            tokenData.verified
+        ]);
     }
 }
 

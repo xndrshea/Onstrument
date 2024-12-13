@@ -1,7 +1,8 @@
-import { BaseProcessor, PriceUpdate } from './baseProcessor';
+import { BaseProcessor } from './baseProcessor';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
+import { PriceUpdate } from '../queue/types';
 
 export class BondingCurveProcessor extends BaseProcessor {
     private connection: Connection;
@@ -47,7 +48,6 @@ export class BondingCurveProcessor extends BaseProcessor {
                 mintAddress: mintAddress.toString(),
                 price,
                 timestamp: Date.now(),
-                source: 'bonding_curve',
                 volume: Number(vaultBalance.value.amount)
             };
 
