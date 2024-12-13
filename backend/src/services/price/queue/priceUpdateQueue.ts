@@ -1,99 +1,85 @@
-import { PriceUpdate } from '../processors/baseProcessor';
-import { PriceHistoryModel } from '../../../models/priceHistoryModel';
+import { PriceUpdate } from './types';
 import { logger } from '../../../utils/logger';
-import { QueueMetrics } from './types';
+import { pool } from '../../../config/database';
 
 export class PriceUpdateQueue {
     private static instance: PriceUpdateQueue;
     private queue: PriceUpdate[] = [];
-    private processing = false;
-    private readonly BATCH_SIZE = 1000;
-    private readonly FLUSH_INTERVAL = 1000; // 1 second
-    private processedCount = 0;
-    private failedCount = 0;
-    private lastProcessingTime = 0;
+    private isProcessing = false;
 
-    private constructor() {
-        setInterval(() => this.processBatch(), this.FLUSH_INTERVAL);
-    }
-
-    static getInstance(): PriceUpdateQueue {
-        if (!this.instance) {
-            this.instance = new PriceUpdateQueue();
+    public static getInstance(): PriceUpdateQueue {
+        if (!PriceUpdateQueue.instance) {
+            PriceUpdateQueue.instance = new PriceUpdateQueue();
         }
-        return this.instance;
+        return PriceUpdateQueue.instance;
     }
 
-    async add(update: PriceUpdate): Promise<void> {
-        logger.info('Adding price update to queue:', {
+    constructor() {
+        // Start processing the queue immediately
+        this.startProcessing();
+    }
+
+    private async startProcessing() {
+        if (this.isProcessing) return;
+
+        this.isProcessing = true;
+        logger.info('Starting price update queue processor');
+
+        while (true) {
+            try {
+                // Process items in batches for better performance
+                while (this.queue.length > 0) {
+                    const update = this.queue.shift()!;
+                    await this.processUpdate(update);
+                }
+                // Only sleep if queue is empty
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (error) {
+                logger.error('Error processing price update:', error);
+            }
+        }
+    }
+
+    private async processUpdate(update: PriceUpdate) {
+        try {
+            await pool.query(`
+                INSERT INTO token_platform.price_history 
+                (mint_address, time, price, open, high, low, close, volume)
+                VALUES ($1, $2, $3, $3, $3, $3, $3, $4)
+                ON CONFLICT (mint_address, time) 
+                DO UPDATE SET
+                    price = (token_platform.price_history.price + EXCLUDED.price) / 2,
+                    volume = token_platform.price_history.volume + EXCLUDED.volume,
+                    high = GREATEST(token_platform.price_history.high, EXCLUDED.price),
+                    low = LEAST(token_platform.price_history.low, EXCLUDED.price),
+                    close = EXCLUDED.price
+            `, [update.mintAddress, update.timestamp, update.price, update.volume || 0]);
+        } catch (error) {
+            logger.error('Failed to process price update:', {
+                error,
+                update
+            });
+        }
+    }
+
+    public async add(update: PriceUpdate) {
+        this.queue.push(update);
+        logger.info('Added price update to queue. Queue length:', this.queue.length);
+    }
+
+    public async addUpdate(update: PriceUpdate): Promise<void> {
+        this.queue.push(update);
+        logger.info('Added price update to queue:', {
             mintAddress: update.mintAddress,
             price: update.price,
-            volume: update.volume,
-            source: update.source,
-            queueLength: this.queue.length + 1
+            queueLength: this.queue.length
         });
-
-        this.queue.push(update);
-
-        if (this.queue.length >= this.BATCH_SIZE) {
-            logger.info('Queue reached batch size, processing...', {
-                batchSize: this.BATCH_SIZE,
-                queueLength: this.queue.length
-            });
-            await this.processBatch();
-        }
     }
 
-    private async processBatch(): Promise<void> {
-        if (this.processing || this.queue.length === 0) {
-            logger.debug('Skipping batch process:', {
-                isProcessing: this.processing,
-                queueLength: this.queue.length
-            });
-            return;
-        }
-
-        this.processing = true;
-        const startTime = Date.now();
-        const batch = this.queue.splice(0, this.BATCH_SIZE);
-
-        try {
-            logger.info('Processing price update batch:', {
-                batchSize: batch.length,
-                firstUpdate: batch[0],
-                lastUpdate: batch[batch.length - 1]
-            });
-
-            for (const update of batch) {
-                await PriceHistoryModel.recordPrice(
-                    update.mintAddress,
-                    update.price,
-                    update.volume
-                );
-            }
-
-            const duration = Date.now() - startTime;
-            logger.info('Batch processing complete:', {
-                processedCount: batch.length,
-                durationMs: duration,
-                remainingInQueue: this.queue.length
-            });
-        } catch (error) {
-            logger.error('Error processing batch:', {
-                error: error instanceof Error ? error.message : 'Unknown error',
-                batchSize: batch.length
-            });
-        } finally {
-            this.processing = false;
-        }
-    }
-
-    public getMetrics(): QueueMetrics {
+    public getMetrics() {
         return {
             queueLength: this.queue.length,
-            processedCount: this.processedCount,
-            failedCount: this.failedCount,
-            lastProcessingTime: this.lastProcessingTime
+            isProcessing: this.isProcessing
         };
     }
 }

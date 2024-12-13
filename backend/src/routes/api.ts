@@ -130,6 +130,22 @@ router.get('/market/tokens', async (req, res) => {
         const offset = (page - 1) * limit;
         const type = (req.query.type as string) || 'all';
 
+        // First get total count
+        const countQuery = `
+            SELECT COUNT(*) 
+            FROM (
+                SELECT mint_address FROM token_platform.tokens
+                ${type === 'custom' ? 'WHERE 1=0' : ''}
+                UNION ALL
+                SELECT mint_address FROM token_platform.custom_tokens
+                ${type === 'dex' ? 'WHERE 1=0' : ''}
+            ) as combined_count
+        `;
+
+        const countResult = await pool.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].count);
+
+        // Then get paginated data
         const query = `
             WITH combined_tokens AS (
                 SELECT 
@@ -165,11 +181,20 @@ router.get('/market/tokens', async (req, res) => {
         `;
 
         const result = await pool.query(query, [limit, offset]);
-        res.json({ tokens: result.rows });
+
+        res.json({
+            tokens: result.rows,
+            pagination: {
+                total: totalCount,
+                page,
+                limit,
+                pages: Math.ceil(totalCount / limit)
+            }
+        });
 
     } catch (error) {
-        logger.error('Market tokens error:', error);
-        res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+        logger.error('Error fetching market tokens:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

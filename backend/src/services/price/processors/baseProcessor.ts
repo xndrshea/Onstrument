@@ -2,15 +2,7 @@ import { EventEmitter } from 'events';
 import { PriceUpdateQueue } from '../queue/priceUpdateQueue';
 import { logger } from '../../../utils/logger';
 import { pool } from '../../../config/database';
-
-export interface PriceUpdate {
-    mintAddress: string;
-    price: number;
-    volume?: number;
-    timestamp: number;
-    source: string;
-}
-
+import { PriceUpdate } from '../queue/types';
 export abstract class BaseProcessor extends EventEmitter {
     protected static isActive: boolean = false;
     protected static lastProcessedTime: number = 0;
