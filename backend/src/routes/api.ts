@@ -3,9 +3,7 @@ import { Router } from 'express';
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
 import { HeliusManager } from '../services/price/websocket/heliusManager';
-import { Connection } from '@solana/web3.js';
 import rateLimit from 'express-rate-limit';
-import { config } from '../config/env';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
 import { RaydiumProcessor } from '../services/price/processors/raydiumProcessor';
 import { BondingCurveProcessor } from '../services/price/processors/bondingCurveProcessor';
@@ -22,12 +20,11 @@ router.use(cors({
 }));
 
 const heliusService = HeliusManager.getInstance();
-const connection = new Connection(config.HELIUS_RPC_URL);
 const priceQueue = PriceUpdateQueue.getInstance();
 
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
+    windowMs: 1 * 60 * 1000,  // 1 minute window
+    max: 300,                  // 300 requests per minute
     message: 'Too many requests from this IP, please try again later.'
 });
 
@@ -123,80 +120,54 @@ router.get('/tokens', async (req, res) => {
 });
 
 // Add new endpoint for market page
-router.get('/market/tokens', async (req, res) => {
-    try {
-        const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 10;
-        const offset = (page - 1) * limit;
-        const type = (req.query.type as string) || 'all';
+router.get('/market/tokens',
+    (req, res, next) => next(),
+    async (req, res) => {
+        try {
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 10;
+            const offset = (page - 1) * limit;
 
-        // First get total count
-        const countQuery = `
-            SELECT COUNT(*) 
-            FROM (
-                SELECT mint_address FROM token_platform.tokens
-                ${type === 'custom' ? 'WHERE 1=0' : ''}
-                UNION ALL
-                SELECT mint_address FROM token_platform.custom_tokens
-                ${type === 'dex' ? 'WHERE 1=0' : ''}
-            ) as combined_count
-        `;
-
-        const countResult = await pool.query(countQuery);
-        const totalCount = parseInt(countResult.rows[0].count);
-
-        // Then get paginated data
-        const query = `
-            WITH combined_tokens AS (
+            // Only fetch from tokens table (DEX tokens)
+            const tokensQuery = `
                 SELECT 
-                    t.mint_address,
-                    t.name,
-                    t.symbol,
-                    t.decimals,
-                    t.metadata_url,
-                    ct.curve_address,
-                    t.created_at,
+                    mint_address,
+                    name,
+                    symbol,
                     'pool' as token_type
-                FROM token_platform.tokens t
-                LEFT JOIN token_platform.custom_tokens ct ON t.mint_address = ct.mint_address
-                ${type === 'custom' ? 'WHERE 1=0' : ''}
-                
-                UNION ALL
-                
-                SELECT 
-                    ct.mint_address,
-                    ct.name,
-                    ct.symbol,
-                    ct.decimals,
-                    ct.metadata_url,
-                    ct.curve_address,
-                    ct.created_at,
-                    'custom' as token_type
-                FROM token_platform.custom_tokens ct
-                ${type === 'dex' ? 'WHERE 1=0' : ''}
-            )
-            SELECT * FROM combined_tokens
-            ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2
-        `;
+                FROM token_platform.tokens
+                WHERE name IS NOT NULL 
+                AND symbol IS NOT NULL
+                ORDER BY name ASC
+                LIMIT $1 OFFSET $2
+            `;
 
-        const result = await pool.query(query, [limit, offset]);
+            const countQuery = `
+                SELECT COUNT(*) 
+                FROM token_platform.tokens
+                WHERE name IS NOT NULL 
+                AND symbol IS NOT NULL
+            `;
 
-        res.json({
-            tokens: result.rows,
-            pagination: {
-                total: totalCount,
-                page,
-                limit,
-                pages: Math.ceil(totalCount / limit)
-            }
-        });
+            const [countResult, tokensResult] = await Promise.all([
+                pool.query(countQuery),
+                pool.query(tokensQuery, [limit, offset])
+            ]);
 
-    } catch (error) {
-        logger.error('Error fetching market tokens:', error);
-        res.status(500).json({ error: 'Internal server error' });
+            res.json({
+                tokens: tokensResult.rows,
+                pagination: {
+                    total: parseInt(countResult.rows[0].count),
+                    page,
+                    limit
+                }
+            });
+        } catch (error) {
+            logger.error('Error fetching market tokens:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
-});
+);
 
 // For Lightweight Charts
 router.get('/price-history/:mintAddress', async (req, res) => {
@@ -264,6 +235,39 @@ router.get('/ws/status', async (_req, res) => {
     } catch (error) {
         logger.error('Error fetching WebSocket status:', error);
         res.status(500).json({ error: 'Failed to fetch WebSocket status' });
+    }
+});
+
+// Add a new endpoint for getting a single custom token
+router.get('/tokens/custom/:mintAddress', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        logger.info(`Fetching custom token: ${mintAddress}`);
+
+        const result = await pool.query(`
+            SELECT * FROM token_platform.custom_tokens
+            WHERE mint_address = $1
+        `, [mintAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Token not found' });
+        }
+
+        const token = result.rows[0];
+        res.json({
+            mintAddress: token.mint_address,
+            curveAddress: token.curve_address,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            description: token.description,
+            metadataUri: token.metadata_url,
+            curveConfig: token.curve_config,
+            createdAt: token.created_at
+        });
+    } catch (error) {
+        logger.error('Error fetching custom token:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

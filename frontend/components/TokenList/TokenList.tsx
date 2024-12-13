@@ -120,47 +120,36 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                     </button>
                 </div>
             </div>
-            {tokens.length > 0 ? (
-                <div className="token-grid">
-                    {sortedTokens.map(token => {
-                        if (!token.mintAddress) {
-                            console.warn('Token missing mintAddress:', token);
-                            return null;
-                        }
-                        return (
-                            <Link
-                                to={`/token/${token.mintAddress}`}
-                                key={token.mintAddress}
-                                className="token-card"
-                            >
-                                <h3>{token.name || 'Unnamed Token'}</h3>
-                                <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
-                                <p className="token-description">{token.description || 'No description available'}</p>
-                                <p className="token-mint">
-                                    Mint: {token.mintAddress ?
-                                        `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
-                                        'N/A'}
-                                </p>
-                                <p className="token-date">
-                                    {token.createdAt ?
-                                        new Date(token.createdAt).toLocaleDateString() :
-                                        'N/A'}
-                                </p>
-                                <p className="token-market-cap">
-                                    Market Cap: {calculateMarketCap(token)}
-                                </p>
-                                <p className="token-supply">
-                                    Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
-                                </p>
-                            </Link>
-                        );
-                    })}
-                </div>
-            ) : (
-                <div className="no-tokens">
-                    <p>No tokens have been created yet.</p>
-                </div>
-            )}
+            <div className="token-list-content">
+                {sortedTokens.map((token) => (
+                    <Link
+                        key={token.mintAddress}
+                        to={`/token/${token.mintAddress}`}
+                        state={{ tokenType: 'custom' }}
+                        className="token-item"
+                    >
+                        <h3>{token.name || 'Unnamed Token'}</h3>
+                        <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
+                        <p className="token-description">{token.description || 'No description available'}</p>
+                        <p className="token-mint">
+                            Mint: {token.mintAddress ?
+                                `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
+                                'N/A'}
+                        </p>
+                        <p className="token-date">
+                            {token.createdAt ?
+                                new Date(token.createdAt).toLocaleDateString() :
+                                'N/A'}
+                        </p>
+                        <p className="token-market-cap">
+                            Market Cap: {calculateMarketCap(token)}
+                        </p>
+                        <p className="token-supply">
+                            Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
+                        </p>
+                    </Link>
+                ))}
+            </div>
         </div>
     )
 } 

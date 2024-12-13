@@ -98,18 +98,33 @@ export class TokenService {
         }
     }
 
-    async getByMintAddress(mintAddress: string): Promise<TokenRecord | null> {
+    async getByMintAddress(mintAddress: string, tokenType?: string): Promise<TokenRecord | null> {
         try {
-            const response = await fetch(`${API_BASE_URL}/tokens/${mintAddress}`);
-            if (response.status === 404) {
-                return null;
+            // For custom tokens, use the simple /tokens endpoint first
+            const customResponse = await fetch(`${API_BASE_URL}/tokens/custom/${mintAddress}`);
+            if (customResponse.ok) {
+                const data = await customResponse.json();
+                return {
+                    ...data,
+                    tokenType: 'custom'
+                };
             }
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+
+            // If not found as custom token and type isn't explicitly custom, try market
+            if (tokenType !== 'custom') {
+                const marketResponse = await fetch(`${API_BASE_URL}/market/tokens/${mintAddress}`);
+                if (marketResponse.ok) {
+                    const data = await marketResponse.json();
+                    return {
+                        ...data,
+                        tokenType: 'market'
+                    };
+                }
             }
-            return await response.json();
+
+            return null;
         } catch (error) {
-            logger.error('Error fetching token:', error);
+            console.error('Error fetching token:', error);
             throw error;
         }
     }
