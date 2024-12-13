@@ -3,6 +3,10 @@ export interface PriceUpdate {
     price: number;
     volume?: number;
     timestamp: number;
+    open?: number;
+    high?: number;
+    low?: number;
+    close?: number;
 }
 
 export interface BatchProcessingResult {

@@ -33,13 +33,25 @@ pool.query('SELECT NOW()', (err) => {
 export async function initializeDatabase() {
     const client = await pool.connect()
     try {
+        // Part 1: Regular table creation in transaction
         await client.query('BEGIN')
+
+        // Create schema first
+        await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform`)
 
         // Enable TimescaleDB
         await client.query('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE')
 
-        // Create schema if it doesn't exist
-        await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform`)
+        // Drop existing continuous aggregates first
+        await client.query(`
+            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1m CASCADE;
+            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1h CASCADE;
+            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1d CASCADE;
+        `)
+
+        // Drop existing tables to recreate as hypertables
+        await client.query(`DROP TABLE IF EXISTS token_platform.price_history CASCADE`)
+        await client.query(`DROP TABLE IF EXISTS token_platform.trades CASCADE`)
 
         // Create custom_tokens table (non-timeseries)
         await client.query(`
@@ -59,40 +71,58 @@ export async function initializeDatabase() {
         // Create or update tokens table
         await client.query(`
             CREATE TABLE IF NOT EXISTS token_platform.tokens (
-                mint_address VARCHAR(255) PRIMARY KEY
+                mint_address VARCHAR(255) PRIMARY KEY,
+                name VARCHAR(255),
+                symbol VARCHAR(20),
+                metadata_url TEXT,
+                metadata_status VARCHAR(50),
+                metadata_source VARCHAR(50),
+                metadata_fetch_attempts INTEGER DEFAULT 0,
+                last_metadata_fetch TIMESTAMP WITH TIME ZONE,
+                verified BOOLEAN DEFAULT FALSE,
+                description TEXT,
+                image_url TEXT,
+                attributes JSONB,
+                off_chain_metadata JSONB
             );
-
-            ALTER TABLE token_platform.tokens 
-            ADD COLUMN IF NOT EXISTS description TEXT,
-            ADD COLUMN IF NOT EXISTS image_url TEXT,
-            ADD COLUMN IF NOT EXISTS attributes JSONB,
-            ADD COLUMN IF NOT EXISTS off_chain_metadata JSONB,
-            ADD COLUMN IF NOT EXISTS metadata_status TEXT DEFAULT 'pending',
-            ADD COLUMN IF NOT EXISTS metadata_source TEXT,
-            ADD COLUMN IF NOT EXISTS last_metadata_fetch TIMESTAMPTZ;
         `);
 
-        // Drop existing tables to recreate as hypertables
-        await client.query(`DROP TABLE IF EXISTS token_platform.price_history`)
-        await client.query(`DROP TABLE IF EXISTS token_platform.trades`)
-
-        // Create price_history as a hypertable
+        // Create price_history table first
         await client.query(`
             CREATE TABLE IF NOT EXISTS token_platform.price_history (
                 time TIMESTAMPTZ NOT NULL,
                 mint_address VARCHAR(255) NOT NULL,
                 price NUMERIC(40, 18) NOT NULL,
-                volume NUMERIC(40, 18) DEFAULT 0
+                open NUMERIC(40, 18) NOT NULL,
+                high NUMERIC(40, 18) NOT NULL,
+                low NUMERIC(40, 18) NOT NULL,
+                close NUMERIC(40, 18) NOT NULL,
+                volume NUMERIC(40, 18) DEFAULT 0,
+                UNIQUE(time, mint_address)
             )
         `)
 
-        // Convert to hypertable
+        // Then convert to hypertable
         await client.query(`
             SELECT create_hypertable(
                 'token_platform.price_history',
                 'time',
+                partitioning_column => 'mint_address',
+                number_partitions => 4,
+                chunk_time_interval => INTERVAL '1 day',
                 if_not_exists => TRUE
             )
+        `)
+
+        // Add compression policy
+        await client.query(`
+            ALTER TABLE token_platform.price_history SET (
+                timescaledb.compress,
+                timescaledb.compress_segmentby = 'mint_address'
+            );
+
+            SELECT add_compression_policy('token_platform.price_history',
+                compress_after => INTERVAL '7 days');
         `)
 
         // Create trades as a hypertable
@@ -108,7 +138,7 @@ export async function initializeDatabase() {
                 total DECIMAL NOT NULL,
                 price DECIMAL NOT NULL,
                 slot BIGINT NOT NULL,
-                UNIQUE(signature)
+                PRIMARY KEY (time, signature)
             )
         `)
 
@@ -129,17 +159,13 @@ export async function initializeDatabase() {
             
             CREATE INDEX IF NOT EXISTS idx_trades_token_time 
             ON token_platform.trades (token_address, time DESC);
-            
-            CREATE INDEX IF NOT EXISTS idx_tokens_symbol 
-            ON token_platform.tokens(symbol);
-            
-            CREATE INDEX IF NOT EXISTS idx_tokens_verified 
-            ON token_platform.tokens(verified);
         `)
 
+        await client.query('COMMIT')
+
+        // Part 2: Create continuous aggregates outside transaction
         // Create continuous aggregates for different time intervals
         await client.query(`
-            -- 1 minute aggregates
             CREATE MATERIALIZED VIEW IF NOT EXISTS token_platform.price_history_1m
             WITH (timescaledb.continuous) AS
             SELECT 
@@ -152,8 +178,9 @@ export async function initializeDatabase() {
                 sum(volume) as volume
             FROM token_platform.price_history
             GROUP BY bucket, mint_address;
+        `);
 
-            -- 1 hour aggregates
+        await client.query(`
             CREATE MATERIALIZED VIEW IF NOT EXISTS token_platform.price_history_1h
             WITH (timescaledb.continuous) AS
             SELECT 
@@ -166,8 +193,9 @@ export async function initializeDatabase() {
                 sum(volume) as volume
             FROM token_platform.price_history
             GROUP BY bucket, mint_address;
+        `);
 
-            -- 1 day aggregates
+        await client.query(`
             CREATE MATERIALIZED VIEW IF NOT EXISTS token_platform.price_history_1d
             WITH (timescaledb.continuous) AS
             SELECT 
@@ -180,8 +208,10 @@ export async function initializeDatabase() {
                 sum(volume) as volume
             FROM token_platform.price_history
             GROUP BY bucket, mint_address;
+        `);
 
-            -- Add refresh policies
+        // Add refresh policies outside transaction
+        await client.query(`
             SELECT add_continuous_aggregate_policy('token_platform.price_history_1m',
                 start_offset => INTERVAL '1 hour',
                 end_offset => INTERVAL '1 minute',
@@ -198,7 +228,6 @@ export async function initializeDatabase() {
                 schedule_interval => INTERVAL '1 day');
         `);
 
-        await client.query('COMMIT')
         logger.info('Database initialized successfully')
         return true
 

@@ -60,7 +60,15 @@ export abstract class BaseProcessor extends EventEmitter {
                     CURRENT_TIMESTAMP,
                     $1, $2, $3, $4, $5, $6, $7, $8, $9
                 )
-                ON CONFLICT (signature) DO NOTHING
+                ON CONFLICT (time, signature) DO UPDATE SET
+                    token_address = EXCLUDED.token_address,
+                    token_type = EXCLUDED.token_type,
+                    wallet_address = EXCLUDED.wallet_address,
+                    side = EXCLUDED.side,
+                    amount = EXCLUDED.amount,
+                    total = EXCLUDED.total,
+                    price = EXCLUDED.price,
+                    slot = EXCLUDED.slot
             `, [
                 trade.signature,
                 trade.tokenAddress,

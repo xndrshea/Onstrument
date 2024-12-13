@@ -1,7 +1,5 @@
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
-import { PriceUpdateQueue } from '../services/price/queue/priceUpdateQueue';
-
 export class PriceHistoryModel {
     // Map TradingView intervals to our base aggregates
     private static readonly TIMEFRAME_MAP = {
@@ -28,44 +26,35 @@ export class PriceHistoryModel {
     static async getOHLCV(
         tokenMintAddress: string,
         resolution: string,
-        from: number,
-        to: number
+        fromTimestamp: number,
+        toTimestamp: number
     ) {
         try {
-            const interval = this.getTimeScaleInterval(resolution);
-            const sourceView = this.TIMEFRAME_MAP[resolution as keyof typeof this.TIMEFRAME_MAP] || 'price_history_1h';
+            // Select appropriate time bucket based on resolution
+            const timeBucket = resolution === '1D' ? '1 day' :
+                resolution === '1H' ? '1 hour' :
+                    '1 minute';
 
             const result = await pool.query(`
-                WITH source_data AS (
-                    SELECT 
-                        time_bucket($1, bucket) as time,
-                        first(open, bucket) as open,
-                        max(high) as high,
-                        min(low) as low,
-                        last(close, bucket) as close,
-                        sum(volume) as volume
-                    FROM token_platform.${sourceView}
-                    WHERE 
-                        mint_address = $2
-                        AND bucket >= to_timestamp($3)
-                        AND bucket <= to_timestamp($4)
-                    GROUP BY 1
-                )
-                SELECT * FROM source_data 
-                WHERE time IS NOT NULL
-                ORDER BY time ASC
-            `, [interval, tokenMintAddress, from / 1000, to / 1000]);
+                SELECT 
+                    extract(epoch from time_bucket($1, time)) * 1000 as time,
+                    first(open, time) as open,
+                    max(high) as high,
+                    min(low) as low,
+                    last(close, time) as close,
+                    sum(volume) as volume
+                FROM token_platform.price_history
+                WHERE 
+                    mint_address = $2 AND
+                    time >= to_timestamp($3) AND
+                    time <= to_timestamp($4)
+                GROUP BY time_bucket($1, time)
+                ORDER BY time_bucket($1, time) ASC
+            `, [timeBucket, tokenMintAddress, fromTimestamp, toTimestamp]);
 
-            return result.rows.map(row => ({
-                time: Math.floor(new Date(row.time).getTime() / 1000),
-                open: parseFloat(row.open),
-                high: parseFloat(row.high),
-                low: parseFloat(row.low),
-                close: parseFloat(row.close),
-                volume: parseFloat(row.volume)
-            }));
+            return result.rows;
         } catch (error) {
-            logger.error('Error fetching OHLCV:', error);
+            logger.error('Error fetching OHLCV data:', error);
             throw error;
         }
     }
