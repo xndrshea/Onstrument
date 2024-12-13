@@ -46,6 +46,7 @@ export abstract class BaseProcessor extends EventEmitter {
         try {
             await pool.query(`
                 INSERT INTO token_platform.trades (
+                    time,
                     signature,
                     token_address,
                     token_type,
@@ -55,7 +56,10 @@ export abstract class BaseProcessor extends EventEmitter {
                     total,
                     price,
                     slot
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ) VALUES (
+                    CURRENT_TIMESTAMP,
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9
+                )
                 ON CONFLICT (signature) DO NOTHING
             `, [
                 trade.signature,

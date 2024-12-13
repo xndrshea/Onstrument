@@ -42,18 +42,55 @@ export class PriceUpdateQueue {
 
     private async processUpdate(update: PriceUpdate) {
         try {
+            // Use time_bucket for 1-minute OHLCV candles
             await pool.query(`
-                INSERT INTO token_platform.price_history 
-                (mint_address, time, price, open, high, low, close, volume)
-                VALUES ($1, $2, $3, $3, $3, $3, $3, $4)
-                ON CONFLICT (mint_address, time) 
-                DO UPDATE SET
-                    price = (token_platform.price_history.price + EXCLUDED.price) / 2,
-                    volume = token_platform.price_history.volume + EXCLUDED.volume,
-                    high = GREATEST(token_platform.price_history.high, EXCLUDED.price),
-                    low = LEAST(token_platform.price_history.low, EXCLUDED.price),
-                    close = EXCLUDED.price
-            `, [update.mintAddress, update.timestamp, update.price, update.volume || 0]);
+                INSERT INTO token_platform.price_history (
+                    time,
+                    mint_address,
+                    price,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume
+                )
+                VALUES (
+                    time_bucket('1 minute', to_timestamp($1)),
+                    $2,
+                    $3,
+                    COALESCE((
+                        SELECT open 
+                        FROM token_platform.price_history 
+                        WHERE mint_address = $2 
+                        AND time = time_bucket('1 minute', to_timestamp($1))
+                    ), $3),
+                    GREATEST(COALESCE((
+                        SELECT high 
+                        FROM token_platform.price_history 
+                        WHERE mint_address = $2 
+                        AND time = time_bucket('1 minute', to_timestamp($1))
+                    ), $3), $3),
+                    LEAST(COALESCE((
+                        SELECT low 
+                        FROM token_platform.price_history 
+                        WHERE mint_address = $2 
+                        AND time = time_bucket('1 minute', to_timestamp($1))
+                    ), $3), $3),
+                    $3,
+                    $4
+                )
+                ON CONFLICT (mint_address, time) DO UPDATE
+                SET 
+                    high = GREATEST(token_platform.price_history.high, EXCLUDED.high),
+                    low = LEAST(token_platform.price_history.low, EXCLUDED.low),
+                    close = EXCLUDED.close,
+                    volume = token_platform.price_history.volume + EXCLUDED.volume
+            `, [
+                update.timestamp / 1000,
+                update.mintAddress,
+                update.price,
+                update.volume || 0
+            ]);
         } catch (error) {
             logger.error('Failed to process price update:', {
                 error,

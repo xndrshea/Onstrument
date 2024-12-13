@@ -9,7 +9,8 @@ import { PriceUpdateQueue } from '../queue/priceUpdateQueue';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { publicKey, Umi } from '@metaplex-foundation/umi';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata'
-import { findMetadataPda, Metadata, fetchMetadata } from '@metaplex-foundation/mpl-token-metadata'
+import { findMetadataPda, fetchMetadata } from '@metaplex-foundation/mpl-token-metadata'
+import { MetadataService } from '../../metadata/metadataService';
 
 
 
@@ -307,59 +308,26 @@ export class RaydiumProcessor extends BaseProcessor {
         }
     }
 
-    private async getTokenMetadata(mintAddress: string): Promise<TokenMetadata | null> {
-        try {
-            const metadataPda = findMetadataPda(this.umi, { mint: publicKey(mintAddress) })[0];
-            const metadata = await fetchMetadata(this.umi, metadataPda);
-
-            return {
-                name: metadata.name,
-                symbol: metadata.symbol,
-                uri: metadata.uri,
-                // Add any other fields you need from the metadata
-            };
-        } catch (error) {
-            logger.error(`Failed to fetch metadata for ${mintAddress}: ${error}`);
-            return null;
-        }
-    }
-
 
     private async ensureTokenExists(mintAddress: string): Promise<boolean> {
         try {
-            // First just check existence using indexed mint_address
-            const existingCheck = await pool.query(
-                'SELECT 1 FROM token_platform.tokens WHERE mint_address = $1 LIMIT 1',
+            // Just ensure minimal record exists
+            await pool.query(
+                `INSERT INTO token_platform.tokens (mint_address)
+                 VALUES ($1)
+                 ON CONFLICT (mint_address) DO NOTHING`,
                 [mintAddress]
             );
 
-            if (existingCheck.rows.length === 0) {
-                // Token doesn't exist at all, try to create it
-                const metadata = await this.getTokenMetadata(mintAddress);
-                if (metadata) {
-                    await this.saveToken(mintAddress, metadata);
-                    return true;
-                }
-                return false;
-            }
-
-            // Only fetch full token data if we need to check for unknown values
-            const tokenData = await pool.query(
-                'SELECT name, symbol FROM token_platform.tokens WHERE mint_address = $1 AND (name IS NULL OR name = \'Unknown Token\' OR symbol IS NULL OR symbol = \'UNKNOWN\')',
-                [mintAddress]
+            // Queue metadata update separately
+            await MetadataService.getInstance().queueMetadataUpdate(
+                mintAddress,
+                'raydium_processor'
             );
-
-            if (tokenData.rows.length > 0) {
-                // Token exists but needs metadata update
-                const metadata = await this.getTokenMetadata(mintAddress);
-                if (metadata) {
-                    await this.saveToken(mintAddress, metadata);
-                }
-            }
 
             return true;
         } catch (error) {
-            logger.error(`Error ensuring token exists for ${mintAddress}: ${error instanceof Error ? error.message : String(error)}`);
+            logger.error(`Error ensuring token exists for ${mintAddress}:`, error);
             return false;
         }
     }
