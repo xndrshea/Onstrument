@@ -1,19 +1,7 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
-import { pool } from '../config/database';
 import { config } from '../config/env';
-import { PriceHistoryModel } from '../models/priceHistoryModel';
-import { Connection, PublicKey } from '@solana/web3.js';
-
-interface ParsedPoolData {
-    mintAddress: string;
-    price: number;
-    baseReserve: number;
-    quoteReserve: number;
-    baseVolume?: number;
-    quoteVolume?: number;
-}
 
 export class HeliusWebSocketService extends EventEmitter {
     private static instance: HeliusWebSocketService;

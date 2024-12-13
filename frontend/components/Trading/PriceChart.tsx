@@ -1,4 +1,4 @@
-import { createChart, ColorType, IChartApi, ISeriesApi, LineData, UTCTimestamp, Time } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineData, UTCTimestamp } from 'lightweight-charts';
 import { useEffect, useRef } from 'react';
 import { TokenRecord } from '../../../shared/types/token';
 import { priceClient } from '../../services/priceClient';

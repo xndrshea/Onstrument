@@ -331,20 +331,6 @@ export class RaydiumProcessor extends BaseProcessor {
             return false;
         }
     }
-
-    private async saveToken(mintAddress: string, metadata: any): Promise<void> {
-        try {
-            await pool.query(
-                `INSERT INTO token_platform.tokens (mint_address, name, symbol, decimals)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (mint_address) 
-                 DO UPDATE SET name = $2, symbol = $3, decimals = $4`,
-                [mintAddress, metadata.name, metadata.symbol, metadata.decimals]
-            );
-        } catch (error) {
-            logger.error(`Failed to save token ${mintAddress}`);
-        }
-    }
 }
 
 

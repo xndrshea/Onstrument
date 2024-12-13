@@ -25,6 +25,19 @@ export class MetadataService {
         return MetadataService.instance;
     }
 
+    async getMetadata(mintAddress: string): Promise<any> {
+        // Return basic DB info while metadata processes
+        const result = await pool.query(
+            'SELECT name, symbol, metadata_url FROM token_platform.tokens WHERE mint_address = $1',
+            [mintAddress]
+        );
+
+        // Queue update if not already processing
+        this.queueMetadataUpdate(mintAddress);
+
+        return result.rows[0] || null;
+    }
+
     async queueMetadataUpdate(mintAddress: string, source: string = 'unknown'): Promise<void> {
         if (this.processingQueue.has(mintAddress)) return;
 
@@ -36,7 +49,9 @@ export class MetadataService {
         }
     }
 
-    private async processMetadata(mintAddress: string, source: string): Promise<void> {
+    private async processMetadata(mintAddress: string, source: string, retryCount = 0): Promise<void> {
+        const MAX_RETRIES = 3;
+
         try {
             const metadataPda = findMetadataPda(this.umi, { mint: publicKey(mintAddress) })[0];
             const metadata = await fetchMetadata(this.umi, metadataPda);
@@ -45,12 +60,13 @@ export class MetadataService {
                 await pool.query(
                     `UPDATE token_platform.tokens 
                      SET 
-                        name = COALESCE($2, name),
-                        symbol = COALESCE($3, symbol),
-                        metadata_url = COALESCE($4, metadata_url),
+                        name = $2,
+                        symbol = $3,
+                        metadata_url = $4,
                         last_metadata_fetch = NOW(),
                         metadata_status = 'success',
-                        metadata_source = $5
+                        metadata_source = $5,
+                        metadata_fetch_attempts = metadata_fetch_attempts + 1
                      WHERE mint_address = $1`,
                     [
                         mintAddress,
@@ -63,9 +79,18 @@ export class MetadataService {
             }
         } catch (error) {
             logger.error(`Error processing metadata for ${mintAddress}:`, error);
+
+            if (retryCount < MAX_RETRIES) {
+                logger.info(`Retrying metadata fetch for ${mintAddress}, attempt ${retryCount + 1}`);
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+                return this.processMetadata(mintAddress, source, retryCount + 1);
+            }
+
             await pool.query(
                 `UPDATE token_platform.tokens 
-                 SET metadata_status = 'failed', last_metadata_fetch = NOW()
+                 SET metadata_status = 'failed', 
+                     last_metadata_fetch = NOW(),
+                     metadata_fetch_attempts = metadata_fetch_attempts + 1
                  WHERE mint_address = $1`,
                 [mintAddress]
             );

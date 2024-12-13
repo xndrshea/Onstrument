@@ -3,9 +3,11 @@ import { logger } from '../../../utils/logger';
 import { pool } from '../../../config/database';
 
 export class PriceUpdateQueue {
+    private static readonly BATCH_SIZE = 100;
+    private static readonly PROCESS_INTERVAL = 1000; // 1 second
     private static instance: PriceUpdateQueue;
     private queue: PriceUpdate[] = [];
-    private isProcessing = false;
+    private processing = false;
 
     public static getInstance(): PriceUpdateQueue {
         if (!PriceUpdateQueue.instance) {
@@ -20,9 +22,9 @@ export class PriceUpdateQueue {
     }
 
     private async startProcessing() {
-        if (this.isProcessing) return;
+        if (this.processing) return;
 
-        this.isProcessing = true;
+        this.processing = true;
         logger.info('Starting price update queue processor');
 
         while (true) {
@@ -42,7 +44,6 @@ export class PriceUpdateQueue {
 
     private async processUpdate(update: PriceUpdate) {
         try {
-            // Use time_bucket for 1-minute OHLCV candles
             await pool.query(`
                 INSERT INTO token_platform.price_history (
                     time,
@@ -58,33 +59,19 @@ export class PriceUpdateQueue {
                     time_bucket('1 minute', to_timestamp($1)),
                     $2,
                     $3,
-                    COALESCE((
-                        SELECT open 
-                        FROM token_platform.price_history 
-                        WHERE mint_address = $2 
-                        AND time = time_bucket('1 minute', to_timestamp($1))
-                    ), $3),
-                    GREATEST(COALESCE((
-                        SELECT high 
-                        FROM token_platform.price_history 
-                        WHERE mint_address = $2 
-                        AND time = time_bucket('1 minute', to_timestamp($1))
-                    ), $3), $3),
-                    LEAST(COALESCE((
-                        SELECT low 
-                        FROM token_platform.price_history 
-                        WHERE mint_address = $2 
-                        AND time = time_bucket('1 minute', to_timestamp($1))
-                    ), $3), $3),
-                    $3,
-                    $4
+                    $3,  -- Initial price becomes open
+                    $3,  -- Initial price becomes high
+                    $3,  -- Initial price becomes low
+                    $3,  -- Initial price becomes close
+                    $4   -- Volume
                 )
                 ON CONFLICT (mint_address, time) DO UPDATE
                 SET 
-                    high = GREATEST(token_platform.price_history.high, EXCLUDED.high),
-                    low = LEAST(token_platform.price_history.low, EXCLUDED.low),
-                    close = EXCLUDED.close,
-                    volume = token_platform.price_history.volume + EXCLUDED.volume
+                    price = $3,
+                    high = GREATEST(token_platform.price_history.high, $3),
+                    low = LEAST(token_platform.price_history.low, $3),
+                    close = $3,
+                    volume = token_platform.price_history.volume + $4
             `, [
                 update.timestamp / 1000,
                 update.mintAddress,
@@ -116,7 +103,34 @@ export class PriceUpdateQueue {
     public getMetrics() {
         return {
             queueLength: this.queue.length,
-            isProcessing: this.isProcessing
+            isProcessing: this.processing
         };
+    }
+
+    async processBatch() {
+        if (this.processing || this.queue.length === 0) return;
+
+        this.processing = true;
+        const batch = this.queue.splice(0, PriceUpdateQueue.BATCH_SIZE);
+
+        try {
+            await pool.query(`
+                INSERT INTO token_platform.price_history (
+                    time, mint_address, price, volume
+                )
+                SELECT * FROM UNNEST ($1::timestamptz[], $2::text[], $3::numeric[], $4::numeric[])
+            `, [
+                batch.map(u => new Date(u.timestamp)),
+                batch.map(u => u.mintAddress),
+                batch.map(u => u.price),
+                batch.map(u => u.volume || 0)
+            ]);
+        } catch (error) {
+            logger.error('Batch processing failed:', error);
+            // Re-queue failed updates
+            this.queue.unshift(...batch);
+        } finally {
+            this.processing = false;
+        }
     }
 }
