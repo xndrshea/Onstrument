@@ -17,8 +17,6 @@ export function MarketPage() {
     const fetchTokens = async () => {
         try {
             setIsLoading(true);
-            console.log('Fetching market tokens, page:', currentPage);
-
             const url = new URL(`${API_BASE_URL}/market/tokens`);
             url.searchParams.append('page', currentPage.toString());
             url.searchParams.append('limit', TOKENS_PER_PAGE.toString());
@@ -27,27 +25,21 @@ export function MarketPage() {
             }
 
             const response = await fetch(url.toString());
-
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-                throw new Error(errorData.details || errorData.error || `HTTP error! status: ${response.status}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
-            console.log('Market tokens response:', data);
-
             setTokens(data.tokens.map((token: any) => ({
-                ...token,
-                mintAddress: token.mintAddress || token.mint_address,
-                tokenType: token.tokenType || token.token_type,
-                price: token.price || 0,
-                volume24h: token.volume24h || 0
+                mintAddress: token.mint_address,
+                name: token.name,
+                symbol: token.symbol,
+                tokenType: token.token_type
             })));
 
             setTotalPages(data.pagination?.total
                 ? Math.ceil(data.pagination.total / TOKENS_PER_PAGE)
                 : 1);
-            setError(null);
         } catch (error) {
             console.error('Error fetching market tokens:', error);
             setError(error instanceof Error ? error.message : 'Failed to fetch tokens');
@@ -59,9 +51,6 @@ export function MarketPage() {
     useEffect(() => {
         fetchTokens();
     }, [currentPage, tokenType]);
-
-    // No need for filteredTokens anymore as filtering is done on the server
-    const displayTokens = tokens;
 
     const handlePageChange = (newPage: number) => {
         setCurrentPage(newPage);
@@ -91,7 +80,7 @@ export function MarketPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {displayTokens.map(token => (
+                    {tokens.map(token => (
                         <Link
                             key={token.mintAddress}
                             to={`/token/${token.mintAddress}`}
@@ -106,10 +95,9 @@ export function MarketPage() {
                                     {token.tokenType === 'pool' ? 'DEX' : 'Custom'}
                                 </span>
                             </div>
-                            <div className="mt-2 text-sm">
-                                <p>Price: ${token.price?.toFixed(6) || '0.00'}</p>
-                                <p>24h Volume: ${token.volume24h?.toFixed(2) || '0.00'}</p>
-                            </div>
+                            <p className="text-sm text-gray-400 mt-2">
+                                {token.mintAddress.slice(0, 4)}...{token.mintAddress.slice(-4)}
+                            </p>
                         </Link>
                     ))}
                 </div>

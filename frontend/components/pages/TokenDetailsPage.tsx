@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { TradingInterface } from '../Trading/TradingInterface';
 import { PriceChart } from '../Trading/PriceChart';
 import { useEffect, useState, useMemo } from 'react';
@@ -11,6 +11,8 @@ import { priceClient } from '../../services/priceClient';
 
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
+    const location = useLocation();
+    const tokenType = location.state?.tokenType;
     const [token, setToken] = useState<TokenRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -37,27 +39,23 @@ export function TokenDetailsPage() {
     }, [connection, wallet, token]);
 
     useEffect(() => {
-        const fetchToken = async () => {
-            try {
-                const { tokens } = await tokenService.getAllTokens();
-                const token = tokens.find(t => t.mintAddress === mintAddress);
-                if (token) {
-                    setToken(token);
-                } else {
-                    setError('Token not found');
-                }
-            } catch (error) {
-                console.error('Error fetching token:', error);
-                setError(error instanceof Error ? error.message : 'Failed to fetch token details');
-            } finally {
-                setLoading(false);
-            }
-        };
-
         if (mintAddress) {
-            fetchToken();
+            setLoading(true);
+            tokenService.getByMintAddress(mintAddress, tokenType)
+                .then(token => {
+                    if (token) {
+                        setToken(token);
+                    } else {
+                        setError('Token not found');
+                    }
+                    setLoading(false);
+                })
+                .catch(error => {
+                    setError(error.message);
+                    setLoading(false);
+                });
         }
-    }, [mintAddress]);
+    }, [mintAddress, tokenType]);
 
     if (loading) return <div className="p-4 text-white">Loading...</div>;
     if (error) return <div className="p-4 text-white">Error: {error}</div>;

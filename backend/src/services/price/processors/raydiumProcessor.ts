@@ -6,9 +6,9 @@ import { Liquidity } from '@raydium-io/raydium-sdk';
 import { pool } from '../../../config/database';
 import { NATIVE_SOL_MINT } from '../../../constants';
 import { Metaplex } from '@metaplex-foundation/js';
-import { TokenListProvider, ENV } from '@solana/spl-token-registry';
 import { PriceUpdateQueue } from '../queue/priceUpdateQueue';
 import { getMint } from '@solana/spl-token';
+import { Metadata } from '@metaplex-foundation/mpl-token-metadata/dist/src/generated';
 
 
 interface TokenMetadata {
@@ -296,22 +296,21 @@ export class RaydiumProcessor extends BaseProcessor {
             }
 
             // If we get here, we need to create the token
-            const connection = new Connection(config.HELIUS_RPC_URL);
-            const mintInfo = await getMint(connection, new PublicKey(mintAddress));
-            const decimals = mintInfo.decimals;
-
-            // Now fetch metadata
             const metadata = await this.getTokenMetadata(mintAddress);
             if (!metadata) {
                 logger.error('Failed to fetch token metadata:', { mintAddress });
                 return false;
             }
 
+            const connection = new Connection(config.HELIUS_RPC_URL);
+            const mintInfo = await getMint(connection, new PublicKey(mintAddress));
+
             await this.saveToken({
                 mint_address: mintAddress,
-                name: metadata.name || 'Unknown Token',
-                symbol: metadata.symbol || 'UNKNOWN',
-                decimals: decimals,
+                name: metadata.name,
+                symbol: metadata.symbol,
+                decimals: mintInfo.decimals,
+                metadata_url: metadata.uri || '',
                 image_url: metadata.image || '',
                 verified: false
             });
@@ -371,52 +370,49 @@ export class RaydiumProcessor extends BaseProcessor {
 
     private async getTokenMetadata(mintAddress: string): Promise<TokenMetadata | null> {
         try {
-            // 1. Try Metaplex first (on-chain data)
-            try {
-                const mintPubkey = new PublicKey(mintAddress);
-                const token = await this.metaplex.nfts().findByMint({ mintAddress: mintPubkey });
+            const [metadataPDA] = PublicKey.findProgramAddressSync(
+                [
+                    Buffer.from('metadata'),
+                    new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s').toBuffer(),
+                    new PublicKey(mintAddress).toBuffer(),
+                ],
+                new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
+            );
 
-                if (token) {
-                    return {
-                        name: token.name,
-                        symbol: token.symbol,
-                        image: token.json?.image || '',
-                        uri: token.uri || ''
-                    };
+            // Add retry logic for fetching account info
+            let retries = 3;
+            let accountInfo = null;
+
+            while (retries > 0) {
+                try {
+                    accountInfo = await this.connection.getAccountInfo(metadataPDA);
+                    break;
+                } catch (error) {
+                    retries--;
+                    if (retries === 0) {
+                        logger.warn('Failed to fetch account info after 3 attempts:', {
+                            mintAddress,
+                            error: error instanceof Error ? error.message : String(error)
+                        });
+                        return null;
+                    }
+                    // Wait 1 second before retrying
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
-            } catch (metaplexError) {
-                logger.debug('Metaplex metadata fetch failed, trying token list', {
-                    mintAddress,
-                    error: metaplexError
-                });
             }
 
-            // 2. Try Solana Token List (off-chain data)
-            const provider = await new TokenListProvider().resolve();
-            const tokenList = provider.filterByChainId(ENV.MainnetBeta).getList();
-            const token = tokenList.find(t => t.address === mintAddress);
+            if (!accountInfo) return null;
 
-            if (token) {
-                return {
-                    name: token.name,
-                    symbol: token.symbol,
-                    image: token.logoURI || '',
-                    uri: ''
-                };
-            }
-
-            // 3. Fallback to basic info
+            const [metadata] = Metadata.fromAccountInfo(accountInfo);
             return {
-                name: `Unknown Token ${mintAddress.slice(0, 4)}...${mintAddress.slice(-4)}`,
-                symbol: 'UNKNOWN',
-                image: '',
-                uri: ''
+                name: metadata.data.name,
+                symbol: metadata.data.symbol,
+                uri: metadata.data.uri
             };
-
         } catch (error) {
-            logger.error('Error fetching token metadata:', {
-                error: error instanceof Error ? error.message : String(error),
-                mintAddress
+            logger.warn('Error fetching token metadata:', {
+                mintAddress,
+                error: error instanceof Error ? error.message : String(error)
             });
             return null;
         }
