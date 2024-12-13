@@ -30,21 +30,14 @@ export interface TokenRecord {
     mintAddress: string;
     name: string;
     symbol: string;
-    tokenType: 'pool' | 'custom';
     description?: string;
     metadataUri?: string;
     totalSupply?: BN;
     decimals: number;
-    curveAddress?: string;
-    curveConfig?: curveConfig;
-    poolAddress?: string;
-    baseReserve?: BN;
-    quoteReserve?: BN;
-    lastSlot?: number;
-    volume24h?: number;
-    liquidity?: number;
-    price?: number;
-    createdAt?: string;
+    curveAddress: string;
+    curveConfig: curveConfig;
+    createdAt: string;
+    tokenType: 'custom' | 'pool';
 }
 
 export interface TokenFormData {

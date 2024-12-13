@@ -34,7 +34,7 @@ export function MarketPage() {
                 mintAddress: token.mint_address,
                 name: token.name,
                 symbol: token.symbol,
-                tokenType: token.token_type
+                tokenType: token.token_type || 'pool'
             })));
 
             setTotalPages(data.pagination?.total
@@ -84,6 +84,7 @@ export function MarketPage() {
                         <Link
                             key={token.mintAddress}
                             to={`/token/${token.mintAddress}`}
+                            state={{ tokenType: token.tokenType }}
                             className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors"
                         >
                             <div className="flex justify-between items-start mb-2">

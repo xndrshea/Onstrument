@@ -271,4 +271,76 @@ router.get('/tokens/custom/:mintAddress', async (req, res) => {
     }
 });
 
+router.get('/market/tokens/:mintAddress', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        logger.info(`Fetching market token: ${mintAddress}`);
+
+        const result = await pool.query(`
+            SELECT 
+                t.mint_address,
+                t.name,
+                t.symbol,
+                t.metadata_url,
+                t.description,
+                t.verified,
+                t.image_url,
+                COALESCE(t.attributes, '{}') as attributes,
+                COALESCE(
+                    (SELECT price FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     ORDER BY time DESC LIMIT 1),
+                    0
+                ) as current_price,
+                COALESCE(
+                    (SELECT SUM(volume) FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     AND time > NOW() - INTERVAL '24 hours'),
+                    0
+                ) as volume_24h
+            FROM token_platform.tokens t
+            WHERE t.mint_address = $1
+        `, [mintAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Token not found' });
+        }
+
+        const token = result.rows[0];
+        res.json({
+            mint_address: token.mint_address,
+            name: token.name?.trim(),
+            symbol: token.symbol?.trim(),
+            decimals: 9, // Default for SPL tokens
+            description: token.description || '',
+            metadata_url: token.metadata_url,
+            token_type: 'pool',
+            current_price: token.current_price,
+            volume_24h: token.volume_24h,
+            verified: token.verified,
+            image_url: token.image_url,
+            attributes: token.attributes
+        });
+    } catch (error) {
+        logger.error('Error fetching market token:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.get('/pools/:mintAddress', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        const result = await pool.query(`
+            SELECT * FROM token_platform.raydium_pools 
+            WHERE base_mint = $1 OR quote_mint = $1
+            ORDER BY created_at DESC
+        `, [mintAddress]);
+
+        res.json(result.rows);
+    } catch (error) {
+        logger.error('Error fetching pools:', error);
+        res.status(500).json({ error: 'Failed to fetch pools' });
+    }
+});
+
 export default router; 

@@ -87,6 +87,28 @@ export async function initializeDatabase() {
             );
         `);
 
+        // Add after tokens table creation, around line 73
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS token_platform.raydium_pools (
+                pool_address VARCHAR(255) PRIMARY KEY,
+                base_mint VARCHAR(255) NOT NULL,
+                quote_mint VARCHAR(255) NOT NULL,
+                base_decimals INTEGER NOT NULL,
+                quote_decimals INTEGER NOT NULL,
+                program_id VARCHAR(255) NOT NULL,
+                pool_type VARCHAR(50) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT valid_pool_type CHECK (pool_type IN ('LEGACY_AMM', 'STANDARD_AMM', 'CLMM'))
+            );
+
+            -- Index for fast lookups by mint address
+            CREATE INDEX IF NOT EXISTS idx_raydium_pools_base_mint 
+            ON token_platform.raydium_pools(base_mint);
+            
+            CREATE INDEX IF NOT EXISTS idx_raydium_pools_quote_mint 
+            ON token_platform.raydium_pools(quote_mint);
+        `);
+
         // Create price_history table first
         await client.query(`
             CREATE TABLE IF NOT EXISTS token_platform.price_history (
