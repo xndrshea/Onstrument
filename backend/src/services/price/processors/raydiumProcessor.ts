@@ -5,10 +5,12 @@ import { logger } from '../../../utils/logger';
 import { Liquidity } from '@raydium-io/raydium-sdk';
 import { pool } from '../../../config/database';
 import { NATIVE_SOL_MINT } from '../../../constants';
-import { Metaplex } from '@metaplex-foundation/js';
 import { PriceUpdateQueue } from '../queue/priceUpdateQueue';
-import { getMint } from '@solana/spl-token';
-import { Metadata } from '@metaplex-foundation/mpl-token-metadata/dist/src/generated';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { publicKey, Umi } from '@metaplex-foundation/umi';
+import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata'
+import { findMetadataPda, Metadata, fetchMetadata } from '@metaplex-foundation/mpl-token-metadata'
+
 
 
 interface TokenMetadata {
@@ -18,16 +20,17 @@ interface TokenMetadata {
     uri?: string;
 }
 
-const METADATA_TIMEOUT_MS = 15000; // Increase timeout to 15 seconds
-
 export class RaydiumProcessor extends BaseProcessor {
     private connection: Connection;
-    private metaplex: Metaplex;
+    private umi: Umi;
+
+
 
     constructor() {
         super();
-        this.connection = new Connection(config.SOLANA_RPC_URL);
-        this.metaplex = new Metaplex(this.connection);
+        this.connection = new Connection(config.HELIUS_RPC_URL);
+        this.umi = createUmi(config.HELIUS_RPC_URL)
+            .use(mplTokenMetadata());
     }
 
     async processEvent(buffer: Buffer, accountKey: string, programId: string): Promise<void> {
@@ -278,78 +281,19 @@ export class RaydiumProcessor extends BaseProcessor {
         }
     }
 
-    private async ensureTokenExists(mintAddress: string): Promise<boolean> {
-        if (!mintAddress) {
-            logger.error('Invalid mint address provided');
-            return false;
-        }
-
-        try {
-            // First check if token exists
-            const existingToken = await pool.query(`
-                SELECT * FROM token_platform.tokens 
-                WHERE mint_address = $1
-            `, [mintAddress]);
-
-            if (existingToken.rows.length > 0) {
-                return true;
-            }
-
-            // If we get here, we need to create the token
-            const metadata = await this.getTokenMetadata(mintAddress);
-            if (!metadata) {
-                logger.error('Failed to fetch token metadata:', { mintAddress });
-                return false;
-            }
-
-            const connection = new Connection(config.HELIUS_RPC_URL);
-            const mintInfo = await getMint(connection, new PublicKey(mintAddress));
-
-            await this.saveToken({
-                mint_address: mintAddress,
-                name: metadata.name,
-                symbol: metadata.symbol,
-                decimals: mintInfo.decimals,
-                metadata_url: metadata.uri || '',
-                image_url: metadata.image || '',
-                verified: false
-            });
-
-            logger.info('Successfully created new token:', {
-                mintAddress,
-                name: metadata.name,
-                symbol: metadata.symbol
-            });
-
-            return true;
-        } catch (error) {
-            logger.error('Error in ensureTokenExists:', {
-                error: error instanceof Error ? error.message : String(error),
-                mintAddress
-            });
-            return false;
-        }
-    }
-
     private async recordPriceUpdate(
         mintAddress: string,
         price: number,
         volume: number,
     ): Promise<void> {
         try {
-            // Ensure token exists in database
             const tokenExists = await this.ensureTokenExists(mintAddress);
 
             if (!tokenExists) {
-                logger.error('Failed to ensure token exists, skipping price update:', {
-                    mintAddress,
-                    price,
-                    volume
-                });
+                logger.error(`Failed to ensure token exists: ${mintAddress}`);
                 return;
             }
 
-            // Queue the price update
             const queue = PriceUpdateQueue.getInstance();
             await queue.addUpdate({
                 mintAddress,
@@ -359,95 +303,79 @@ export class RaydiumProcessor extends BaseProcessor {
             });
 
         } catch (error) {
-            logger.error('Error in recordPriceUpdate:', {
-                error: error instanceof Error ? error.message : String(error),
-                mintAddress,
-                price,
-                volume,
-            });
+            logger.error(`Error in recordPriceUpdate for ${mintAddress}: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
     private async getTokenMetadata(mintAddress: string): Promise<TokenMetadata | null> {
         try {
-            const [metadataPDA] = PublicKey.findProgramAddressSync(
-                [
-                    Buffer.from('metadata'),
-                    new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s').toBuffer(),
-                    new PublicKey(mintAddress).toBuffer(),
-                ],
-                new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
-            );
+            const metadataPda = findMetadataPda(this.umi, { mint: publicKey(mintAddress) })[0];
+            const metadata = await fetchMetadata(this.umi, metadataPda);
 
-            // Add retry logic for fetching account info
-            let retries = 3;
-            let accountInfo = null;
-
-            while (retries > 0) {
-                try {
-                    accountInfo = await this.connection.getAccountInfo(metadataPDA);
-                    break;
-                } catch (error) {
-                    retries--;
-                    if (retries === 0) {
-                        logger.warn('Failed to fetch account info after 3 attempts:', {
-                            mintAddress,
-                            error: error instanceof Error ? error.message : String(error)
-                        });
-                        return null;
-                    }
-                    // Wait 1 second before retrying
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
-
-            if (!accountInfo) return null;
-
-            const [metadata] = Metadata.fromAccountInfo(accountInfo);
             return {
-                name: metadata.data.name,
-                symbol: metadata.data.symbol,
-                uri: metadata.data.uri
+                name: metadata.name,
+                symbol: metadata.symbol,
+                uri: metadata.uri,
+                // Add any other fields you need from the metadata
             };
         } catch (error) {
-            logger.warn('Error fetching token metadata:', {
-                mintAddress,
-                error: error instanceof Error ? error.message : String(error)
-            });
+            logger.error(`Failed to fetch metadata for ${mintAddress}: ${error}`);
             return null;
         }
     }
 
-    private async saveToken(tokenData: {
-        mint_address: string,
-        name: string,
-        symbol: string,
-        decimals: number,
-        metadata_url?: string,
-        image_url?: string,
-        verified: boolean
-    }): Promise<void> {
-        await pool.query(`
-            INSERT INTO token_platform.tokens 
-            (mint_address, name, symbol, decimals, metadata_url, image_url, verified)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (mint_address) DO UPDATE 
-            SET 
-                name = EXCLUDED.name,
-                symbol = EXCLUDED.symbol,
-                decimals = EXCLUDED.decimals,
-                metadata_url = EXCLUDED.metadata_url,
-                image_url = EXCLUDED.image_url,
-                verified = EXCLUDED.verified
-        `, [
-            tokenData.mint_address,
-            tokenData.name,
-            tokenData.symbol,
-            tokenData.decimals,
-            tokenData.metadata_url || null,
-            tokenData.image_url || null,
-            tokenData.verified
-        ]);
+
+    private async ensureTokenExists(mintAddress: string): Promise<boolean> {
+        try {
+            // First just check existence using indexed mint_address
+            const existingCheck = await pool.query(
+                'SELECT 1 FROM token_platform.tokens WHERE mint_address = $1 LIMIT 1',
+                [mintAddress]
+            );
+
+            if (existingCheck.rows.length === 0) {
+                // Token doesn't exist at all, try to create it
+                const metadata = await this.getTokenMetadata(mintAddress);
+                if (metadata) {
+                    await this.saveToken(mintAddress, metadata);
+                    return true;
+                }
+                return false;
+            }
+
+            // Only fetch full token data if we need to check for unknown values
+            const tokenData = await pool.query(
+                'SELECT name, symbol FROM token_platform.tokens WHERE mint_address = $1 AND (name IS NULL OR name = \'Unknown Token\' OR symbol IS NULL OR symbol = \'UNKNOWN\')',
+                [mintAddress]
+            );
+
+            if (tokenData.rows.length > 0) {
+                // Token exists but needs metadata update
+                const metadata = await this.getTokenMetadata(mintAddress);
+                if (metadata) {
+                    await this.saveToken(mintAddress, metadata);
+                }
+            }
+
+            return true;
+        } catch (error) {
+            logger.error(`Error ensuring token exists for ${mintAddress}: ${error instanceof Error ? error.message : String(error)}`);
+            return false;
+        }
+    }
+
+    private async saveToken(mintAddress: string, metadata: any): Promise<void> {
+        try {
+            await pool.query(
+                `INSERT INTO token_platform.tokens (mint_address, name, symbol, decimals)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (mint_address) 
+                 DO UPDATE SET name = $2, symbol = $3, decimals = $4`,
+                [mintAddress, metadata.name, metadata.symbol, metadata.decimals]
+            );
+        } catch (error) {
+            logger.error(`Failed to save token ${mintAddress}`);
+        }
     }
 }
 
