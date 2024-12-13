@@ -3,27 +3,27 @@ import { logger } from '../utils/logger';
 import BN from 'bn.js';
 
 const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
+const TOKEN_DECIMALS = 9;
 
 export class TokenService {
     private transformToken(token: any): TokenRecord {
-        return {
-            mintAddress: token.mint_address,
-            name: token.name,
-            symbol: token.symbol,
-            tokenType: token.token_type,
+        const transformedToken = {
+            mintAddress: token.mint_address || token.mintAddress,
+            name: (token.name || '').trim(),
+            symbol: (token.symbol || '').trim(),
             description: token.description || '',
-            metadataUri: token.metadata_uri,
+            metadataUri: token.metadata_url || token.metadataUri,
             totalSupply: token.total_supply ? new BN(token.total_supply) : undefined,
-            decimals: token.token_type === 'dex' ? token.dex_decimals : token.decimals,
-            curveAddress: token.curve_address,
+            decimals: token.decimals || TOKEN_DECIMALS,
+            curveAddress: token.curve_address || token.curveAddress,
             curveConfig: token.curve_config ? {
-                virtualSol: new BN(token.curve_config.virtual_sol)
-            } : undefined,
-            poolAddress: token.pool_address,
-            volume24h: token.volume_24h || 0,
-            liquidity: token.liquidity || 0,
-            createdAt: token.created_at || new Date().toISOString(),
+                virtualSol: new BN(token.curve_config.virtual_sol || 30)
+            } : { virtualSol: new BN(0) },
+            createdAt: token.created_at || token.createdAt || new Date().toISOString(),
+            tokenType: token.tokenType || 'custom'
         };
+
+        return transformedToken;
     }
 
     async create(token: TokenRecord): Promise<TokenRecord> {
@@ -100,29 +100,51 @@ export class TokenService {
 
     async getByMintAddress(mintAddress: string, tokenType?: string): Promise<TokenRecord | null> {
         try {
-            // For custom tokens, use the simple /tokens endpoint first
-            const customResponse = await fetch(`${API_BASE_URL}/tokens/custom/${mintAddress}`);
-            if (customResponse.ok) {
-                const data = await customResponse.json();
-                return {
-                    ...data,
-                    tokenType: 'custom'
-                };
-            }
+            let response;
+            console.log('Fetching token details for:', mintAddress, 'type:', tokenType);
 
-            // If not found as custom token and type isn't explicitly custom, try market
-            if (tokenType !== 'custom') {
-                const marketResponse = await fetch(`${API_BASE_URL}/market/tokens/${mintAddress}`);
-                if (marketResponse.ok) {
-                    const data = await marketResponse.json();
-                    return {
-                        ...data,
-                        tokenType: 'market'
-                    };
+            // If tokenType is specified, try that endpoint first
+            if (tokenType === 'custom') {
+                response = await fetch(`${API_BASE_URL}/tokens/custom/${mintAddress}`);
+            } else if (tokenType === 'pool') {
+                response = await fetch(`${API_BASE_URL}/market/tokens/${mintAddress}`);
+            } else {
+                // If no type specified or unknown, try both endpoints
+                response = await fetch(`${API_BASE_URL}/tokens/custom/${mintAddress}`);
+                if (!response.ok) {
+                    response = await fetch(`${API_BASE_URL}/market/tokens/${mintAddress}`);
                 }
             }
 
-            return null;
+            if (!response.ok) {
+                if (response.status === 404) {
+                    return null;
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Ensure proper data transformation
+            const transformedToken = {
+                ...data,
+                mintAddress: data.mintAddress || data.mint_address, // Handle both formats
+                tokenType: tokenType || data.tokenType || 'pool',
+                decimals: data.decimals || 9,
+                description: data.description || '',
+                totalSupply: data.totalSupply || data.total_supply || '0',
+                name: data.name?.trim() || 'Unknown Token',
+                symbol: data.symbol?.trim() || 'UNKNOWN'
+            };
+
+            console.log('Transformed token data:', transformedToken);
+
+            // Validate required fields
+            if (!transformedToken.mintAddress) {
+                throw new Error(`Invalid token data: missing mintAddress for token ${transformedToken.name}`);
+            }
+
+            return transformedToken;
         } catch (error) {
             console.error('Error fetching token:', error);
             throw error;

@@ -6,15 +6,10 @@ import { TokenRecord } from '../../../shared/types/token'
 import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { BN } from '@project-serum/anchor'
-import { priceClient } from '../../services/priceClient'
 import { dexService } from '../../services/dexService'
-
-interface TradeHistory {
-    side: 'buy' | 'sell';
-    amount: number;
-    price: number;
-    timestamp: number;
-}
+import { mainnetConnection, devnetConnection } from '../../config'
+import { Connection } from '@solana/web3.js'
+import { config } from '../../config'
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -32,19 +27,16 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
     const [error, setError] = useState<string | null>(null)
     const [solBalance, setSolBalance] = useState<number>(0)
     const [userBalance, setUserBalance] = useState<bigint>(BigInt(0))
-    const [bondingCurveBalance, setBondingCurveBalance] = useState<bigint>(BigInt(0))
     const [priceInfo, setPriceInfo] = useState<{ price: number; totalCost: number } | null>(null)
-    const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05); // Default 5%
-    const [spotPrice, setSpotPrice] = useState<number | null>(null);
-    const [trades, setTrades] = useState<TradeHistory[]>([]);
+    const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05)
+    const [spotPrice, setSpotPrice] = useState<number | null>(null)
 
-    // Add token type check
-    const isDexToken = token.tokenType === 'pool';
+    const isDexToken = token.tokenType === 'pool'
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
         if (!connection || !publicKey || !token.mintAddress || !token.curveAddress) {
-            return null;
+            return null
         }
 
         try {
@@ -53,276 +45,167 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                 wallet,
                 new PublicKey(token.mintAddress),
                 new PublicKey(token.curveAddress)
-            );
+            )
         } catch (error) {
-            console.error('Error creating bonding curve interface:', error);
-            return null;
+            console.error('Error creating bonding curve interface:', error)
+            return null
         }
-    }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet]);
+    }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet])
 
-    // Add this near the top of the component after state declarations
-    useEffect(() => {
-        // Verify token address and network
-        console.log('Current connection endpoint:', connection.rpcEndpoint);
-        console.log('Token details:', {
-            mintAddress: token.mintAddress,
-            symbol: token.symbol,
-            tokenType: token.tokenType,
-            curveAddress: token.curveAddress
-        });
-
-        // Verify wallet
-        if (publicKey) {
-            console.log('Connected wallet:', publicKey.toString());
+    const getAppropriateConnection = () => {
+        if (isDexToken && config.HELIUS_RPC_URL) {
+            return new Connection(config.HELIUS_RPC_URL, 'confirmed')
         }
-    }, [connection, token, publicKey]);
+        return isDexToken ? mainnetConnection : devnetConnection
+    }
 
-    // Fetch balances and price
     const updateBalances = async () => {
-        if (!publicKey) return;
+        if (!publicKey) return
 
         try {
-            // Verify the token mint account exists
-            const mintInfo = await connection.getAccountInfo(new PublicKey(token.mintAddress));
-            if (!mintInfo) {
-                console.error('Token mint account not found!');
-                setError('Invalid token mint address');
-                return;
-            }
-            console.log('Token mint account found:', {
-                space: mintInfo.data.length,
-                owner: mintInfo.owner.toString()
-            });
+            const appropriateConnection = getAppropriateConnection()
 
+            // Get SOL balance
+            const solBal = await appropriateConnection.getBalance(publicKey)
+            setSolBalance(solBal / LAMPORTS_PER_SOL)
+
+            // Get token balance
             const ata = await getAssociatedTokenAddress(
                 new PublicKey(token.mintAddress),
                 publicKey
-            );
-            console.log('Looking for ATA at:', ata.toString());
+            )
 
-            // Get all token accounts owned by the user
-            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-                publicKey,
-                { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
-            );
-
-            console.log('All user token accounts:',
-                tokenAccounts.value.map(ta => ({
-                    mint: ta.account.data.parsed.info.mint,
-                    address: ta.pubkey.toString(),
-                    amount: ta.account.data.parsed.info.tokenAmount.amount
-                }))
-            );
-
-            console.log('Updating balances for token:', token.mintAddress);
-            const ataInfo = await connection.getAccountInfo(ata);
-            const solBal = await connection.getBalance(publicKey);
-            setSolBalance(solBal / LAMPORTS_PER_SOL);
-
-            // Only fetch token balance if ATA exists
+            const ataInfo = await appropriateConnection.getAccountInfo(ata)
             if (ataInfo) {
-                const tokenAccountInfo = await connection.getTokenAccountBalance(ata);
-                console.log('User token balance:', tokenAccountInfo.value.amount);
-                setUserBalance(BigInt(tokenAccountInfo.value.amount));
+                const tokenAccountInfo = await appropriateConnection.getTokenAccountBalance(ata)
+                setUserBalance(BigInt(tokenAccountInfo.value.amount))
             } else {
-                console.log('No ATA found, setting balance to 0');
-                setUserBalance(BigInt(0));
+                setUserBalance(BigInt(0))
             }
 
-            // Fetch pool balance with detailed logging
+            // For DEX tokens, update spot price
             if (isDexToken) {
-                console.log('Fetching DEX pool info');
-                try {
-                    const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
-                    const poolBalance = (token.liquidity || 0) * TOKEN_DECIMAL_MULTIPLIER;
-                    console.log('DEX pool balance:', poolBalance);
-                    setBondingCurveBalance(BigInt(poolBalance));
-                } catch (error) {
-                    console.error('DEX pool info error:', error);
-                    setBondingCurveBalance(BigInt(0));
-                }
-            } else if (bondingCurve) {
-                console.log('Fetching bonding curve pool info');
-                try {
-                    const [tokenVault] = PublicKey.findProgramAddressSync(
-                        [Buffer.from("token_vault"), new PublicKey(token.mintAddress).toBuffer()],
-                        bondingCurve.program.programId
-                    );
-                    console.log('Token vault address:', tokenVault.toString());
-
-                    const vaultInfo = await connection.getAccountInfo(tokenVault);
-                    if (vaultInfo) {
-                        const vaultBalance = await connection.getTokenAccountBalance(tokenVault);
-                        console.log('Vault balance:', vaultBalance.value.amount);
-                        setBondingCurveBalance(BigInt(vaultBalance.value.amount));
-                    } else {
-                        console.log('No vault found, setting balance to 0');
-                        setBondingCurveBalance(BigInt(0));
-                    }
-                } catch (error) {
-                    console.error('Bonding curve pool info error:', error);
-                    setBondingCurveBalance(BigInt(0));
-                }
+                const quote = await dexService.calculateTradePrice(
+                    token.mintAddress,
+                    1,
+                    true,
+                    appropriateConnection
+                )
+                setSpotPrice(quote.price)
             }
         } catch (error) {
-            console.error('Balance update error:', error);
-            setError('Failed to fetch balances');
+            console.error('Balance update error:', error)
+            setError('Failed to fetch balances')
         }
-    };
+    }
 
-    // Replace the WebSocket effect with this:
-    useEffect(() => {
-        const updateCurrentPrice = async () => {
-            try {
-                if (isDexToken) {
-                    console.log('Fetching DEX pool info for:', token.mintAddress);
-                    const poolInfo = await dexService.getPoolInfo(token.mintAddress);
-                    console.log('DEX pool info received:', poolInfo);
-                    setSpotPrice(poolInfo.price);
-                } else if (bondingCurve) {
-                    console.log('Fetching bonding curve price for:', token.mintAddress);
-                    try {
-                        const quote = await bondingCurve.getPriceQuote(1, true);
-                        console.log('Bonding curve quote received:', quote);
-                        setSpotPrice(quote.price);
-                    } catch (error: any) {
-                        console.error('Detailed bonding curve error:', {
-                            error,
-                            message: error.message,
-                            stack: error.stack
-                        });
-                        if (error.message.includes('not found')) {
-                            console.log('New token detected, setting initial price to 0');
-                            setSpotPrice(0);
-                        } else {
-                            setError(`Price fetch error: ${error.message}`);
-                        }
-                    }
-                }
-            } catch (error: any) {
-                console.error('Price update error:', {
-                    error,
-                    message: error.message,
-                    stack: error.stack
-                });
-                setError(`Failed to update price: ${error.message}`);
-                setSpotPrice(0);
-            }
-        };
-
-        updateCurrentPrice();
-        const interval = setInterval(updateCurrentPrice, 5000);
-        return () => clearInterval(interval);
-    }, [isDexToken, token.mintAddress, bondingCurve]);
-
-    // Separate price quote calculation
+    // Price quote updates
     useEffect(() => {
         const updatePriceQuote = async () => {
             if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-                setPriceInfo(null);
-                return;
+                setPriceInfo(null)
+                return
             }
 
             try {
-                if (isDexToken && spotPrice !== null) {
-                    const totalCost = spotPrice * parseFloat(amount);
-                    setPriceInfo({ price: spotPrice, totalCost });
+                if (isDexToken) {
+                    const appropriateConnection = getAppropriateConnection()
+                    const quote = await dexService.calculateTradePrice(
+                        token.mintAddress,
+                        parseFloat(amount),
+                        isSelling,
+                        appropriateConnection
+                    )
+                    setPriceInfo(quote)
+                    setError(null)
                 } else if (bondingCurve) {
-                    try {
-                        const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling);
-                        setPriceInfo(quote);
-                        setError(null);
-                    } catch (error: any) {
-                        console.error('Price quote error:', error);
-                        setPriceInfo(null);
-                        // Only set error if it's not a "not found" error for new tokens
-                        if (!error.message.includes('not found')) {
-                            setError(error.message);
-                        }
-                    }
+                    const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling)
+                    setPriceInfo(quote)
                 }
             } catch (error: any) {
-                console.error('Error fetching price quote:', error);
-                setPriceInfo(null);
-                setError(error.message);
+                console.error('Error fetching price quote:', error)
+                setPriceInfo(null)
+                setError(error.message)
             }
-        };
+        }
 
-        updatePriceQuote();
-    }, [amount, isSelling, bondingCurve, isDexToken, spotPrice]);
+        updatePriceQuote()
+    }, [amount, isSelling, isDexToken, token.mintAddress, bondingCurve])
 
-    // Handle transaction
+    // Initial balance fetch and periodic updates
+    useEffect(() => {
+        if (connected && publicKey) {
+            updateBalances()
+            const interval = setInterval(updateBalances, 10000)
+            return () => clearInterval(interval)
+        }
+    }, [connected, publicKey])
+
+    // Load saved values
+    useEffect(() => {
+        const savedAmount = localStorage.getItem(`trade_amount_${token.mintAddress}`)
+        const savedIsSelling = localStorage.getItem(`trade_isSelling_${token.mintAddress}`)
+
+        if (savedAmount) setAmount(savedAmount)
+        if (savedIsSelling) setIsSelling(savedIsSelling === 'true')
+    }, [token.mintAddress])
+
+    // Update localStorage when values change
+    useEffect(() => {
+        if (amount) {
+            localStorage.setItem(`trade_amount_${token.mintAddress}`, amount)
+        }
+        localStorage.setItem(`trade_isSelling_${token.mintAddress}`, isSelling.toString())
+    }, [amount, isSelling, token.mintAddress])
+
     const handleTransaction = async () => {
-        if (!publicKey || !amount) {
-            setError('Invalid transaction parameters');
-            return;
+        if (!publicKey || !amount || !wallet) {
+            setError('Invalid transaction parameters')
+            return
         }
 
         try {
-            setIsLoading(true);
-            const parsedAmount = new BN(parseFloat(amount) * (10 ** TOKEN_DECIMALS));
+            setIsLoading(true)
+            const parsedAmount = new BN(parseFloat(amount) * (10 ** TOKEN_DECIMALS))
+            const appropriateConnection = getAppropriateConnection()
 
             if (isDexToken) {
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
                     amount: parsedAmount,
                     isSelling,
-                    slippageTolerance
-                });
+                    slippageTolerance,
+                    wallet,
+                    connection: appropriateConnection
+                })
             } else if (bondingCurve && priceInfo) {
                 if (isSelling) {
-                    const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)));
+                    const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)))
                     await bondingCurve.sell({
                         amount: parsedAmount,
                         minSolReturn: minReturn
-                    });
+                    })
                 } else {
-                    const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL);
+                    const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL)
                     if (solBalance * LAMPORTS_PER_SOL < minRequired) {
-                        throw new Error(`Insufficient SOL. Need ${(minRequired / LAMPORTS_PER_SOL).toFixed(4)} SOL (including fees)`);
+                        throw new Error(`Insufficient SOL. Need ${(minRequired / LAMPORTS_PER_SOL).toFixed(4)} SOL (including fees)`)
                     }
-
                     await bondingCurve.buy({
                         amount: parsedAmount,
                         maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
-                    });
+                    })
                 }
             }
 
-            await updateBalances();
-            setAmount('');
+            await updateBalances()
+            setAmount('')
         } catch (error: any) {
-            console.error('Transaction error:', error);
-            setError(error.message || 'Transaction failed');
+            console.error('Transaction error:', error)
+            setError(error.message || 'Transaction failed')
         } finally {
-            setIsLoading(false);
+            setIsLoading(false)
         }
-    };
-
-    // Initial balance fetch
-    useEffect(() => {
-        if (connected && publicKey) {
-            updateBalances();
-        }
-    }, [connected, publicKey]);
-
-    // Add at the top of the component, after the state declarations
-    useEffect(() => {
-        // Load saved values
-        const savedAmount = localStorage.getItem(`trade_amount_${token.mintAddress}`);
-        const savedIsSelling = localStorage.getItem(`trade_isSelling_${token.mintAddress}`);
-
-        if (savedAmount) setAmount(savedAmount);
-        if (savedIsSelling) setIsSelling(savedIsSelling === 'true');
-    }, [token.mintAddress]);
-
-    // Update localStorage when values change
-    useEffect(() => {
-        if (amount) {
-            localStorage.setItem(`trade_amount_${token.mintAddress}`, amount);
-        }
-        localStorage.setItem(`trade_isSelling_${token.mintAddress}`, isSelling.toString());
-    }, [amount, isSelling, token.mintAddress]);
+    }
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">
@@ -410,13 +293,13 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                                 type="text"
                                 value={slippageTolerance * 100}
                                 onChange={(e) => {
-                                    const value = e.target.value;
+                                    const value = e.target.value
                                     if (value === '') {
-                                        setSlippageTolerance(0);
+                                        setSlippageTolerance(0)
                                     } else {
-                                        const parsed = parseFloat(value);
+                                        const parsed = parseFloat(value)
                                         if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-                                            setSlippageTolerance(parsed / 100);
+                                            setSlippageTolerance(parsed / 100)
                                         }
                                     }
                                 }}
@@ -480,25 +363,8 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                             )}
                         </button>
                     </div>
-
-                    {/* Pool Information */}
-                    <div className="mt-6 p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
-                        <h3 className="text-sm font-medium text-gray-900 mb-2">Pool Information</h3>
-                        <div className="flex justify-between">
-                            <span className="text-sm text-gray-700">
-                                {isDexToken ? 'DEX Liquidity' : 'Pool Balance'}
-                            </span>
-                            <span className="text-sm font-medium text-gray-900">
-                                {isDexToken ? (
-                                    `${token.liquidity?.toFixed(2) || 'Loading...'} SOL`
-                                ) : (
-                                    `${Number(bondingCurveBalance) / (10 ** TOKEN_DECIMALS)} ${token.symbol}`
-                                )}
-                            </span>
-                        </div>
-                    </div>
                 </>
             )}
         </div>
-    );
+    )
 } 

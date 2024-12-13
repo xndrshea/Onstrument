@@ -12,7 +12,7 @@ import { priceClient } from '../../services/priceClient';
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
     const location = useLocation();
-    const tokenType = location.state?.tokenType;
+    const tokenType = location.state?.tokenType || 'pool';
     const [token, setToken] = useState<TokenRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -39,22 +39,34 @@ export function TokenDetailsPage() {
     }, [connection, wallet, token]);
 
     useEffect(() => {
-        if (mintAddress) {
-            setLoading(true);
-            tokenService.getByMintAddress(mintAddress, tokenType)
-                .then(token => {
-                    if (token) {
-                        setToken(token);
-                    } else {
-                        setError('Token not found');
-                    }
-                    setLoading(false);
-                })
-                .catch(error => {
-                    setError(error.message);
-                    setLoading(false);
-                });
+        if (!mintAddress) {
+            setError('No mint address provided');
+            return;
         }
+
+        setLoading(true);
+        console.log('Fetching token details for mintAddress:', mintAddress, 'type:', tokenType);
+
+        tokenService.getByMintAddress(mintAddress, tokenType)
+            .then(tokenData => {
+                if (!tokenData) {
+                    throw new Error('Token not found');
+                }
+                console.log('Token data received:', tokenData);
+
+                // Validate required fields
+                if (!tokenData.mintAddress) {
+                    throw new Error(`Invalid token data: missing mintAddress for ${tokenData.name}`);
+                }
+
+                setToken(tokenData);
+                setLoading(false);
+            })
+            .catch(error => {
+                console.error('Error fetching token:', error);
+                setError(error.message);
+                setLoading(false);
+            });
     }, [mintAddress, tokenType]);
 
     if (loading) return <div className="p-4 text-white">Loading...</div>;

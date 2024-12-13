@@ -7,19 +7,9 @@ import { pool } from '../../../config/database';
 import { NATIVE_SOL_MINT } from '../../../constants';
 import { PriceUpdateQueue } from '../queue/priceUpdateQueue';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { publicKey, Umi } from '@metaplex-foundation/umi';
+import { Umi } from '@metaplex-foundation/umi';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata'
-import { findMetadataPda, fetchMetadata } from '@metaplex-foundation/mpl-token-metadata'
 import { MetadataService } from '../../metadata/metadataService';
-
-
-
-interface TokenMetadata {
-    name: string;
-    symbol: string;
-    image?: string;
-    uri?: string;
-}
 
 export class RaydiumProcessor extends BaseProcessor {
     private connection: Connection;
@@ -150,6 +140,17 @@ export class RaydiumProcessor extends BaseProcessor {
                 isValid: isFinite(price) && price > 0
             });
 
+            // After base/quote mint validation
+            await this.savePoolInfo(
+                accountKey,
+                baseMint,
+                quoteMint,
+                baseDecimals,
+                quoteDecimals,
+                config.RAYDIUM_PROGRAMS.STANDARD_AMM,
+                'STANDARD_AMM'
+            );
+
         } catch (error) {
             logger.error('Error processing Standard AMM:', error);
         }
@@ -254,6 +255,17 @@ export class RaydiumProcessor extends BaseProcessor {
                     slot: 0  // TODO: Get actual slot
                 });
             }
+
+            // After base/quote mint validation
+            await this.savePoolInfo(
+                accountKey,
+                baseMint,
+                quoteMint,
+                baseDecimals,
+                quoteDecimals,
+                config.RAYDIUM_PROGRAMS.LEGACY_AMM,
+                'LEGACY_AMM'
+            );
         } catch (error) {
             logger.error('Error processing Legacy AMM:', error);
         }
@@ -329,6 +341,27 @@ export class RaydiumProcessor extends BaseProcessor {
         } catch (error) {
             logger.error(`Error ensuring token exists for ${mintAddress}:`, error);
             return false;
+        }
+    }
+
+    private async savePoolInfo(
+        accountKey: string,
+        baseMint: string,
+        quoteMint: string,
+        baseDecimals: number,
+        quoteDecimals: number,
+        programId: string,
+        poolType: 'LEGACY_AMM' | 'STANDARD_AMM' | 'CLMM'
+    ): Promise<void> {
+        try {
+            await pool.query(`
+                INSERT INTO token_platform.raydium_pools 
+                (pool_address, base_mint, quote_mint, base_decimals, quote_decimals, program_id, pool_type)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (pool_address) DO NOTHING
+            `, [accountKey, baseMint, quoteMint, baseDecimals, quoteDecimals, programId, poolType]);
+        } catch (error) {
+            logger.error('Error saving pool info:', error);
         }
     }
 }
