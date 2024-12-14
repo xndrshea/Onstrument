@@ -4,6 +4,7 @@ import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
 import { findMetadataPda, fetchMetadata } from '@metaplex-foundation/mpl-token-metadata';
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
+import { config } from '../../config/env';
 
 export class MetadataService {
     private static instance: MetadataService;
@@ -11,10 +12,10 @@ export class MetadataService {
     private processingQueue: Set<string> = new Set();
 
     private constructor() {
-        if (!process.env.HELIUS_RPC_URL) {
+        if (!config.HELIUS_RPC_URL) {
             throw new Error('HELIUS_RPC_URL is required');
         }
-        this.umi = createUmi(process.env.HELIUS_RPC_URL)
+        this.umi = createUmi(config.HELIUS_RPC_URL)
             .use(mplTokenMetadata());
     }
 

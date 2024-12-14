@@ -173,7 +173,17 @@ router.get('/market/tokens',
 router.get('/price-history/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
+        logger.info(`Fetching price history for ${mintAddress}`);
+
         const history = await PriceHistoryModel.getPriceHistory(mintAddress);
+        logger.info(`Found ${history.length} price points for ${mintAddress}`);
+
+        // Log first and last points
+        if (history.length > 0) {
+            logger.info('First point:', history[0]);
+            logger.info('Last point:', history[history.length - 1]);
+        }
+
         res.json(history);
     } catch (error) {
         logger.error('Error fetching price history:', error);
@@ -340,6 +350,56 @@ router.get('/pools/:mintAddress', async (req, res) => {
     } catch (error) {
         logger.error('Error fetching pools:', error);
         res.status(500).json({ error: 'Failed to fetch pools' });
+    }
+});
+
+router.get('/search/tokens', async (req, res) => {
+    try {
+        const query = req.query.q as string;
+
+        if (!query || query.length < 1) {
+            return res.json({ tokens: [] });
+        }
+
+        // Query both custom tokens and DEX tokens
+        const result = await pool.query(`
+            (
+                SELECT 
+                    mint_address,
+                    name,
+                    symbol,
+                    'custom' as token_type
+                FROM token_platform.custom_tokens 
+                WHERE 
+                    (LOWER(name) LIKE LOWER($1) OR 
+                    LOWER(symbol) LIKE LOWER($1) OR 
+                    mint_address LIKE $2)
+                AND name IS NOT NULL 
+                AND symbol IS NOT NULL
+            )
+            UNION ALL
+            (
+                SELECT 
+                    mint_address,
+                    name,
+                    symbol,
+                    'pool' as token_type
+                FROM token_platform.tokens 
+                WHERE 
+                    (LOWER(name) LIKE LOWER($1) OR 
+                    LOWER(symbol) LIKE LOWER($1) OR 
+                    mint_address LIKE $2)
+                AND name IS NOT NULL 
+                AND symbol IS NOT NULL
+            )
+            ORDER BY name ASC
+            LIMIT 10
+        `, [`%${query}%`, `${query}%`]);
+
+        res.json({ tokens: result.rows });
+    } catch (error) {
+        logger.error('Search error:', error);
+        res.status(500).json({ error: 'Search failed' });
     }
 });
 

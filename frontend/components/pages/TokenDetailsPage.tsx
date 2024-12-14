@@ -1,12 +1,9 @@
 import { useParams, useLocation } from 'react-router-dom';
 import { TradingInterface } from '../Trading/TradingInterface';
 import { PriceChart } from '../Trading/PriceChart';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { TokenRecord } from '../../../shared/types/token';
 import { tokenService } from '../../services/tokenService';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { BondingCurve } from '../../services/bondingCurve';
-import { PublicKey } from '@solana/web3.js';
 import { priceClient } from '../../services/priceClient';
 
 export function TokenDetailsPage() {
@@ -16,27 +13,6 @@ export function TokenDetailsPage() {
     const [token, setToken] = useState<TokenRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { connection } = useConnection();
-    const wallet = useWallet();
-
-    // Initialize bonding curve
-    const bondingCurve = useMemo(() => {
-        if (!connection || !wallet.publicKey || !token?.mintAddress || !token?.curveAddress) {
-            return null;
-        }
-
-        try {
-            return new BondingCurve(
-                connection,
-                wallet,
-                new PublicKey(token.mintAddress),
-                new PublicKey(token.curveAddress)
-            );
-        } catch (error) {
-            console.error('Error creating bonding curve interface:', error);
-            return null;
-        }
-    }, [connection, wallet, token]);
 
     useEffect(() => {
         if (!mintAddress) {

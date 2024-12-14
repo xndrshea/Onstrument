@@ -13,9 +13,10 @@ import { config } from '../../config'
 
 interface TradingInterfaceProps {
     token: TokenRecord
+    onPriceUpdate?: (price: number) => void
 }
 
-export function TradingInterface({ token }: TradingInterfaceProps) {
+export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
     const { publicKey, connected } = wallet
@@ -30,6 +31,7 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
     const [priceInfo, setPriceInfo] = useState<{ price: number; totalCost: number } | null>(null)
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05)
     const [spotPrice, setSpotPrice] = useState<number | null>(null)
+    const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
 
     const isDexToken = token.tokenType === 'pool'
 
@@ -54,50 +56,107 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
 
     const getAppropriateConnection = () => {
         if (isDexToken && config.HELIUS_RPC_URL) {
-            return new Connection(config.HELIUS_RPC_URL, 'confirmed')
+            // Always use Helius for DEX tokens
+            return mainnetConnection;
         }
-        return isDexToken ? mainnetConnection : devnetConnection
+        // For custom tokens or when Helius is not available
+        return devnetConnection;
     }
 
-    const updateBalances = async () => {
-        if (!publicKey) return
+    const checkTokenTradability = async () => {
+        if (!isDexToken) return;
 
         try {
-            const appropriateConnection = getAppropriateConnection()
+            const appropriateConnection = getAppropriateConnection();
+            const quote = await dexService.calculateTradePrice(
+                token.mintAddress,
+                1,
+                true,
+                appropriateConnection
+            );
 
-            // Get SOL balance
-            const solBal = await appropriateConnection.getBalance(publicKey)
-            setSolBalance(solBal / LAMPORTS_PER_SOL)
+            // Only mark as tradable if we get a valid price
+            if (quote && quote.price > 0) {
+                console.log("Token tradability check succeeded");
+                setIsTokenTradable(true);
+            } else {
+                console.log("Token not tradable - no valid price");
+                setIsTokenTradable(false);
+            }
+        } catch (error: any) {
+            console.log("Token tradability check failed:", error);
+            setIsTokenTradable(false);
+        }
+    };
 
-            // Get token balance
+    const updateBalances = async () => {
+        if (!publicKey) return;
+
+        try {
+            const appropriateConnection = getAppropriateConnection();
+
+            // Get SOL balance and token balance regardless of token type
+            const solBal = await appropriateConnection.getBalance(publicKey);
+            setSolBalance(solBal / LAMPORTS_PER_SOL);
+
             const ata = await getAssociatedTokenAddress(
                 new PublicKey(token.mintAddress),
                 publicKey
-            )
+            );
 
-            const ataInfo = await appropriateConnection.getAccountInfo(ata)
+            const ataInfo = await appropriateConnection.getAccountInfo(ata);
             if (ataInfo) {
-                const tokenAccountInfo = await appropriateConnection.getTokenAccountBalance(ata)
-                setUserBalance(BigInt(tokenAccountInfo.value.amount))
+                const tokenAccountInfo = await appropriateConnection.getTokenAccountBalance(ata);
+                setUserBalance(BigInt(tokenAccountInfo.value.amount));
             } else {
-                setUserBalance(BigInt(0))
+                setUserBalance(BigInt(0));
             }
 
-            // For DEX tokens, update spot price
-            if (isDexToken) {
-                const quote = await dexService.calculateTradePrice(
-                    token.mintAddress,
-                    1,
-                    true,
-                    appropriateConnection
-                )
-                setSpotPrice(quote.price)
+            // Skip spot price check if we already know token isn't tradable
+            if (isDexToken && isTokenTradable) {
+                await checkTokenTradability();
             }
         } catch (error) {
-            console.error('Balance update error:', error)
-            setError('Failed to fetch balances')
+            console.error('Balance update error:', error);
+            setError('Failed to fetch balances');
         }
-    }
+    };
+
+    const updateSpotPrice = async () => {
+        if (!isDexToken || !token.mintAddress) return;
+
+        try {
+            console.log("Starting spot price update for token:", token.mintAddress);
+            // Request a quote for selling 1 token to get the spot price
+            const response = await fetch(
+                `https://quote-api.jup.ag/v6/quote?` +
+                `inputMint=${token.mintAddress}` + // Selling token
+                `&outputMint=So11111111111111111111111111111111111111112` + // Getting SOL
+                `&amount=${10 ** token.decimals}`  // 1 token in its base units
+            );
+
+            const quoteResponse = await response.json();
+            console.log("SPOT PRICE RAW:", quoteResponse);
+
+            if (response.ok && quoteResponse.outAmount) {
+                // Calculate price per token using the same logic as dexService
+                const pricePerToken = Number(quoteResponse.outAmount) / Number(quoteResponse.inAmount) * (10 ** (token.decimals - 9));
+                console.log("SPOT PRICE CALC:", {
+                    outAmount: quoteResponse.outAmount,
+                    inAmount: quoteResponse.inAmount,
+                    tokenDecimals: token.decimals,
+                    solDecimals: 9,
+                    pricePerToken
+                });
+                setSpotPrice(pricePerToken);
+                onPriceUpdate?.(pricePerToken);
+            } else {
+                console.error("Invalid Jupiter response:", quoteResponse);
+            }
+        } catch (error) {
+            console.error('Error updating spot price:', error);
+        }
+    };
 
     // Price quote updates
     useEffect(() => {
@@ -114,9 +173,11 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                         token.mintAddress,
                         parseFloat(amount),
                         isSelling,
-                        appropriateConnection
+                        appropriateConnection,
+                        token.decimals
                     )
                     setPriceInfo(quote)
+                    onPriceUpdate?.(quote.totalCost / LAMPORTS_PER_SOL)
                     setError(null)
                 } else if (bondingCurve) {
                     const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling)
@@ -135,11 +196,17 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
     // Initial balance fetch and periodic updates
     useEffect(() => {
         if (connected && publicKey) {
-            updateBalances()
-            const interval = setInterval(updateBalances, 10000)
-            return () => clearInterval(interval)
+            updateBalances();
+            updateSpotPrice();
+
+            const interval = setInterval(() => {
+                updateBalances();
+                updateSpotPrice();
+            }, 10000);
+
+            return () => clearInterval(interval);
         }
-    }, [connected, publicKey])
+    }, [connected, publicKey, token.mintAddress]);
 
     // Load saved values
     useEffect(() => {
@@ -207,6 +274,12 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
         }
     }
 
+    useEffect(() => {
+        console.log("Token type:", token.tokenType);
+        console.log("isDexToken:", isDexToken);
+        console.log("isTokenTradable:", isTokenTradable);
+    }, [token.tokenType, isDexToken, isTokenTradable]);
+
     return (
         <div className="p-4 bg-white rounded-lg shadow">
             {/* Connection Status */}
@@ -250,20 +323,18 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                         {/* Buy/Sell Toggle */}
                         <div className="flex mb-4">
                             <button
-                                className={`flex-1 py-2 px-4 text-center ${!isSelling
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 text-gray-700'
+                                className={`flex-1 py-2 px-4 text-center ${!isSelling ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
                                     }`}
                                 onClick={() => setIsSelling(false)}
+                                disabled={!isTokenTradable || isLoading}
                             >
                                 Buy
                             </button>
                             <button
-                                className={`flex-1 py-2 px-4 text-center ${isSelling
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 text-gray-700'
+                                className={`flex-1 py-2 px-4 text-center ${isSelling ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
                                     }`}
                                 onClick={() => setIsSelling(true)}
+                                disabled={!isTokenTradable || isLoading}
                             >
                                 Sell
                             </button>
@@ -278,9 +349,10 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                                 type="number"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                                className={`w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!isTokenTradable ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                    } text-gray-900`}
                                 placeholder="Enter amount"
-                                disabled={isLoading}
+                                disabled={!isTokenTradable || isLoading}
                             />
                         </div>
 
@@ -303,24 +375,34 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                                         }
                                     }
                                 }}
-                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                                className={`w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!isTokenTradable ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
+                                    } text-gray-900`}
                                 placeholder="Enter slippage %"
+                                disabled={!isTokenTradable || isLoading}
                             />
                         </div>
 
                         {/* Price Information */}
-                        {amount && !isNaN(parseFloat(amount)) && (
-                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md shadow-sm">
+                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md shadow-sm">
+                            <div className="flex justify-between mb-2">
+                                <span className="text-sm text-blue-700">
+                                    Current Price
+                                </span>
+                                <span className="font-medium text-blue-900">
+                                    {(priceInfo?.price || 0).toFixed(6)} SOL
+                                </span>
+                            </div>
+                            {amount && !isNaN(parseFloat(amount)) && (
                                 <div className="flex justify-between mb-2">
                                     <span className="text-sm text-blue-700">
                                         {isSelling ? 'SOL You Will Receive' : 'SOL Cost'}
                                     </span>
                                     <span className="font-medium text-blue-900">
-                                        {((priceInfo?.totalCost ?? 0) / LAMPORTS_PER_SOL).toFixed(4)} SOL
+                                        {((priceInfo?.totalCost ?? 0)).toFixed(6)} SOL
                                     </span>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
 
                         {/* Error Display */}
                         {error && (
@@ -349,12 +431,12 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
 
                         {/* Trade Button */}
                         <button
-                            className={`w-full py-2 px-4 rounded font-medium ${isLoading
+                            className={`w-full py-2 px-4 rounded font-medium ${isLoading || !isTokenTradable
                                 ? 'bg-gray-300 cursor-not-allowed'
                                 : 'bg-blue-600 hover:bg-blue-700 text-white'
                                 }`}
                             onClick={handleTransaction}
-                            disabled={isLoading || !amount || isNaN(parseFloat(amount))}
+                            disabled={isLoading || !amount || isNaN(parseFloat(amount)) || !isTokenTradable}
                         >
                             {isLoading ? (
                                 <span>Processing...</span>
@@ -363,6 +445,19 @@ export function TradingInterface({ token }: TradingInterfaceProps) {
                             )}
                         </button>
                     </div>
+
+                    {isDexToken && (
+                        <div className={`mb-4 p-3 ${isTokenTradable ? 'hidden' : 'bg-yellow-100 border border-yellow-200'} rounded-md`}>
+                            <div className="text-yellow-800">
+                                This token cannot be traded at the moment. This could be because:
+                                <ul className="list-disc ml-5 mt-2">
+                                    <li>The token is newly created</li>
+                                    <li>There is no liquidity available</li>
+                                    <li>The token hasn't been listed on any DEX yet</li>
+                                </ul>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>

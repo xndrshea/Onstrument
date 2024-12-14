@@ -116,17 +116,13 @@ export class PriceHistoryModel {
             const result = await pool.query(`
                 SELECT 
                     extract(epoch from time) * 1000 as time,
-                    price as value,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
+                    price as value
                 FROM token_platform.price_history
                 WHERE mint_address = $1
                 ORDER BY time ASC
             `, [tokenMintAddress]);
 
+            logger.info(`Found ${result.rows.length} price points for ${tokenMintAddress}`);
             return result.rows;
         } catch (error) {
             logger.error('Error fetching price history:', error);
