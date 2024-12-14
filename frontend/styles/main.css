@@ -289,3 +289,23 @@ button[type="submit"]:disabled {
 .sync-button:hover {
     background-color: #2d3748;
 }
+
+.search-results {
+    max-height: 400px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #4a5568 #2d3748;
+}
+
+.search-results::-webkit-scrollbar {
+    width: 8px;
+}
+
+.search-results::-webkit-scrollbar-track {
+    background: #2d3748;
+}
+
+.search-results::-webkit-scrollbar-thumb {
+    background-color: #4a5568;
+    border-radius: 4px;
+}

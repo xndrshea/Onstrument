@@ -96,8 +96,10 @@ export async function initializeDatabase() {
                 base_decimals INTEGER NOT NULL,
                 quote_decimals INTEGER NOT NULL,
                 program_id VARCHAR(255) NOT NULL,
+                version INTEGER NOT NULL,
                 pool_type VARCHAR(50) NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT valid_pool_type CHECK (pool_type IN ('LEGACY_AMM', 'STANDARD_AMM', 'CLMM'))
             );
 
@@ -107,6 +109,9 @@ export async function initializeDatabase() {
             
             CREATE INDEX IF NOT EXISTS idx_raydium_pools_quote_mint 
             ON token_platform.raydium_pools(quote_mint);
+
+            CREATE INDEX IF NOT EXISTS idx_raydium_pools_mints 
+            ON token_platform.raydium_pools(base_mint, quote_mint);
         `);
 
         // Create price_history table first

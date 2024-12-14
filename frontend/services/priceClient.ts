@@ -1,79 +1,147 @@
 import { API_BASE_URL } from '../config';
 
-export const priceClient = {
-    // Only used for getting historical price data for charts
-    async getPriceHistory(mintAddress: string): Promise<Array<{ time: number, value: number }>> {
-        const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
-        if (!response.ok) throw new Error('Failed to fetch price history');
-        return response.json();
-    },
+class WebSocketClient {
+    private static instance: WebSocketClient | null = null;
+    private ws: WebSocket | null = null;
+    private reconnectAttempts = 0;
+    private maxReconnectAttempts = 5;
+    private subscribers = new Map<string, Set<(price: number) => void>>();
 
-    // Only used for real-time chart updates
-    subscribeToPrice(mintAddress: string, callback: (price: number) => void): () => void {
-        let ws: WebSocket | null = null;
-        let reconnectTimer: NodeJS.Timeout | null = null;
-        let isIntentionalClose = false;
-        let isConnecting = false;
+    private constructor() { }
 
-        const connect = () => {
-            if (isConnecting || ws?.readyState === WebSocket.OPEN) return;
+    static getInstance(): WebSocketClient {
+        if (!this.instance) {
+            this.instance = new WebSocketClient();
+        }
+        return this.instance;
+    }
 
-            isConnecting = true;
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = process.env.NODE_ENV === 'production'
-                ? window.location.host
-                : `${window.location.hostname}:3001`;
-            const wsUrl = `${protocol}//${host}/ws`;
+    private getWebSocketUrl(): string {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = process.env.NODE_ENV === 'production'
+            ? window.location.host
+            : `${window.location.hostname}:3001`;
+        return `${protocol}//${host}/ws`;
+    }
 
-            ws = new WebSocket(wsUrl);
+    private connect(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            try {
+                this.ws = new WebSocket(this.getWebSocketUrl());
 
-            ws.onopen = () => {
-                console.log(`WebSocket connected for ${mintAddress}`);
-                isConnecting = false;
-                ws?.send(JSON.stringify({
-                    type: 'subscribe',
-                    mintAddress,
-                    channel: 'price'
-                }));
-            };
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.reconnectAttempts = 0;
+                    this.resubscribeAll();
+                    resolve();
+                };
 
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'price' && data.mintAddress === mintAddress) {
-                        callback(data.data.price);
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'price' && data.mintAddress) {
+                            const callbacks = this.subscribers.get(data.mintAddress);
+                            callbacks?.forEach(callback => callback(data.data.price));
+                        }
+                    } catch (error) {
+                        console.error('Error processing WebSocket message:', error);
                     }
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
-                }
-            };
+                };
 
-            ws.onclose = () => {
-                isConnecting = false;
-                if (!isIntentionalClose) {
-                    reconnectTimer = setTimeout(connect, 2000);
-                }
-            };
+                this.ws.onclose = () => {
+                    this.handleDisconnect();
+                };
 
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                isConnecting = false;
-                if (!isIntentionalClose) {
-                    reconnectTimer = setTimeout(connect, 2000);
-                }
-            };
-        };
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    reject(error);
+                };
 
-        connect();
+            } catch (error) {
+                console.error('WebSocket connection error:', error);
+                reject(error);
+            }
+        });
+    }
+
+    private async handleDisconnect() {
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error('Max reconnection attempts reached');
+            return;
+        }
+
+        this.reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+
+        console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        setTimeout(() => this.connect(), delay);
+    }
+
+    private resubscribeAll() {
+        for (const mintAddress of this.subscribers.keys()) {
+            this.sendSubscription(mintAddress);
+        }
+    }
+
+    private sendSubscription(mintAddress: string) {
+        if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'subscribe',
+                mintAddress,
+                channel: 'price'
+            }));
+        }
+    }
+
+    subscribeToPrice(mintAddress: string, callback: (price: number) => void): () => void {
+        if (!this.subscribers.has(mintAddress)) {
+            this.subscribers.set(mintAddress, new Set());
+        }
+
+        this.subscribers.get(mintAddress)?.add(callback);
+
+        if (this.ws?.readyState !== WebSocket.OPEN) {
+            this.connect();
+        } else {
+            this.sendSubscription(mintAddress);
+        }
 
         return () => {
-            isIntentionalClose = true;
-            if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-            }
-            if (ws) {
-                ws.close();
+            const callbacks = this.subscribers.get(mintAddress);
+            callbacks?.delete(callback);
+            if (callbacks?.size === 0) {
+                this.subscribers.delete(mintAddress);
             }
         };
     }
+}
+
+export const priceClient = {
+    wsClient: WebSocketClient.getInstance(),
+
+    subscribeToPrice(mintAddress: string, callback: (price: number) => void): () => void {
+        return this.wsClient.subscribeToPrice(mintAddress, callback);
+    },
+
+    // Only used for getting historical price data for charts
+    async getPriceHistory(mintAddress: string): Promise<Array<{ time: number, value: number }>> {
+        console.log('Fetching price history from API for:', mintAddress);
+        const response = await fetch(
+            `${API_BASE_URL}/price-history/${mintAddress}`
+        );
+
+        if (!response.ok) throw new Error('Failed to fetch price history');
+
+        const data = await response.json();
+        console.log('Raw price history data:', data);
+
+        if (!data || !data.length) {
+            throw new Error('No price data available');
+        }
+
+        return data.map((point: any) => ({
+            time: point.time,
+            value: point.value
+        }));
+    },
 };

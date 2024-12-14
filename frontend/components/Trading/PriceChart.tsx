@@ -7,85 +7,120 @@ interface PriceChartProps {
     token: TokenRecord;
     width?: number;
     height?: number;
+    currentPrice?: number;
 }
 
-export function PriceChart({ token, width = 600, height = 300 }: PriceChartProps) {
+export function PriceChart({ token, width = 600, height = 300, currentPrice }: PriceChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chart = useRef<IChartApi | null>(null);
     const series = useRef<ISeriesApi<"Line"> | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [hasInitialized, setHasInitialized] = useState(false);
 
-    useEffect(() => {
-        if (!chartContainerRef.current || !token.mintAddress) return;
+    const fetchAndUpdatePrices = async () => {
+        try {
+            setIsLoading(true);
+            const history = await priceClient.getPriceHistory(token.mintAddress);
 
-        chart.current = createChart(chartContainerRef.current, {
-            layout: {
-                background: { color: '#232427' },
-                textColor: 'rgba(255, 255, 255, 0.9)',
-            },
-            width,
-            height,
-            timeScale: {
-                timeVisible: true,
-                secondsVisible: false
-            },
-        });
-
-        series.current = chart.current.addLineSeries({
-            color: '#4CAF50',
-            lineWidth: 2,
-            priceFormat: {
-                type: 'price',
-                precision: 6,
-                minMove: 0.000001,
-            },
-        });
-
-        return () => {
-            if (chart.current) {
-                chart.current.remove();
+            if (!history?.length) {
+                setError('No price history available');
+                return;
             }
-        };
-    }, [token.mintAddress]);
+
+            if (series.current) {
+                const formattedData = history.map(point => ({
+                    time: Math.floor(point.time / 1000) as UTCTimestamp,
+                    value: Number(point.value)
+                }));
+
+                series.current.setData(formattedData);
+                chart.current?.timeScale().fitContent();
+            }
+            setError(null);
+        } catch (error) {
+            setError('Failed to load price history');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchAndUpdatePrices = async () => {
-            if (!token.mintAddress) {
-                setError('Invalid token: missing mintAddress');
+        const initChart = async () => {
+            if (!chartContainerRef.current || !token?.mintAddress) {
+                console.log('[Chart Debug] Missing requirements:', {
+                    container: !!chartContainerRef.current,
+                    mintAddress: token?.mintAddress
+                });
                 return;
             }
 
             try {
-                setIsLoading(true);
-                const history = await priceClient.getPriceHistory(token.mintAddress);
-                if (series.current && history?.length > 0) {
-                    const formattedData = history.map(point => ({
-                        time: point.time as UTCTimestamp,
-                        value: point.value
-                    }));
-                    series.current.setData(formattedData);
-                } else {
-                    setError('No price history available');
+                if (chart.current) {
+                    chart.current.remove();
                 }
-            } catch (error) {
-                console.error('Error fetching price history:', error);
-                setError('Failed to load price history');
-            } finally {
-                setIsLoading(false);
+
+                chart.current = createChart(chartContainerRef.current, {
+                    layout: {
+                        background: { color: '#232427' },
+                        textColor: 'rgba(255, 255, 255, 0.9)',
+                    },
+                    width,
+                    height,
+                    timeScale: {
+                        timeVisible: true,
+                        secondsVisible: false,
+                    },
+                    grid: {
+                        vertLines: { color: '#2c2c2c' },
+                        horzLines: { color: '#2c2c2c' },
+                    },
+                });
+
+                series.current = chart.current.addLineSeries({
+                    color: '#26a69a',
+                    lineWidth: 2,
+                });
+
+                await fetchAndUpdatePrices();
+                setHasInitialized(true);
+            } catch (err) {
+                console.error('[Chart Debug] Error:', err);
+                setError('Failed to initialize chart');
             }
         };
 
-        fetchAndUpdatePrices();
-    }, [token.mintAddress]);
+        initChart();
+    }, [token?.mintAddress]);
 
-    if (error) {
-        return <div className="text-red-500 p-4">{error}</div>;
-    }
+    return (
+        <div className="relative">
+            <div
+                ref={chartContainerRef}
+                className="price-chart-container"
+                style={{
+                    width: `${width}px`,
+                    height: `${height}px`,
+                    minWidth: '300px',
+                    minHeight: '200px',
+                    background: '#232427',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    margin: '16px 0'
+                }}
+            />
 
-    if (isLoading) {
-        return <div className="text-white p-4">Loading price history...</div>;
-    }
+            {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <div className="text-white/80">Loading price chart...</div>
+                </div>
+            )}
 
-    return <div ref={chartContainerRef} />;
+            {error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <div className="text-red-500 p-4 bg-red-100/10 rounded-lg">{error}</div>
+                </div>
+            )}
+        </div>
+    );
 }

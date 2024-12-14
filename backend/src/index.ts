@@ -4,39 +4,64 @@ import { initializeDatabase } from './config/database'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { Server } from 'http'
 import WebSocket from 'ws'
+import cors from 'cors'
 
 const PORT = process.env.PORT || 3001
 
 async function startServer() {
     try {
         logger.info('Starting server initialization...')
-
-        // Initialize database first
         await initializeDatabase()
-        logger.info('Database initialized successfully')
 
-        // Create Express app and server
         const app = createApp()
         const server = new Server(app)
 
-        // Initialize WebSocket server
+        // Initialize WebSocket server with proper CORS
         const wss = new WebSocket.Server({
             server,
-            path: '/ws'
+            path: '/ws',
+            verifyClient: (info, cb) => {
+                const origin = info.origin || info.req.headers.origin
+                const allowedOrigins = [
+                    'http://localhost:3000',
+                    'http://localhost:5173',
+                    process.env.FRONTEND_URL
+                ].filter(Boolean)
+
+                if (allowedOrigins.includes(origin)) {
+                    cb(true)
+                } else {
+                    logger.warn(`Rejected WebSocket connection from origin: ${origin}`)
+                    cb(false, 403, 'Forbidden')
+                }
+            }
         })
 
-        // Initialize HeliusWebSocketService
-        try {
-            const heliusManager = HeliusManager.getInstance()
-            await heliusManager.initialize(wss)
-            logger.info('HeliusWebSocketService initialized successfully')
-        } catch (error) {
-            logger.error('Failed to initialize HeliusWebSocketService:', error)
-            throw error
-        }
+        // WebSocket connection handling
+        wss.on('connection', (ws, req) => {
+            logger.info(`New WebSocket connection from ${req.socket.remoteAddress}`)
+
+            ws.on('message', (message) => {
+                try {
+                    const data = JSON.parse(message.toString())
+                    logger.info('Received WebSocket message:', data)
+                } catch (error) {
+                    logger.error('Error parsing WebSocket message:', error)
+                }
+            })
+
+            ws.on('error', (error) => {
+                logger.error('WebSocket client error:', error)
+            })
+        })
+
+        // Initialize HeliusManager
+        const heliusManager = HeliusManager.getInstance()
+        await heliusManager.initialize(wss)
 
         server.listen(PORT, () => {
             logger.info(`Server running on port ${PORT}`)
+            logger.info(`WebSocket server running on ws://localhost:${PORT}/ws`)
         })
 
     } catch (error) {

@@ -97,38 +97,21 @@ export class HeliusManager extends EventEmitter {
 
     private async handleMessage(data: any) {
         this.messageCount++;
-
         try {
             const messageObj = JSON.parse(data.toString());
-
-            // Add MORE logging
-            logger.info('Received Helius message:', {
-                method: messageObj.method,
-                programId: messageObj.params?.result?.value?.account?.owner,
-                accountKey: messageObj.params?.result?.value?.pubkey,
-                dataLength: messageObj.params?.result?.value?.account?.data?.[0]?.length
-            });
-
             if (messageObj.method === "programNotification") {
                 const programId = messageObj.params.result.value.account.owner;
                 const buffer = Buffer.from(messageObj.params.result.value.account.data[0], 'base64');
                 const accountKey = messageObj.params.result.value.pubkey;
 
-                // Check if it's any of the Raydium programs
                 if (Object.values(config.RAYDIUM_PROGRAMS).includes(programId)) {
-                    logger.info(`Processing Raydium message ${this.messageCount}/${this.MAX_MESSAGES} from program ${programId}`, {
-                        programId,
-                        programType: Object.entries(config.RAYDIUM_PROGRAMS).find(([_, id]) => id === programId)?.[0],
-                        bufferLength: buffer.length
-                    });
                     await this.raydiumProcessor.processEvent(buffer, accountKey, programId);
                 } else if (programId === config.BONDING_CURVE_PROGRAM_ID) {
-                    logger.info(`Processing Bonding Curve message ${this.messageCount}/${this.MAX_MESSAGES}`);
                     await this.bondingCurveProcessor.processEvent(buffer, accountKey, programId);
                 }
             }
         } catch (error) {
-            logger.error('Error handling message:', error);
+            logger.error('Error handling Helius message:', error);
         }
     }
 

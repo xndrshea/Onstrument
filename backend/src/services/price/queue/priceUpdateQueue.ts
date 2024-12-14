@@ -56,7 +56,7 @@ export class PriceUpdateQueue {
                     volume
                 )
                 VALUES (
-                    time_bucket('1 minute', to_timestamp($1)),
+                    time_bucket('1 minute', to_timestamp($1::bigint / 1000)),
                     $2,
                     $3,
                     $3,  -- Initial price becomes open
@@ -73,7 +73,7 @@ export class PriceUpdateQueue {
                     close = $3,
                     volume = token_platform.price_history.volume + $4
             `, [
-                update.timestamp / 1000,
+                update.timestamp,
                 update.mintAddress,
                 update.price,
                 update.volume || 0
