@@ -81,7 +81,7 @@ export class RaydiumProcessor extends BaseProcessor {
                 return;
             }
 
-            await this.ensureTokenExists(tokenToTrack);
+            await this.ensureTokenExists(tokenToTrack, tokenDecimals);
             await this.recordPriceUpdate(tokenToTrack, price, volume);
 
         } catch (error) {
@@ -130,7 +130,7 @@ export class RaydiumProcessor extends BaseProcessor {
                 totalQuoteVolume / totalBaseVolume :
                 totalBaseVolume / totalQuoteVolume;
 
-            await this.ensureTokenExists(tokenToTrack);
+            await this.ensureTokenExists(tokenToTrack, tokenDecimals);
             await this.recordPriceUpdate(
                 tokenToTrack,
                 price,
@@ -214,19 +214,39 @@ export class RaydiumProcessor extends BaseProcessor {
     }
 
 
-    private async ensureTokenExists(mintAddress: string): Promise<boolean> {
+    private async ensureTokenExists(mintAddress: string, decimals?: number): Promise<boolean> {
         try {
             await pool.query(
-                `INSERT INTO token_platform.tokens (mint_address)
-                 VALUES ($1)
-                 ON CONFLICT (mint_address) DO NOTHING`,
+                `INSERT INTO token_platform.tokens (
+                    mint_address, 
+                    decimals,
+                    metadata_status,
+                    metadata_source
+                )
+                VALUES ($1, $2, 'pending', 'raydium')
+                ON CONFLICT (mint_address) 
+                DO UPDATE SET 
+                    decimals = COALESCE(token_platform.tokens.decimals, EXCLUDED.decimals),
+                    metadata_status = CASE 
+                        WHEN token_platform.tokens.metadata_status IS NULL 
+                        THEN 'pending' 
+                        ELSE token_platform.tokens.metadata_status 
+                    END`,
+                [mintAddress, decimals || null]
+            );
+
+            // Only queue metadata update if we don't already have it
+            const result = await pool.query(
+                `SELECT metadata_status FROM token_platform.tokens WHERE mint_address = $1`,
                 [mintAddress]
             );
 
-            await MetadataService.getInstance().queueMetadataUpdate(
-                mintAddress,
-                'raydium_processor'
-            );
+            if (result.rows[0]?.metadata_status === 'pending') {
+                await MetadataService.getInstance().queueMetadataUpdate(
+                    mintAddress,
+                    'raydium_processor'
+                );
+            }
 
             return true;
         } catch (error) {

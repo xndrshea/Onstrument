@@ -1,8 +1,8 @@
-import { Connection, VersionedTransaction } from '@solana/web3.js';
+import { Connection, VersionedTransaction, PublicKey } from '@solana/web3.js';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { NATIVE_SOL_MINT } from '../constants';
 import { BN } from '@project-serum/anchor';
-import { TOKEN_DECIMALS } from './bondingCurve';
+import { getMint } from '@solana/spl-token';
 
 interface TradeParams {
     mintAddress: string;
@@ -37,19 +37,23 @@ export const dexService = {
         mintAddress: string,
         amount: number,
         isSelling: boolean,
-        connection: Connection,
-        decimals: number = 9
+        connection: Connection
     ) => {
         try {
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
-            const rawAmount = Math.floor(amount * (10 ** decimals));
+
+            // Get token decimals from the mint account
+            const tokenMint = await getMint(connection, new PublicKey(mintAddress));
+            const baseAmount = isSelling
+                ? amount * (10 ** tokenMint.decimals)  // Use actual token decimals
+                : amount * (10 ** 9); // SOL always uses 9 decimals
 
             const response = await fetch(
                 `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
-                `&amount=${rawAmount}`
+                `&amount=${baseAmount}`
             );
 
             const quoteResponse = await response.json();
@@ -59,7 +63,7 @@ export const dexService = {
             }
 
             if (isSelling) {
-                const solReceived = Number(quoteResponse.outAmount) / (10 ** 9);
+                const solReceived = Number(quoteResponse.outAmount) / (10 ** 9); // Only SOL decimals
                 const pricePerToken = solReceived / amount;
                 return {
                     price: pricePerToken,
@@ -67,7 +71,7 @@ export const dexService = {
                     isSelling
                 };
             } else {
-                const solNeeded = Number(quoteResponse.inAmount) / (10 ** 9);
+                const solNeeded = Number(quoteResponse.inAmount) / (10 ** 9); // Only SOL decimals
                 const pricePerToken = solNeeded / amount;
                 return {
                     price: pricePerToken,
@@ -93,11 +97,15 @@ export const dexService = {
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
 
+            // Get token decimals for the amount conversion
+            const tokenMint = await getMint(connection, new PublicKey(mintAddress));
+            const baseAmount = amount * (10 ** tokenMint.decimals);
+
             const quoteResponse = await fetch(
                 `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
-                `&amount=${amount.toString()}` +
+                `&amount=${baseAmount}` +
                 `&slippageBps=${Math.floor(slippageTolerance * 10000)}`
             ).then(res => res.json());
 

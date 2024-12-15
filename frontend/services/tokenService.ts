@@ -1,9 +1,9 @@
 import { TokenRecord } from '../../shared/types/token';
 import { logger } from '../utils/logger';
 import BN from 'bn.js';
+import { TOKEN_DECIMALS } from './bondingCurve';
 
 const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
-const TOKEN_DECIMALS = 9;
 
 export class TokenService {
     private transformToken(token: any): TokenRecord {

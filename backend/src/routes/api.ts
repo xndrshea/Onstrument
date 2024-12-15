@@ -59,10 +59,10 @@ router.post('/tokens', async (req, res) => {
             symbol,
             description,
             metadataUri,
-            curveConfig
+            curveConfig,
+            decimals
         } = req.body;
 
-        // Simple insertion into custom_tokens only
         const result = await pool.query(`
             INSERT INTO token_platform.custom_tokens (
                 mint_address,
@@ -71,8 +71,9 @@ router.post('/tokens', async (req, res) => {
                 symbol,
                 description,
                 metadata_url,
-                curve_config
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                curve_config,
+                decimals
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
         `, [
             mintAddress,
@@ -81,7 +82,8 @@ router.post('/tokens', async (req, res) => {
             symbol,
             description,
             metadataUri,
-            curveConfig
+            curveConfig,
+            decimals
         ]);
 
         res.status(201).json(result.rows[0]);
