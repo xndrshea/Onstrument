@@ -2,6 +2,7 @@ import { Connection, VersionedTransaction, PublicKey } from '@solana/web3.js';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { NATIVE_SOL_MINT } from '../constants';
 import { BN } from '@project-serum/anchor';
+import { mainnetConnection } from '../config';
 import { getMint } from '@solana/spl-token';
 
 interface TradeParams {
@@ -16,17 +17,19 @@ interface TradeParams {
 export const dexService = {
     getTokenPrice: async (
         mintAddress: string,
-        connection: Connection
+        _connection: Connection
     ): Promise<number | null> => {
         try {
             const response = await fetch(
-                `https://api.jup.ag/price/v2?ids=${mintAddress}&showExtraInfo=true`
+                `https://price.jup.ag/v4/price?` +
+                `ids=${mintAddress}` +
+                `&vsToken=SOL`
             );
 
             if (!response.ok) return null;
 
             const priceData = await response.json();
-            return Number(priceData.data[mintAddress]?.price) || null;
+            return priceData.data[mintAddress]?.price || null;
         } catch (error) {
             console.error('Error fetching token price:', error);
             return null;
@@ -37,48 +40,66 @@ export const dexService = {
         mintAddress: string,
         amount: number,
         isSelling: boolean,
-        connection: Connection
+        _connection: Connection
     ) => {
         try {
-            const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
-            const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
+            const mintInfo = await mainnetConnection.getParsedAccountInfo(
+                new PublicKey(mintAddress)
+            );
 
-            // Get token decimals from the mint account
-            const tokenMint = await getMint(connection, new PublicKey(mintAddress));
-            const baseAmount = isSelling
-                ? amount * (10 ** tokenMint.decimals)  // Use actual token decimals
-                : amount * (10 ** 9); // SOL always uses 9 decimals
+            if (!mintInfo.value?.data || typeof mintInfo.value.data !== 'object') {
+                throw new Error('Failed to get mint info');
+            }
 
+            const tokenDecimals = (mintInfo.value.data as any).parsed.info.decimals;
+            console.log('Token decimals from mint:', tokenDecimals);
+
+            // When buying, we want this many tokens as OUTPUT
+            // So we need to query with the output amount
             const response = await fetch(
                 `https://quote-api.jup.ag/v6/quote?` +
-                `inputMint=${inputMint}` +
-                `&outputMint=${outputMint}` +
-                `&amount=${baseAmount}`
+                `inputMint=${isSelling ? mintAddress : NATIVE_SOL_MINT}` +
+                `&outputMint=${isSelling ? NATIVE_SOL_MINT : mintAddress}` +
+                `&amount=${Math.floor(amount * 10 ** tokenDecimals)}` +
+                `&swapMode=${isSelling ? 'ExactIn' : 'ExactOut'}`
             );
 
             const quoteResponse = await response.json();
+            console.log('Jupiter quote response:', quoteResponse);
 
             if (!response.ok || !quoteResponse.outAmount) {
+                console.error('Invalid quote response:', quoteResponse);
                 return { price: 0, totalCost: 0, isSelling };
             }
 
+            let price, totalCost;
+
             if (isSelling) {
-                const solReceived = Number(quoteResponse.outAmount) / (10 ** 9); // Only SOL decimals
-                const pricePerToken = solReceived / amount;
-                return {
-                    price: pricePerToken,
-                    totalCost: solReceived,
-                    isSelling
-                };
+                const solReceived = Number(quoteResponse.outAmount) / 1e9;
+                price = solReceived / amount;  // Price per token
+                totalCost = solReceived;
             } else {
-                const solNeeded = Number(quoteResponse.inAmount) / (10 ** 9); // Only SOL decimals
-                const pricePerToken = solNeeded / amount;
-                return {
-                    price: pricePerToken,
-                    totalCost: solNeeded,
-                    isSelling
-                };
+                const solNeeded = Number(quoteResponse.inAmount) / 1e9;
+                price = solNeeded;  // Total SOL needed
+                totalCost = solNeeded;
             }
+
+            console.log('Price calculation:', {
+                rawInAmount: amount,
+                rawOutAmount: quoteResponse.outAmount,
+                inAmount: quoteResponse.inAmount,
+                tokenDecimals,
+                price,
+                actualSolCost: Number(quoteResponse.inAmount) / 1e9,  // Add this for clarity
+                totalCost,
+                isSelling
+            });
+
+            return {
+                price,
+                totalCost,
+                isSelling
+            };
         } catch (error) {
             console.error('Error calculating trade price:', error);
             return { price: 0, totalCost: 0, isSelling };
@@ -97,15 +118,11 @@ export const dexService = {
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
 
-            // Get token decimals for the amount conversion
-            const tokenMint = await getMint(connection, new PublicKey(mintAddress));
-            const baseAmount = amount * (10 ** tokenMint.decimals);
-
             const quoteResponse = await fetch(
                 `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
-                `&amount=${baseAmount}` +
+                `&amount=${amount}` +
                 `&slippageBps=${Math.floor(slippageTolerance * 10000)}`
             ).then(res => res.json());
 
@@ -134,14 +151,14 @@ export const dexService = {
             }
 
             const signedTx = await wallet.signTransaction(transaction);
-            const latestBlockhash = await connection.getLatestBlockhash();
+            const latestBlockhash = await mainnetConnection.getLatestBlockhash();
 
-            const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+            const signature = await mainnetConnection.sendRawTransaction(signedTx.serialize(), {
                 skipPreflight: true,
                 maxRetries: 2
             });
 
-            await connection.confirmTransaction({
+            await mainnetConnection.confirmTransaction({
                 signature,
                 blockhash: latestBlockhash.blockhash,
                 lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
