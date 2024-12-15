@@ -8,7 +8,6 @@ import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { BN } from '@project-serum/anchor'
 import { dexService } from '../../services/dexService'
 import { mainnetConnection, devnetConnection } from '../../config'
-import { Connection } from '@solana/web3.js'
 import { config } from '../../config'
 
 interface TradingInterfaceProps {
@@ -123,35 +122,23 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     };
 
     const updateSpotPrice = async () => {
-        if (!isDexToken || !token.mintAddress) return;
+        if (!token.mintAddress) return;
 
         try {
-            console.log("Starting spot price update for token:", token.mintAddress);
-            // Request a quote for selling 1 token to get the spot price
-            const response = await fetch(
-                `https://quote-api.jup.ag/v6/quote?` +
-                `inputMint=${token.mintAddress}` + // Selling token
-                `&outputMint=So11111111111111111111111111111111111111112` + // Getting SOL
-                `&amount=${10 ** token.decimals}`  // 1 token in its base units
-            );
-
-            const quoteResponse = await response.json();
-            console.log("SPOT PRICE RAW:", quoteResponse);
-
-            if (response.ok && quoteResponse.outAmount) {
-                // Calculate price per token using the same logic as dexService
-                const pricePerToken = Number(quoteResponse.outAmount) / Number(quoteResponse.inAmount) * (10 ** (token.decimals - 9));
-                console.log("SPOT PRICE CALC:", {
-                    outAmount: quoteResponse.outAmount,
-                    inAmount: quoteResponse.inAmount,
-                    tokenDecimals: token.decimals,
-                    solDecimals: 9,
-                    pricePerToken
-                });
-                setSpotPrice(pricePerToken);
-                onPriceUpdate?.(pricePerToken);
-            } else {
-                console.error("Invalid Jupiter response:", quoteResponse);
+            if (isDexToken) {
+                const quote = await dexService.calculateTradePrice(
+                    token.mintAddress,
+                    1,  // Get price for 1 token
+                    true,
+                    connection
+                );
+                setSpotPrice(quote.price);
+                onPriceUpdate?.(quote.price);
+            } else if (bondingCurve) {
+                // Get price quote for custom tokens using bonding curve
+                const quote = await bondingCurve.getPriceQuote(1, true);
+                setSpotPrice(quote.price);
+                onPriceUpdate?.(quote.price);
             }
         } catch (error) {
             console.error('Error updating spot price:', error);
@@ -173,8 +160,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                         token.mintAddress,
                         parseFloat(amount),
                         isSelling,
-                        appropriateConnection,
-                        token.decimals
+                        appropriateConnection
                     )
                     setPriceInfo(quote)
                     onPriceUpdate?.(quote.totalCost / LAMPORTS_PER_SOL)
@@ -233,7 +219,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
 
         try {
             setIsLoading(true)
-            const parsedAmount = new BN(parseFloat(amount) * (10 ** TOKEN_DECIMALS))
+            const parsedAmount = new BN(parseFloat(amount) * (10 ** token.decimals))
             const appropriateConnection = getAppropriateConnection()
 
             if (isDexToken) {
@@ -278,7 +264,8 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
         console.log("Token type:", token.tokenType);
         console.log("isDexToken:", isDexToken);
         console.log("isTokenTradable:", isTokenTradable);
-    }, [token.tokenType, isDexToken, isTokenTradable]);
+        console.log("Token actual decimals:", token.decimals);
+    }, [token.tokenType, isDexToken, isTokenTradable, token.decimals]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">
@@ -301,7 +288,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                         <div className="p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
                             <p className="text-sm text-gray-700">Your {token.symbol} Balance</p>
                             <p className="text-lg font-semibold text-gray-900">
-                                {Number(userBalance) / (10 ** TOKEN_DECIMALS)} {token.symbol}
+                                {Number(userBalance) / (10 ** token.decimals)} {token.symbol}
                             </p>
                         </div>
                     </div>
@@ -384,21 +371,13 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
 
                         {/* Price Information */}
                         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md shadow-sm">
-                            <div className="flex justify-between mb-2">
-                                <span className="text-sm text-blue-700">
-                                    Current Price
-                                </span>
-                                <span className="font-medium text-blue-900">
-                                    {(priceInfo?.price || 0).toFixed(6)} SOL
-                                </span>
-                            </div>
                             {amount && !isNaN(parseFloat(amount)) && (
                                 <div className="flex justify-between mb-2">
                                     <span className="text-sm text-blue-700">
                                         {isSelling ? 'SOL You Will Receive' : 'SOL Cost'}
                                     </span>
                                     <span className="font-medium text-blue-900">
-                                        {((priceInfo?.totalCost ?? 0)).toFixed(6)} SOL
+                                        {(priceInfo?.price || 0).toFixed(6)} SOL
                                     </span>
                                 </div>
                             )}
