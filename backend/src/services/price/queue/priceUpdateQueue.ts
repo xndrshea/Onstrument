@@ -44,6 +44,20 @@ export class PriceUpdateQueue {
 
     private async processUpdate(update: PriceUpdate) {
         try {
+            const timestamp = new Date(update.timestamp);
+
+            // Get the last price point for this token within the last minute
+            const lastPrice = await pool.query(`
+                SELECT price, high, low
+                FROM token_platform.price_history 
+                WHERE mint_address = $1 
+                AND time >= NOW() - INTERVAL '1 minute'
+                ORDER BY time DESC 
+                LIMIT 1
+            `, [update.mintAddress]);
+
+            const previousData = lastPrice.rows[0];
+
             await pool.query(`
                 INSERT INTO token_platform.price_history (
                     time,
@@ -56,14 +70,14 @@ export class PriceUpdateQueue {
                     volume
                 )
                 VALUES (
-                    time_bucket('1 minute', to_timestamp($1::bigint / 1000)),
+                    $1,
                     $2,
                     $3,
-                    $3,  -- Initial price becomes open
-                    $3,  -- Initial price becomes high
-                    $3,  -- Initial price becomes low
-                    $3,  -- Initial price becomes close
-                    $4   -- Volume
+                    $4,
+                    $5,
+                    $6,
+                    $3,
+                    $7
                 )
                 ON CONFLICT (mint_address, time) DO UPDATE
                 SET 
@@ -71,11 +85,14 @@ export class PriceUpdateQueue {
                     high = GREATEST(token_platform.price_history.high, $3),
                     low = LEAST(token_platform.price_history.low, $3),
                     close = $3,
-                    volume = token_platform.price_history.volume + $4
+                    volume = token_platform.price_history.volume + $7
             `, [
-                update.timestamp,
+                timestamp,
                 update.mintAddress,
                 update.price,
+                previousData?.price || update.price,  // open
+                Math.max(previousData?.high || update.price, update.price),  // high
+                Math.min(previousData?.low || update.price, update.price),   // low
                 update.volume || 0
             ]);
         } catch (error) {

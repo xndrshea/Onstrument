@@ -10,6 +10,7 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { Umi } from '@metaplex-foundation/umi';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata'
 import { MetadataService } from '../../metadata/metadataService';
+import { Decimal } from 'decimal.js';
 
 export class RaydiumProcessor extends BaseProcessor {
     private connection: Connection;
@@ -26,6 +27,12 @@ export class RaydiumProcessor extends BaseProcessor {
 
     async processEvent(buffer: Buffer, accountKey: string, programId: string): Promise<void> {
         try {
+            logger.info('Received Raydium event:', {
+                accountKey,
+                programId,
+                bufferLength: buffer.length
+            });
+
             switch (programId) {
                 case config.RAYDIUM_PROGRAMS.STANDARD_AMM:
                     await this.processStandardAMM(buffer, accountKey);
@@ -36,6 +43,8 @@ export class RaydiumProcessor extends BaseProcessor {
                 case config.RAYDIUM_PROGRAMS.CLMM:
                     await this.processCLMM(buffer, accountKey);
                     break;
+                default:
+                    logger.warn('Unknown Raydium program:', programId);
             }
         } catch (error) {
             logger.error('Error in RaydiumProcessor:', { error, programId, accountKey });
@@ -77,9 +86,15 @@ export class RaydiumProcessor extends BaseProcessor {
 
             const volume = Math.min(baseReserve, quoteReserve);
 
-            if (!isFinite(price) || price <= 0) {
-                return;
-            }
+            logger.info('Calculated price for pool:', {
+                accountKey,
+                tokenToTrack,
+                price,
+                volume,
+                baseReserve,
+                quoteReserve,
+                isSolBase
+            });
 
             await this.ensureTokenExists(tokenToTrack, tokenDecimals);
             await this.recordPriceUpdate(tokenToTrack, price, volume);
@@ -91,12 +106,24 @@ export class RaydiumProcessor extends BaseProcessor {
 
     private async processLegacyAMM(buffer: Buffer, accountKey: string): Promise<void> {
         try {
+            logger.info('Starting Legacy AMM processing:', { accountKey });
+
             const poolState = Liquidity.getStateLayout(4).decode(buffer);
 
-            if (poolState.baseMint?.toString() === '11111111111111111111111111111111' ||
-                poolState.quoteMint?.toString() === '11111111111111111111111111111111' ||
-                poolState.swapBaseInAmount?.toString() === '0' ||
-                poolState.swapQuoteInAmount?.toString() === '0') {
+            logger.info('Raw Legacy AMM pool state:', {
+                accountKey,
+                baseMint: poolState.baseMint?.toString(),
+                quoteMint: poolState.quoteMint?.toString(),
+                baseDecimal: poolState.baseDecimal?.toString(),
+                quoteDecimal: poolState.quoteDecimal?.toString(),
+                swapBaseInAmount: poolState.swapBaseInAmount?.toString(),
+                swapBaseOutAmount: poolState.swapBaseOutAmount?.toString(),
+                swapQuoteInAmount: poolState.swapQuoteInAmount?.toString(),
+                swapQuoteOutAmount: poolState.swapQuoteOutAmount?.toString()
+            });
+
+            if (!poolState.baseMint || !poolState.quoteMint) {
+                logger.warn('Missing mints in Legacy AMM:', { accountKey });
                 return;
             }
 
@@ -105,68 +132,98 @@ export class RaydiumProcessor extends BaseProcessor {
             const baseDecimals = Number(poolState.baseDecimal);
             const quoteDecimals = Number(poolState.quoteDecimal);
 
+            logger.info('Processed pool info:', {
+                accountKey,
+                baseMint,
+                quoteMint,
+                baseDecimals,
+                quoteDecimals
+            });
+
             const isSolBase = baseMint === NATIVE_SOL_MINT;
             const isSolQuote = quoteMint === NATIVE_SOL_MINT;
-            if (!isSolBase && !isSolQuote) return;
+
+            if (!isSolBase && !isSolQuote) {
+                logger.info('Skipping non-SOL pool:', { accountKey, baseMint, quoteMint });
+                return;
+            }
 
             const tokenToTrack = isSolBase ? quoteMint : baseMint;
             const tokenDecimals = isSolBase ? quoteDecimals : baseDecimals;
 
-            const baseVolume = {
-                in: this.getRawNumber(poolState.swapBaseInAmount?.toString(), baseDecimals),
-                out: this.getRawNumber(poolState.swapBaseOutAmount?.toString(), baseDecimals)
-            };
-            const quoteVolume = {
-                in: this.getRawNumber(poolState.swapQuoteInAmount?.toString(), quoteDecimals),
-                out: this.getRawNumber(poolState.swapQuoteOutAmount?.toString(), quoteDecimals)
-            };
+            logger.info('Volume calculations:', {
+                accountKey,
+                baseVolume: {
+                    in: this.getRawNumber(poolState.swapBaseInAmount?.toString(), baseDecimals),
+                    out: this.getRawNumber(poolState.swapBaseOutAmount?.toString(), baseDecimals)
+                },
+                quoteVolume: {
+                    in: this.getRawNumber(poolState.swapQuoteInAmount?.toString(), quoteDecimals),
+                    out: this.getRawNumber(poolState.swapQuoteOutAmount?.toString(), quoteDecimals)
+                },
+                tokenToTrack
+            });
 
-            const totalBaseVolume = baseVolume.in + baseVolume.out;
-            const totalQuoteVolume = quoteVolume.in + quoteVolume.out;
+            const totalBaseVolume = poolState.swapBaseInAmount?.toString() === '0' ? 0 : this.getRawNumber(poolState.swapBaseInAmount?.toString(), baseDecimals) + this.getRawNumber(poolState.swapBaseOutAmount?.toString(), baseDecimals);
+            const totalQuoteVolume = poolState.swapQuoteInAmount?.toString() === '0' ? 0 : this.getRawNumber(poolState.swapQuoteInAmount?.toString(), quoteDecimals) + this.getRawNumber(poolState.swapQuoteOutAmount?.toString(), quoteDecimals);
 
-            if (totalBaseVolume === 0 || totalQuoteVolume === 0) return;
+            if (totalBaseVolume === 0 || totalQuoteVolume === 0) {
+                logger.info('Zero volume detected:', {
+                    accountKey,
+                    totalBaseVolume,
+                    totalQuoteVolume
+                });
+                return;
+            }
 
             const price = isSolBase ?
                 totalQuoteVolume / totalBaseVolume :
                 totalBaseVolume / totalQuoteVolume;
 
-            await this.ensureTokenExists(tokenToTrack, tokenDecimals);
+            logger.info('Price calculation:', {
+                accountKey,
+                tokenToTrack,
+                price,
+                isSolBase,
+                totalBaseVolume,
+                totalQuoteVolume
+            });
+
+            const tokenExists = await this.ensureTokenExists(tokenToTrack, tokenDecimals);
+            if (!tokenExists) {
+                logger.error('Failed to ensure token exists:', { tokenToTrack, tokenDecimals });
+                return;
+            }
+
+            if (!isFinite(price) || price <= 0) {
+                logger.error('Invalid price calculated:', {
+                    tokenToTrack,
+                    price,
+                    totalBaseVolume,
+                    totalQuoteVolume
+                });
+                return;
+            }
+
             await this.recordPriceUpdate(
                 tokenToTrack,
                 price,
                 Math.max(totalBaseVolume, totalQuoteVolume)
             );
 
-            if (baseVolume.in > 0 || quoteVolume.in > 0) {
-                const tradePrice = isSolBase ?
-                    baseVolume.in / quoteVolume.out :
-                    quoteVolume.in / baseVolume.out;
-
-                await this.recordTrade({
-                    signature: `${accountKey}-${Date.now()}`,
-                    tokenAddress: tokenToTrack,
-                    tokenType: 'pool',
-                    walletAddress: accountKey,
-                    side: isSolBase ? 'buy' : 'sell',
-                    amount: isSolBase ? baseVolume.in : quoteVolume.in,
-                    total: isSolBase ? quoteVolume.out : baseVolume.out,
-                    price: tradePrice,
-                    slot: 0
-                });
-            }
-
-            await this.savePoolInfo(
+            logger.info('Successfully processed Legacy AMM event:', {
                 accountKey,
-                baseMint,
-                quoteMint,
-                baseDecimals,
-                quoteDecimals,
-                config.RAYDIUM_PROGRAMS.LEGACY_AMM,
-                'LEGACY_AMM',
-                Date.now()
-            );
+                tokenToTrack,
+                price,
+                volume: Math.max(totalBaseVolume, totalQuoteVolume)
+            });
+
         } catch (error) {
-            logger.error('Error processing Legacy AMM:', error);
+            logger.error('Error processing Legacy AMM:', {
+                error,
+                accountKey,
+                stack: error instanceof Error ? error.stack : undefined
+            });
         }
     }
 
@@ -180,7 +237,8 @@ export class RaydiumProcessor extends BaseProcessor {
     private getRawNumber(num: string, decimals: number): number {
         if (!num) return 0;
         try {
-            return Number(num) / Math.pow(10, decimals);
+            const value = new Decimal(num);
+            return value.dividedBy(new Decimal(10).pow(decimals)).toNumber();
         } catch (e) {
             logger.error('Error converting number:', { num, decimals, error: e });
             return 0;
@@ -193,49 +251,75 @@ export class RaydiumProcessor extends BaseProcessor {
         volume: number,
     ): Promise<void> {
         try {
-            const tokenExists = await this.ensureTokenExists(mintAddress);
-
-            if (!tokenExists) {
-                logger.error(`Failed to ensure token exists: ${mintAddress}`);
+            if (!isFinite(price) || price <= 0) {
+                logger.error(`Invalid price calculation for ${mintAddress}:`, {
+                    price,
+                    volume
+                });
                 return;
             }
+
+            await pool.query(`
+                INSERT INTO token_platform.price_history (
+                    time,
+                    mint_address,
+                    price,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume
+                ) VALUES (
+                    NOW(),
+                    $1,
+                    $2,
+                    $2,
+                    $2,
+                    $2,
+                    $2,
+                    $3
+                )
+            `, [mintAddress, price, volume]);
 
             const queue = PriceUpdateQueue.getInstance();
             await queue.addUpdate({
                 mintAddress,
                 price,
                 volume,
-                timestamp: Math.floor(Date.now() / 1000),
+                timestamp: Date.now()
             });
 
+            logger.info(`Recorded price update for ${mintAddress}:`, {
+                price,
+                volume,
+                timestamp: new Date().toISOString()
+            });
         } catch (error) {
-            logger.error(`Error in recordPriceUpdate for ${mintAddress}: ${error instanceof Error ? error.message : String(error)}`);
+            logger.error(`Failed to record price update for ${mintAddress}:`, error);
         }
     }
 
 
-    private async ensureTokenExists(mintAddress: string, decimals?: number): Promise<boolean> {
+    private async ensureTokenExists(mintAddress: string, decimals: number): Promise<boolean> {
         try {
             await pool.query(
                 `INSERT INTO token_platform.tokens (
-                    mint_address, 
-                    decimals,
+                    mint_address,
                     metadata_status,
                     metadata_source
                 )
-                VALUES ($1, $2, 'pending', 'raydium')
+                VALUES ($1, 'pending', 'raydium')
                 ON CONFLICT (mint_address) 
                 DO UPDATE SET 
-                    decimals = COALESCE(token_platform.tokens.decimals, EXCLUDED.decimals),
                     metadata_status = CASE 
                         WHEN token_platform.tokens.metadata_status IS NULL 
                         THEN 'pending' 
                         ELSE token_platform.tokens.metadata_status 
                     END`,
-                [mintAddress, decimals || null]
+                [mintAddress]
             );
 
-            // Only queue metadata update if we don't already have it
+            // Queue metadata update (which will now handle decimals)
             const result = await pool.query(
                 `SELECT metadata_status FROM token_platform.tokens WHERE mint_address = $1`,
                 [mintAddress]

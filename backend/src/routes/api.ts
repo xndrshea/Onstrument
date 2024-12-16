@@ -293,6 +293,7 @@ router.get('/market/tokens/:mintAddress', async (req, res) => {
                 t.mint_address,
                 t.name,
                 t.symbol,
+                t.decimals,
                 t.metadata_url,
                 t.description,
                 t.verified,
@@ -323,7 +324,7 @@ router.get('/market/tokens/:mintAddress', async (req, res) => {
             mint_address: token.mint_address,
             name: token.name?.trim(),
             symbol: token.symbol?.trim(),
-            decimals: 9, // Default for SPL tokens
+            decimals: token.decimals,
             description: token.description || '',
             metadata_url: token.metadata_url,
             token_type: 'pool',
