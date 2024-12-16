@@ -126,22 +126,32 @@ export const priceClient = {
     // Only used for getting historical price data for charts
     async getPriceHistory(mintAddress: string): Promise<Array<{ time: number, value: number }>> {
         console.log('Fetching price history from API for:', mintAddress);
-        const response = await fetch(
-            `${API_BASE_URL}/price-history/${mintAddress}`
-        );
+        const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
 
-        if (!response.ok) throw new Error('Failed to fetch price history');
+        if (!response.ok) {
+            console.error('Price history fetch failed:', response.status);
+            throw new Error('Failed to fetch price history');
+        }
 
         const data = await response.json();
-        console.log('Raw price history data:', data);
+        console.log('Price history data points:', data.length);
+        console.log('Sample data point:', data[0]);
 
         if (!data || !data.length) {
+            console.warn('No price data available for:', mintAddress);
             throw new Error('No price data available');
         }
 
-        return data.map((point: any) => ({
-            time: point.time,
-            value: point.value
-        }));
+        return data.map((point: any) => {
+            const time = Number(point.time);
+            const value = Number(point.value);
+
+            if (!isFinite(time) || !isFinite(value)) {
+                console.warn('Invalid data point:', point);
+                return null;
+            }
+
+            return { time, value };
+        }).filter(Boolean);
     },
 };

@@ -5,6 +5,8 @@ import { findMetadataPda, fetchMetadata } from '@metaplex-foundation/mpl-token-m
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import { config } from '../../config/env';
+import { Connection } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 
 export class MetadataService {
     private static instance: MetadataService;
@@ -54,30 +56,45 @@ export class MetadataService {
         const MAX_RETRIES = 3;
 
         try {
+            // Get decimals from mint account
+            const connection = new Connection(config.HELIUS_RPC_URL);
+            const mintInfo = await connection.getParsedAccountInfo(new PublicKey(mintAddress));
+
+            if (!mintInfo.value?.data || typeof mintInfo.value.data !== 'object') {
+                throw new Error('Failed to get mint info');
+            }
+
+            const decimals = (mintInfo.value.data as any).parsed.info.decimals;
+            if (typeof decimals !== 'number') {
+                throw new Error('Invalid decimals from mint account');
+            }
+
+            // Get metadata as before
             const metadataPda = findMetadataPda(this.umi, { mint: publicKey(mintAddress) })[0];
             const metadata = await fetchMetadata(this.umi, metadataPda);
 
-            if (metadata) {
-                await pool.query(
-                    `UPDATE token_platform.tokens 
-                     SET 
-                        name = $2,
-                        symbol = $3,
-                        metadata_url = $4,
-                        last_metadata_fetch = NOW(),
-                        metadata_status = 'success',
-                        metadata_source = $5,
-                        metadata_fetch_attempts = metadata_fetch_attempts + 1
-                     WHERE mint_address = $1`,
-                    [
-                        mintAddress,
-                        metadata.name,
-                        metadata.symbol,
-                        metadata.uri,
-                        source
-                    ]
-                );
-            }
+            // Update query to include decimals
+            await pool.query(
+                `UPDATE token_platform.tokens 
+                 SET 
+                    name = $2,
+                    symbol = $3,
+                    metadata_url = $4,
+                    decimals = $5,
+                    last_metadata_fetch = NOW(),
+                    metadata_status = 'success',
+                    metadata_source = $6,
+                    metadata_fetch_attempts = metadata_fetch_attempts + 1
+                 WHERE mint_address = $1`,
+                [
+                    mintAddress,
+                    metadata?.name || 'Unknown',
+                    metadata?.symbol || 'UNKNOWN',
+                    metadata?.uri || '',
+                    decimals,
+                    source
+                ]
+            );
         } catch (error) {
             logger.error(`Error processing metadata for ${mintAddress}:`, error);
 

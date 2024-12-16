@@ -128,9 +128,9 @@ export class TokenService {
             // Ensure proper data transformation
             const transformedToken = {
                 ...data,
-                mintAddress: data.mintAddress || data.mint_address, // Handle both formats
+                mintAddress: data.mintAddress || data.mint_address,
                 tokenType: tokenType || data.tokenType || 'pool',
-                decimals: data.decimals || 9,
+                decimals: data.decimals,
                 description: data.description || '',
                 totalSupply: data.totalSupply || data.total_supply || '0',
                 name: data.name?.trim() || 'Unknown Token',

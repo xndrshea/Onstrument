@@ -29,16 +29,30 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
             }
 
             if (series.current) {
-                const formattedData = history.map(point => ({
-                    time: Math.floor(point.time / 1000) as UTCTimestamp,
-                    value: Number(point.value)
-                }));
+                const formattedData = history
+                    .filter(point =>
+                        point &&
+                        typeof point.time === 'number' &&
+                        typeof point.value === 'number' &&
+                        !isNaN(point.time) &&
+                        !isNaN(point.value)
+                    )
+                    .map(point => ({
+                        time: point.time as UTCTimestamp,
+                        value: point.value
+                    }));
+
+                if (formattedData.length === 0) {
+                    setError('Invalid price data received');
+                    return;
+                }
 
                 series.current.setData(formattedData);
                 chart.current?.timeScale().fitContent();
+                setError(null);
             }
-            setError(null);
         } catch (error) {
+            console.error('Price history error:', error);
             setError('Failed to load price history');
         } finally {
             setIsLoading(false);
