@@ -2,7 +2,7 @@ import { BaseProcessor } from './baseProcessor';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
-import { Liquidity } from '@raydium-io/raydium-sdk';
+import { Liquidity, LIQUIDITY_STATE_LAYOUT_V4 } from '@raydium-io/raydium-sdk';
 import { pool } from '../../../config/database';
 import { NATIVE_SOL_MINT } from '../../../constants';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
@@ -12,6 +12,9 @@ import { MetadataService } from '../../metadata/metadataService';
 import { Decimal } from 'decimal.js';
 import { PRICE_WHITELIST } from '../../../constants/priceWhitelist';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
+import { BN } from 'bn.js';
+import bs58 from 'bs58';
+
 
 export class RaydiumProcessor extends BaseProcessor {
     private connection: Connection;
@@ -28,22 +31,16 @@ export class RaydiumProcessor extends BaseProcessor {
 
     async processEvent(buffer: Buffer, accountKey: string, programId: string): Promise<void> {
         try {
-            logger.info('Received Raydium event:', {
-                accountKey,
-                programId,
-                bufferLength: buffer.length
-            });
-
             switch (programId) {
-                case config.RAYDIUM_PROGRAMS.STANDARD_AMM:
-                    await this.processStandardAMM(buffer, accountKey);
+                case config.RAYDIUM_PROGRAMS.CP_AMM:
+                    await this.processCPSwap(buffer, accountKey);
                     break;
-                case config.RAYDIUM_PROGRAMS.LEGACY_AMM:
-                    await this.processLegacyAMM(buffer, accountKey);
-                    break;
-                case config.RAYDIUM_PROGRAMS.CLMM:
-                    await this.processCLMM(buffer, accountKey);
-                    break;
+                // case config.RAYDIUM_PROGRAMS.V4_AMM:
+                //     await this.processV4AMM(buffer, accountKey);
+                //     break;
+                // case config.RAYDIUM_PROGRAMS.CLMM:
+                //     await this.processCLMM(buffer, accountKey);
+                //     break;
                 default:
                     logger.warn('Unknown Raydium program:', programId);
             }
@@ -52,129 +49,155 @@ export class RaydiumProcessor extends BaseProcessor {
         }
     }
 
-    private async processStandardAMM(buffer: Buffer, accountKey: string): Promise<void> {
+    private async processCPSwap(buffer: Buffer, accountKey: string): Promise<void> {
         try {
-            const poolState = Liquidity.getStateLayout(4).decode(buffer);
-
-            if (!poolState.baseMint || !poolState.quoteMint) {
-                return;
-            }
-
-            const baseMint = poolState.baseMint.toString();
-            const quoteMint = poolState.quoteMint.toString();
-
-            if (!PRICE_WHITELIST.has(baseMint) && !PRICE_WHITELIST.has(quoteMint)) {
-                return;
-            }
-
-            const baseDecimals = Number(poolState.baseDecimal);
-            const quoteDecimals = Number(poolState.quoteDecimal);
-
-            const isSolBase = baseMint === NATIVE_SOL_MINT;
-            const isSolQuote = quoteMint === NATIVE_SOL_MINT;
-            if (!isSolBase && !isSolQuote) {
-                return;
-            }
-
-            const tokenToTrack = isSolBase ? quoteMint : baseMint;
-            const tokenDecimals = isSolBase ? quoteDecimals : baseDecimals;
-
-            const baseReserve = new Decimal(poolState.baseVault?.toString() || '0');
-            const quoteReserve = new Decimal(poolState.quoteVault?.toString() || '0');
-
-            logger.info('Pool state details:', {
+            const bufferString = bs58.encode(buffer);
+            logger.info('CP Swap Buffer:', {
                 accountKey,
-                baseDecimals,
-                quoteDecimals,
-                isSolBase,
-                rawBaseReserve: baseReserve.toString(),
-                rawQuoteReserve: quoteReserve.toString(),
-                baseVaultRaw: poolState.baseVault?.toString(),
-                quoteVaultRaw: poolState.quoteVault?.toString(),
+                bufferString
             });
-
-            if (baseReserve.isZero() || quoteReserve.isZero()) {
-                return;
-            }
-
-            const price = isSolBase
-                ? baseReserve.div(quoteReserve).mul(new Decimal(10).pow(quoteDecimals - baseDecimals)).toNumber()
-                : quoteReserve.div(baseReserve).mul(new Decimal(10).pow(baseDecimals - quoteDecimals)).toNumber();
-
-            logger.info('Price calculation details:', {
-                price,
-                decimalAdjustment: new Decimal(10).pow(quoteDecimals - baseDecimals).toString(),
-                baseReserveAdjusted: baseReserve.div(new Decimal(10).pow(baseDecimals)).toString(),
-                quoteReserveAdjusted: quoteReserve.div(new Decimal(10).pow(quoteDecimals)).toString(),
-            });
-
-            const volume = Math.min(
-                baseReserve.div(new Decimal(10).pow(baseDecimals)).toNumber(),
-                quoteReserve.div(new Decimal(10).pow(quoteDecimals)).toNumber()
-            );
-
-            await this.ensureTokenExists(tokenToTrack, tokenDecimals);
-            await this.recordPriceUpdate(tokenToTrack, price, volume);
-
         } catch (error) {
-            logger.error('Error processing Standard AMM:', error);
+            logger.error('Error in processCPSwap:', error);
         }
     }
 
-    private async processLegacyAMM(buffer: Buffer, accountKey: string): Promise<void> {
+    private async processV4AMM(buffer: Buffer, accountKey: string): Promise<void> {
         try {
-            const poolState = Liquidity.getStateLayout(4).decode(buffer);
+            const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(buffer);
 
-            if (!poolState.baseMint || !poolState.quoteMint) {
-                return;
+            // Log the entire pool state object with all fields
+            /*logger.info('V4 Pool State:', {
+                accountKey,
+                // Basic info
+                nonce: poolState.nonce?.toString(),
+                owner: poolState.owner?.toString(),
+                status: poolState.status?.toString(),
+                maxOrder: poolState.maxOrder?.toString(),
+                depth: poolState.depth?.toString(),
+
+                // Decimals and state
+                baseDecimal: poolState.baseDecimal?.toString(),
+                quoteDecimal: poolState.quoteDecimal?.toString(),
+                state: poolState.state?.toString(),
+                resetFlag: poolState.resetFlag?.toString(),
+
+                // Size and ratio parameters
+                minSize: poolState.minSize?.toString(),
+                volMaxCutRatio: poolState.volMaxCutRatio?.toString(),
+                amountWaveRatio: poolState.amountWaveRatio?.toString(),
+                baseLotSize: poolState.baseLotSize?.toString(),
+                quoteLotSize: poolState.quoteLotSize?.toString(),
+
+                // Price multipliers
+                minPriceMultiplier: poolState.minPriceMultiplier?.toString(),
+                maxPriceMultiplier: poolState.maxPriceMultiplier?.toString(),
+                systemDecimalValue: poolState.systemDecimalValue?.toString(),
+
+                // Separation parameters
+                minSeparateNumerator: poolState.minSeparateNumerator?.toString(),
+                minSeparateDenominator: poolState.minSeparateDenominator?.toString(),
+
+                // Fee structure
+                tradeFeeNumerator: poolState.tradeFeeNumerator?.toString(),
+                tradeFeeDenominator: poolState.tradeFeeDenominator?.toString(),
+                swapFeeNumerator: poolState.swapFeeNumerator?.toString(),
+                swapFeeDenominator: poolState.swapFeeDenominator?.toString(),
+
+                // PnL related
+                pnlNumerator: poolState.pnlNumerator?.toString(),
+                pnlDenominator: poolState.pnlDenominator?.toString(),
+                baseNeedTakePnl: poolState.baseNeedTakePnl?.toString(),
+                quoteNeedTakePnl: poolState.quoteNeedTakePnl?.toString(),
+                quoteTotalPnl: poolState.quoteTotalPnl?.toString(),
+                baseTotalPnl: poolState.baseTotalPnl?.toString(),
+
+                // Time related
+                poolOpenTime: poolState.poolOpenTime?.toString(),
+                orderbookToInitTime: poolState.orderbookToInitTime?.toString(),
+
+                // Punishment amounts
+                punishPcAmount: poolState.punishPcAmount?.toString(),
+                punishCoinAmount: poolState.punishCoinAmount?.toString(),
+
+                // Swap amounts
+                swapBaseInAmount: poolState.swapBaseInAmount?.toString(),
+                swapQuoteOutAmount: poolState.swapQuoteOutAmount?.toString(),
+                swapBase2QuoteFee: poolState.swapBase2QuoteFee?.toString(),
+                swapQuoteInAmount: poolState.swapQuoteInAmount?.toString(),
+                swapBaseOutAmount: poolState.swapBaseOutAmount?.toString(),
+                swapQuote2BaseFee: poolState.swapQuote2BaseFee?.toString(),
+
+                // PublicKeys
+                baseVault: poolState.baseVault?.toString(),
+                quoteVault: poolState.quoteVault?.toString(),
+                baseMint: poolState.baseMint?.toString(),
+                quoteMint: poolState.quoteMint?.toString(),
+                lpMint: poolState.lpMint?.toString(),
+                openOrders: poolState.openOrders?.toString(),
+                marketId: poolState.marketId?.toString(),
+                marketProgramId: poolState.marketProgramId?.toString(),
+                targetOrders: poolState.targetOrders?.toString(),
+                withdrawQueue: poolState.withdrawQueue?.toString(),
+                lpVault: poolState.lpVault?.toString(),
+
+                // LP related
+                lpReserve: poolState.lpReserve?.toString(),
+            });*/
+
+            // Now let's use that data for price calculation
+            const baseMint = poolState.baseMint?.toString();
+            const quoteMint = poolState.quoteMint?.toString();
+            const baseDecimal = Number(poolState.baseDecimal);
+            const quoteDecimal = Number(poolState.quoteDecimal);
+
+            // Only proceed if we have valid data and one of the tokens is whitelisted
+            if (baseMint && quoteMint &&
+                (PRICE_WHITELIST.has(baseMint) || PRICE_WHITELIST.has(quoteMint))) {
+
+                // Ensure both tokens exist in our database first
+                await Promise.all([
+                    this.ensureTokenExists(baseMint, baseDecimal),
+                    this.ensureTokenExists(quoteMint, quoteDecimal)
+                ]);
+
+                const baseVaultBalance = this.getRawNumber(poolState.swapBaseInAmount.toString(), baseDecimal);
+                const quoteVaultBalance = this.getRawNumber(poolState.swapQuoteInAmount.toString(), quoteDecimal);
+
+                if (baseVaultBalance !== 0 && quoteVaultBalance !== 0) {
+                    let price: number | undefined;
+                    let mintToRecord: string | undefined;
+                    let volume: number | undefined;
+
+                    // Need to account for these fees in price calculation
+                    const tradeFeeNumerator = Number(poolState.tradeFeeNumerator);
+                    const tradeFeeDenominator = Number(poolState.tradeFeeDenominator);
+                    const swapFeeNumerator = Number(poolState.swapFeeNumerator);
+                    const swapFeeDenominator = Number(poolState.swapFeeDenominator);
+
+                    // Calculate total fee multiplier
+                    const feeMultiplier = (1 - (tradeFeeNumerator / tradeFeeDenominator)) *
+                        (1 - (swapFeeNumerator / swapFeeDenominator));
+
+                    if (baseMint === NATIVE_SOL_MINT) {
+                        price = (baseVaultBalance / quoteVaultBalance) / feeMultiplier;  // DIVIDE by fee multiplier
+                        mintToRecord = quoteMint;
+                        volume = quoteVaultBalance;
+                    } else if (quoteMint === NATIVE_SOL_MINT) {
+                        price = (quoteVaultBalance / baseVaultBalance) / feeMultiplier;  // DIVIDE by fee multiplier
+                        mintToRecord = baseMint;
+                        volume = baseVaultBalance;
+                    }
+                    console.log('Price:', price);
+                    console.log('Mint to record:', mintToRecord);
+                    console.log('Volume:', volume);
+
+                    if (price && volume) {
+                        await this.recordPriceUpdate(mintToRecord!, price, volume);
+                    }
+                }
             }
-
-            const baseMint = poolState.baseMint.toString();
-            const quoteMint = poolState.quoteMint.toString();
-
-            if (!PRICE_WHITELIST.has(baseMint) && !PRICE_WHITELIST.has(quoteMint)) {
-                return;
-            }
-
-            const baseDecimals = Number(poolState.baseDecimal);
-            const quoteDecimals = Number(poolState.quoteDecimal);
-
-            const isSolBase = baseMint === NATIVE_SOL_MINT;
-            const isSolQuote = quoteMint === NATIVE_SOL_MINT;
-
-            if (!isSolBase && !isSolQuote) {
-                return;
-            }
-
-            const tokenToTrack = isSolBase ? quoteMint : baseMint;
-            const tokenDecimals = isSolBase ? quoteDecimals : baseDecimals;
-
-            const baseInAmount = new Decimal(poolState.swapBaseInAmount?.toString() || '0');
-            const baseOutAmount = new Decimal(poolState.swapBaseOutAmount?.toString() || '0');
-            const quoteInAmount = new Decimal(poolState.swapQuoteInAmount?.toString() || '0');
-            const quoteOutAmount = new Decimal(poolState.swapQuoteOutAmount?.toString() || '0');
-
-            const totalBaseVolume = baseInAmount.plus(baseOutAmount);
-            const totalQuoteVolume = quoteInAmount.plus(quoteOutAmount);
-
-            if (totalBaseVolume.isZero() || totalQuoteVolume.isZero()) {
-                return;
-            }
-
-            const price = isSolBase
-                ? totalBaseVolume.div(totalQuoteVolume).mul(new Decimal(10).pow(quoteDecimals - baseDecimals)).toNumber()
-                : totalQuoteVolume.div(totalBaseVolume).mul(new Decimal(10).pow(baseDecimals - quoteDecimals)).toNumber();
-
-            const volume = Math.max(
-                totalBaseVolume.div(new Decimal(10).pow(baseDecimals)).toNumber(),
-                totalQuoteVolume.div(new Decimal(10).pow(quoteDecimals)).toNumber()
-            );
-
-            await this.ensureTokenExists(tokenToTrack, tokenDecimals);
-            await this.recordPriceUpdate(tokenToTrack, price, volume);
-
         } catch (error) {
-            logger.error('Error processing Legacy AMM:', error);
+            logger.error('Error in processV4AMM:', error);
         }
     }
 
