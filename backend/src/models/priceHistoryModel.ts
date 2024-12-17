@@ -77,23 +77,29 @@ export class PriceHistoryModel {
     }
 
     // This function runs after every trade to save the new price
-    static async recordPrice(
-        tokenMintAddress: string,
-        price: number,
-        volume: number = 0
-    ) {
-        try {
-            const timestamp = new Date();
+    static async recordPrice(update: {
+        mintAddress: string;
+        price: number;
+        volume?: number;
+        timestamp?: Date;
+    }) {
+        const { mintAddress, price, volume = 0, timestamp = new Date() } = update;
 
-            // First check if we have a price point in the current minute
+        try {
+            if (!isFinite(price) || price <= 0) {
+                logger.error(`Invalid price for ${mintAddress}:`, { price, volume });
+                return;
+            }
+
+            // Get the last price point for this token within the current minute
             const lastPrice = await pool.query(`
-                SELECT price, high, low
+                SELECT price, high, low, open
                 FROM token_platform.price_history 
                 WHERE mint_address = $1 
-                AND time >= date_trunc('minute', NOW())
+                AND time >= date_trunc('minute'::text, $2::timestamp)
                 ORDER BY time DESC 
                 LIMIT 1
-            `, [tokenMintAddress]);
+            `, [mintAddress, timestamp]);
 
             const previousData = lastPrice.rows[0];
 
@@ -108,31 +114,37 @@ export class PriceHistoryModel {
                     close,
                     volume
                 ) VALUES (
-                    date_trunc('minute', $1),  -- Round to minute for proper bucketing
+                    $1,
                     $2,
                     $3,
-                    $4,  -- Use previous price as open if exists
-                    $5,  -- Max of previous high and current
-                    $6,  -- Min of previous low and current
-                    $3,  -- Current price is always close
+                    $4,
+                    $5,
+                    $6,
+                    $3,
                     $7
                 )
                 ON CONFLICT (mint_address, time) DO UPDATE
                 SET 
-                    price = $3,
-                    high = GREATEST(token_platform.price_history.high, $3),
-                    low = LEAST(token_platform.price_history.low, $3),
-                    close = $3,
-                    volume = token_platform.price_history.volume + $7
+                    price = EXCLUDED.price,
+                    high = GREATEST(token_platform.price_history.high, EXCLUDED.price),
+                    low = LEAST(token_platform.price_history.low, EXCLUDED.price),
+                    close = EXCLUDED.price,
+                    volume = token_platform.price_history.volume + EXCLUDED.volume
             `, [
                 timestamp,
-                tokenMintAddress,
+                mintAddress,
                 price,
-                previousData?.price || price,  // open
-                Math.max(previousData?.high || price, price),  // high
-                Math.min(previousData?.low || price, price),   // low
+                previousData?.open || price,
+                Math.max(previousData?.high || price, price),
+                Math.min(previousData?.low || price, price),
                 volume
             ]);
+
+            logger.info('Recorded price:', {
+                mintAddress,
+                price,
+                timestamp: timestamp.toISOString()
+            });
         } catch (error) {
             logger.error('Error recording price:', error);
             throw error;
@@ -144,22 +156,20 @@ export class PriceHistoryModel {
         try {
             const result = await pool.query(`
                 SELECT 
-                    EXTRACT(EPOCH FROM time) * 1000 as time,
-                    close::float as value
+                    time_bucket('3 seconds', time) as time,
+                    last(price, time) as value  -- Take last price in each bucket
                 FROM token_platform.price_history
                 WHERE 
                     mint_address = $1 
                     AND time >= NOW() - INTERVAL '7 days'
-                ORDER BY time ASC
+                GROUP BY 1
+                ORDER BY 1 ASC
             `, [tokenMintAddress]);
 
-            // Debug logging
-            logger.info(`Found ${result.rows.length} price points for ${tokenMintAddress}`);
-            if (result.rows.length > 0) {
-                logger.info('Sample point:', result.rows[0]);
-            }
-
-            return result.rows;
+            return result.rows.map(row => ({
+                time: Math.floor(Date.parse(row.time) / 1000),
+                value: Number(row.value)
+            }));
         } catch (error) {
             logger.error('Error getting price history:', error);
             throw error;

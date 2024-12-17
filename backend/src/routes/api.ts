@@ -7,7 +7,6 @@ import rateLimit from 'express-rate-limit';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
 import { RaydiumProcessor } from '../services/price/processors/raydiumProcessor';
 import { BondingCurveProcessor } from '../services/price/processors/bondingCurveProcessor';
-import { PriceUpdateQueue } from '../services/price/queue/priceUpdateQueue';
 
 const router = Router();
 
@@ -20,7 +19,6 @@ router.use(cors({
 }));
 
 const heliusService = HeliusManager.getInstance();
-const priceQueue = PriceUpdateQueue.getInstance();
 
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000,  // 1 minute window
@@ -38,8 +36,7 @@ router.get('/system/status', async (_req, res) => {
             processors: {
                 raydium: RaydiumProcessor.getStatus(),
                 bondingCurve: BondingCurveProcessor.getStatus()
-            },
-            queue: priceQueue.getMetrics()
+            }
         };
 
         res.json(status);

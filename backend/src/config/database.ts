@@ -120,13 +120,13 @@ export async function initializeDatabase() {
             CREATE TABLE IF NOT EXISTS token_platform.price_history (
                 time TIMESTAMPTZ NOT NULL,
                 mint_address VARCHAR(255) NOT NULL,
-                price NUMERIC(40, 18) NOT NULL,
-                open NUMERIC(40, 18) NOT NULL,
-                high NUMERIC(40, 18) NOT NULL,
-                low NUMERIC(40, 18) NOT NULL,
-                close NUMERIC(40, 18) NOT NULL,
-                volume NUMERIC(40, 18) DEFAULT 0,
-                UNIQUE(time, mint_address)
+                price NUMERIC(78,36) NOT NULL,
+                open NUMERIC(78,36) NOT NULL,
+                high NUMERIC(78,36) NOT NULL,
+                low NUMERIC(78,36) NOT NULL,
+                close NUMERIC(78,36) NOT NULL,
+                volume NUMERIC(78,36) DEFAULT 0,
+                CONSTRAINT price_history_pkey PRIMARY KEY (mint_address, time)
             )
         `)
 
@@ -162,9 +162,9 @@ export async function initializeDatabase() {
                 token_type TEXT NOT NULL,
                 wallet_address TEXT NOT NULL,
                 side TEXT NOT NULL,
-                amount DECIMAL NOT NULL,
-                total DECIMAL NOT NULL,
-                price DECIMAL NOT NULL,
+                amount NUMERIC(78,36) NOT NULL,
+                total NUMERIC(78,36) NOT NULL,
+                price NUMERIC(78,36) NOT NULL,
                 slot BIGINT NOT NULL,
                 PRIMARY KEY (time, signature)
             )
