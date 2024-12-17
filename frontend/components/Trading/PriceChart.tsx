@@ -17,11 +17,14 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [hasInitialized, setHasInitialized] = useState(false);
+    const latestTime = useRef<number>(0);
+    const latestValue = useRef<number>(0);
 
     const fetchAndUpdatePrices = async () => {
         try {
             setIsLoading(true);
             const history = await priceClient.getPriceHistory(token.mintAddress);
+            console.log("RAW HISTORY DATA:", history);
 
             if (!history?.length) {
                 setError('No price history available');
@@ -42,14 +45,15 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
                         value: point.value
                     }));
 
+                console.log("FORMATTED DATA:", formattedData);
+
                 if (formattedData.length === 0) {
                     setError('Invalid price data received');
                     return;
                 }
 
                 series.current.setData(formattedData);
-                chart.current?.timeScale().fitContent();
-                setError(null);
+                console.log("DATA SET TO CHART");
             }
         } catch (error) {
             console.error('Price history error:', error);
@@ -106,6 +110,28 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
 
         initChart();
     }, [token?.mintAddress]);
+
+    useEffect(() => {
+        if (!series.current || !token.mintAddress) return;
+
+        const unsubscribe = priceClient.subscribeToPrice(token.mintAddress, (price) => {
+            if (!series.current) return;
+
+            const now = Math.floor(Date.now() / 1000);
+
+            if (now > latestTime.current) {
+                latestTime.current = now;
+                latestValue.current = price;
+
+                series.current.update({
+                    time: now as UTCTimestamp,
+                    value: price
+                });
+            }
+        });
+
+        return () => unsubscribe();
+    }, [token.mintAddress, series.current]);
 
     return (
         <div className="relative">

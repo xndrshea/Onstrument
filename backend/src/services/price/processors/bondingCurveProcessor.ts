@@ -2,7 +2,7 @@ import { BaseProcessor } from './baseProcessor';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
-import { PriceUpdate } from '../queue/types';
+import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 
 export class BondingCurveProcessor extends BaseProcessor {
     private connection: Connection;
@@ -44,14 +44,14 @@ export class BondingCurveProcessor extends BaseProcessor {
             const newSolAmount = k / newTokenAmount;
             const price = Number(newSolAmount - effectiveSol) / LAMPORTS_PER_SOL;
 
-            const update: PriceUpdate = {
+            const update = {
                 mintAddress: mintAddress.toString(),
                 price,
-                timestamp: Date.now(),
+                timestamp: new Date(),
                 volume: Number(vaultBalance.value.amount)
             };
 
-            await this.queuePriceUpdate(update);
+            await PriceHistoryModel.recordPrice(update);
         } catch (error) {
             logger.error(`Error processing Bonding Curve event: ${error}`);
         }
