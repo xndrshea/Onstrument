@@ -51,13 +51,55 @@ export class RaydiumProcessor extends BaseProcessor {
 
     private async processCPSwap(buffer: Buffer, accountKey: string): Promise<void> {
         try {
-            const bufferString = bs58.encode(buffer);
-            logger.info('CP Swap Buffer:', {
-                accountKey,
-                bufferString
+            // Skip discriminator (8 bytes)
+            let offset = 8;
+
+            const poolState = {
+                // First comes all the PublicKeys (32 bytes each)
+                ammConfig: new PublicKey(buffer.subarray(offset, offset += 32)),
+                poolCreator: new PublicKey(buffer.subarray(offset, offset += 32)),
+                token0Vault: new PublicKey(buffer.subarray(offset, offset += 32)),
+                token1Vault: new PublicKey(buffer.subarray(offset, offset += 32)),
+                lpMint: new PublicKey(buffer.subarray(offset, offset += 32)),
+                token0Mint: new PublicKey(buffer.subarray(offset, offset += 32)),
+                token1Mint: new PublicKey(buffer.subarray(offset, offset += 32)),
+                token0Program: new PublicKey(buffer.subarray(offset, offset += 32)),
+                token1Program: new PublicKey(buffer.subarray(offset, offset += 32)),
+                observationKey: new PublicKey(buffer.subarray(offset, offset += 32)),
+
+                // Then come the smaller fields
+                authBump: buffer.readUInt8(offset++),
+                status: buffer.readUInt8(offset++),
+                lpMintDecimals: buffer.readUInt8(offset++),
+                mint0Decimals: buffer.readUInt8(offset++),
+                mint1Decimals: buffer.readUInt8(offset++),
+
+                // Then the u64 fields
+                lpSupply: new BN(buffer.subarray(offset, offset += 8), 'le'),
+                protocolFeesToken0: new BN(buffer.subarray(offset, offset += 8), 'le'),
+                protocolFeesToken1: new BN(buffer.subarray(offset, offset += 8), 'le'),
+                fundFeesToken0: new BN(buffer.subarray(offset, offset += 8), 'le'),
+                fundFeesToken1: new BN(buffer.subarray(offset, offset += 8), 'le'),
+                openTime: new BN(buffer.subarray(offset, offset += 8), 'le'),
+                recentEpoch: new BN(buffer.subarray(offset, offset += 8), 'le'),
+            };
+
+            // Calculate price using the protocol fees as reserves
+            const price = poolState.protocolFeesToken1
+                .mul(new BN(10).pow(new BN(poolState.mint0Decimals)))
+                .div(poolState.protocolFeesToken0.mul(new BN(10).pow(new BN(poolState.mint1Decimals))));
+
+            logger.info('Processed Raydium CP pool:', {
+                account: accountKey,
+                baseToken: poolState.token0Mint.toString(),
+                quoteToken: poolState.token1Mint.toString(),
+                price: price.toString(),
+                baseReserve: poolState.protocolFeesToken0.toString(),
+                quoteReserve: poolState.protocolFeesToken1.toString()
             });
+
         } catch (error) {
-            logger.error('Error in processCPSwap:', error);
+            logger.error('Error processing Raydium CP pool:', error);
         }
     }
 
