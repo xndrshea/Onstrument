@@ -84,18 +84,17 @@ export class RaydiumProcessor extends BaseProcessor {
                 recentEpoch: new BN(buffer.subarray(offset, offset += 8), 'le'),
             };
 
-            // Calculate price using the protocol fees as reserves
-            const price = poolState.protocolFeesToken1
-                .mul(new BN(10).pow(new BN(poolState.mint0Decimals)))
-                .div(poolState.protocolFeesToken0.mul(new BN(10).pow(new BN(poolState.mint1Decimals))));
+
 
             logger.info('Processed Raydium CP pool:', {
                 account: accountKey,
                 baseToken: poolState.token0Mint.toString(),
                 quoteToken: poolState.token1Mint.toString(),
-                price: price.toString(),
-                baseReserve: poolState.protocolFeesToken0.toString(),
-                quoteReserve: poolState.protocolFeesToken1.toString()
+                baseVault: poolState.token0Vault.toString(),
+                quoteVault: poolState.token1Vault.toString(),
+
+
+
             });
 
         } catch (error) {
