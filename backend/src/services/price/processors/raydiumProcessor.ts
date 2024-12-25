@@ -242,15 +242,6 @@ export class RaydiumProcessor extends BaseProcessor {
         }
     }
 
-    private async processCLMM(buffer: Buffer, accountKey: string): Promise<void> {
-        try {
-
-
-        } catch (error) {
-            logger.error('Error processing CLMM:', error);
-        }
-    }
-
     private getRawNumber(num: string, decimals: number): number {
         if (!num) return 0;
         try {
