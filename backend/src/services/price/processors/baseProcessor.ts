@@ -1,6 +1,4 @@
 import { EventEmitter } from 'events';
-import { logger } from '../../../utils/logger';
-import { pool } from '../../../config/database';
 export abstract class BaseProcessor extends EventEmitter {
     protected static isActive: boolean = false;
     protected static lastProcessedTime: number = 0;
