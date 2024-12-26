@@ -2,24 +2,21 @@ import { BaseProcessor } from './baseProcessor';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
-import { Liquidity, LIQUIDITY_STATE_LAYOUT_V4 } from '@raydium-io/raydium-sdk';
+import { LIQUIDITY_STATE_LAYOUT_V4 } from '@raydium-io/raydium-sdk';
 import { pool } from '../../../config/database';
-import { NATIVE_SOL_MINT } from '../../../constants';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { Umi } from '@metaplex-foundation/umi';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata'
 import { MetadataService } from '../../metadata/metadataService';
-import { Decimal } from 'decimal.js';
-import { PRICE_WHITELIST } from '../../../constants/priceWhitelist';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 import { BN } from 'bn.js';
-import bs58 from 'bs58';
+import { PriceFetcher } from './priceFetcher';
+import { PRICE_WHITELIST } from '../../../constants/priceWhitelist';
 
 
 export class RaydiumProcessor extends BaseProcessor {
     private connection: Connection;
     private umi: Umi;
-
 
 
     constructor() {
@@ -35,12 +32,10 @@ export class RaydiumProcessor extends BaseProcessor {
                 case config.RAYDIUM_PROGRAMS.CP_AMM:
                     await this.processCPSwap(buffer, accountKey);
                     break;
-                // case config.RAYDIUM_PROGRAMS.V4_AMM:
-                //     await this.processV4AMM(buffer, accountKey);
-                //     break;
-                // case config.RAYDIUM_PROGRAMS.CLMM:
-                //     await this.processCLMM(buffer, accountKey);
-                //     break;
+                case config.RAYDIUM_PROGRAMS.V4_AMM:
+                    await this.processV4AMM(buffer, accountKey);
+                    break;
+
                 default:
                     logger.warn('Unknown Raydium program:', programId);
             }
@@ -51,6 +46,10 @@ export class RaydiumProcessor extends BaseProcessor {
 
     private async processCPSwap(buffer: Buffer, accountKey: string): Promise<void> {
         try {
+            if (buffer.length < 328) {  // Add this check
+                logger.warn(`Buffer too small for CP pool ${accountKey}: ${buffer.length} bytes`);
+                return;
+            }
             // Skip discriminator (8 bytes)
             let offset = 8;
 
@@ -84,18 +83,17 @@ export class RaydiumProcessor extends BaseProcessor {
                 recentEpoch: new BN(buffer.subarray(offset, offset += 8), 'le'),
             };
 
-
-
-            logger.info('Processed Raydium CP pool:', {
-                account: accountKey,
+            await this.pairFetcher({
                 baseToken: poolState.token0Mint.toString(),
                 quoteToken: poolState.token1Mint.toString(),
                 baseVault: poolState.token0Vault.toString(),
                 quoteVault: poolState.token1Vault.toString(),
-
-
-
+                baseDecimals: poolState.mint0Decimals,
+                quoteDecimals: poolState.mint1Decimals,
+                accountKey
             });
+
+
 
         } catch (error) {
             logger.error('Error processing Raydium CP pool:', error);
@@ -107,7 +105,7 @@ export class RaydiumProcessor extends BaseProcessor {
             const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(buffer);
 
             // Log the entire pool state object with all fields
-            /*logger.info('V4 Pool State:', {
+            const extractedPoolState = {
                 accountKey,
                 // Basic info
                 nonce: poolState.nonce?.toString(),
@@ -183,90 +181,26 @@ export class RaydiumProcessor extends BaseProcessor {
 
                 // LP related
                 lpReserve: poolState.lpReserve?.toString(),
-            });*/
+            };
 
-            // Now let's use that data for price calculation
-            const baseMint = poolState.baseMint?.toString();
-            const quoteMint = poolState.quoteMint?.toString();
-            const baseDecimal = Number(poolState.baseDecimal);
-            const quoteDecimal = Number(poolState.quoteDecimal);
 
-            // Only proceed if we have valid data and one of the tokens is whitelisted
-            if (baseMint && quoteMint &&
-                (PRICE_WHITELIST.has(baseMint) || PRICE_WHITELIST.has(quoteMint))) {
 
-                // Ensure both tokens exist in our database first
-                await Promise.all([
-                    this.ensureTokenExists(baseMint, baseDecimal),
-                    this.ensureTokenExists(quoteMint, quoteDecimal)
-                ]);
+            await this.pairFetcher({
+                baseToken: poolState.baseMint.toString(),
+                quoteToken: poolState.quoteMint.toString(),
+                baseVault: poolState.baseVault.toString(),
+                quoteVault: poolState.quoteVault.toString(),
+                baseDecimals: parseInt(poolState.baseDecimal.toString()),
+                quoteDecimals: parseInt(poolState.quoteDecimal.toString()),
+                accountKey
+            });
 
-                const baseVaultBalance = this.getRawNumber(poolState.swapBaseInAmount.toString(), baseDecimal);
-                const quoteVaultBalance = this.getRawNumber(poolState.swapQuoteInAmount.toString(), quoteDecimal);
 
-                if (baseVaultBalance !== 0 && quoteVaultBalance !== 0) {
-                    let price: number | undefined;
-                    let mintToRecord: string | undefined;
-                    let volume: number | undefined;
 
-                    // Need to account for these fees in price calculation
-                    const tradeFeeNumerator = Number(poolState.tradeFeeNumerator);
-                    const tradeFeeDenominator = Number(poolState.tradeFeeDenominator);
-                    const swapFeeNumerator = Number(poolState.swapFeeNumerator);
-                    const swapFeeDenominator = Number(poolState.swapFeeDenominator);
 
-                    // Calculate total fee multiplier
-                    const feeMultiplier = (1 - (tradeFeeNumerator / tradeFeeDenominator)) *
-                        (1 - (swapFeeNumerator / swapFeeDenominator));
 
-                    if (baseMint === NATIVE_SOL_MINT) {
-                        price = (baseVaultBalance / quoteVaultBalance) / feeMultiplier;  // DIVIDE by fee multiplier
-                        mintToRecord = quoteMint;
-                        volume = quoteVaultBalance;
-                    } else if (quoteMint === NATIVE_SOL_MINT) {
-                        price = (quoteVaultBalance / baseVaultBalance) / feeMultiplier;  // DIVIDE by fee multiplier
-                        mintToRecord = baseMint;
-                        volume = baseVaultBalance;
-                    }
-                    console.log('Price:', price);
-                    console.log('Mint to record:', mintToRecord);
-                    console.log('Volume:', volume);
-
-                    if (price && volume) {
-                        await this.recordPriceUpdate(mintToRecord!, price, volume);
-                    }
-                }
-            }
         } catch (error) {
             logger.error('Error in processV4AMM:', error);
-        }
-    }
-
-    private getRawNumber(num: string, decimals: number): number {
-        if (!num) return 0;
-        try {
-            const value = new Decimal(num);
-            return value.dividedBy(new Decimal(10).pow(decimals)).toNumber();
-        } catch (e) {
-            logger.error('Error converting number:', { num, decimals, error: e });
-            return 0;
-        }
-    }
-
-    private async recordPriceUpdate(
-        mintAddress: string,
-        price: number,
-        volume: number,
-    ): Promise<void> {
-        try {
-            await PriceHistoryModel.recordPrice({
-                mintAddress,
-                price,
-                volume,
-                timestamp: new Date()
-            });
-        } catch (error) {
-            logger.error(`Failed to record price update for ${mintAddress}:`, error);
         }
     }
 
@@ -310,28 +244,56 @@ export class RaydiumProcessor extends BaseProcessor {
         }
     }
 
-    private async savePoolInfo(
-        accountKey: string,
-        baseMint: string,
-        quoteMint: string,
+    private async pairFetcher({
+        baseToken,
+        quoteToken,
+        baseVault,
+        quoteVault,
+        baseDecimals,
+        quoteDecimals,
+        accountKey
+    }: {
+        baseToken: string,
+        quoteToken: string,
+        baseVault: string,
+        quoteVault: string,
         baseDecimals: number,
         quoteDecimals: number,
-        programId: string,
-        poolType: 'LEGACY_AMM' | 'STANDARD_AMM' | 'CLMM',
-        version: number
-    ): Promise<void> {
-        try {
-            const normalizedVersion = version % 10000;
+        accountKey: string
+    }): Promise<void> {
+        const NATIVE_SOL = "So11111111111111111111111111111111111111112";
 
-            await pool.query(`
-                INSERT INTO token_platform.raydium_pools 
-                (pool_address, base_mint, quote_mint, base_decimals, quote_decimals, program_id, pool_type, version)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (pool_address) DO NOTHING
-            `, [accountKey, baseMint, quoteMint, baseDecimals, quoteDecimals, programId, poolType, normalizedVersion]);
-        } catch (error) {
-            logger.error('Error saving pool info:', error);
+        // Check if either token is SOL
+        const isBaseSol = baseToken === NATIVE_SOL;
+        const isQuoteSol = quoteToken === NATIVE_SOL;
+
+        if (!isBaseSol && !isQuoteSol) {
+            return; // Skip if neither token is SOL
         }
+
+        // Determine which token needs to be tracked
+        const tokenToTrack = isBaseSol ? quoteToken : baseToken;
+
+        // Check if token is in whitelist
+        if (!PRICE_WHITELIST.has(tokenToTrack)) {
+            return; // Skip if token is not in whitelist
+        }
+
+        const tokenDecimals = isBaseSol ? quoteDecimals : baseDecimals;
+
+        // Ensure token exists in database
+        await this.ensureTokenExists(tokenToTrack, tokenDecimals);
+
+        // Forward to price fetcher
+        await PriceFetcher.fetchPrice({
+            baseToken,
+            quoteToken,
+            baseVault,
+            quoteVault,
+            baseDecimals,
+            quoteDecimals,
+            accountKey
+        });
     }
 }
 
