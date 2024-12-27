@@ -49,10 +49,26 @@ export function TokenDetailsPage() {
     if (error) return <div className="p-4 text-white">Error: {error}</div>;
     if (!token) return <div className="p-4 text-white">Token not found</div>;
 
+    // Get image URL from content metadata
+    const imageUrl = token.content?.metadata?.image || token.imageUrl;
+
     return (
         <div className="p-4 text-white">
             <div className="max-w-6xl mx-auto">
-                <h1 className="text-2xl font-bold mb-4">{token.name} ({token.symbol})</h1>
+                <div className="flex items-center gap-4 mb-4">
+                    {imageUrl && (
+                        <img
+                            src={imageUrl}
+                            alt={token.name}
+                            className="w-16 h-16 rounded-full object-cover"
+                            onError={(e) => {
+                                // Fallback if image fails to load
+                                (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                        />
+                    )}
+                    <h1 className="text-2xl font-bold">{token.name} ({token.symbol})</h1>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="bg-[#232427] rounded-lg p-4 mb-4">
@@ -67,9 +83,33 @@ export function TokenDetailsPage() {
                     <div className="space-y-4">
                         <div className="bg-[#232427] rounded-lg p-4">
                             <h2 className="text-xl mb-4">Token Info</h2>
-                            <p className="mb-2">Description: {token.description}</p>
-                            <p className="mb-2">Total Supply: {Number(token.totalSupply) / (10 ** token.decimals)} {token.symbol}</p>
-                            <p>Mint Address: {token.mintAddress}</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p className="mb-2">Name: {token.name}</p>
+                                    <p className="mb-2">Symbol: {token.symbol}</p>
+                                    <p className="mb-2">Description: {token.description || 'No description available'}</p>
+                                    <p className="mb-2">Total Supply: {Number(token.totalSupply) / (10 ** token.decimals)} {token.symbol}</p>
+                                    <p className="mb-2">Decimals: {token.decimals}</p>
+                                    <p className="mb-2">Token Type: {token.tokenType}</p>
+                                    <p className="mb-2">Verified: {token.verified ? 'Yes' : 'No'}</p>
+                                </div>
+                                <div>
+                                    <p className="mb-2">Mint Address: {token.mintAddress}</p>
+                                    {token.curveAddress && (
+                                        <p className="mb-2">Curve Address: {token.curveAddress}</p>
+                                    )}
+                                    {token.curveConfig && (
+                                        <p className="mb-2">Virtual SOL: {token.curveConfig.virtualSol?.toString()}</p>
+                                    )}
+                                    {token.content?.metadata?.collection?.name && (
+                                        <p className="mb-2">Collection: {token.content.metadata.collection.name}</p>
+                                    )}
+                                    {token.metadataUri && (
+                                        <p className="mb-2">Metadata URI: {token.metadataUri}</p>
+                                    )}
+                                    <p className="mb-2">Created: {new Date(token.createdAt).toLocaleString()}</p>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="bg-[#232427] rounded-lg p-4">

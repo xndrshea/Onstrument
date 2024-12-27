@@ -32,8 +32,6 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     const [spotPrice, setSpotPrice] = useState<number | null>(null)
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
 
-    const isDexToken = token.tokenType === 'pool'
-
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
         if (!connection || !publicKey || !token.mintAddress || !token.curveAddress) {
@@ -54,16 +52,14 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet])
 
     const getAppropriateConnection = () => {
-        if (isDexToken && config.HELIUS_RPC_URL) {
-            // Always use Helius for DEX tokens
+        if (token.tokenType === 'pool' && config.HELIUS_RPC_URL) {
             return mainnetConnection;
         }
-        // For custom tokens or when Helius is not available
         return devnetConnection;
     }
 
     const checkTokenTradability = async () => {
-        if (!isDexToken) return;
+        if (token.tokenType !== 'pool') return;
 
         try {
             const appropriateConnection = getAppropriateConnection();
@@ -74,15 +70,8 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                 appropriateConnection
             );
 
-            // Only mark as tradable if we get a valid price
-            if (quote && quote.price > 0) {
-                console.log("Token tradability check succeeded");
-                setIsTokenTradable(true);
-            } else {
-                console.log("Token not tradable - no valid price");
-                setIsTokenTradable(false);
-            }
-        } catch (error: any) {
+            setIsTokenTradable(quote && quote.price > 0);
+        } catch (error) {
             console.log("Token tradability check failed:", error);
             setIsTokenTradable(false);
         }
@@ -112,7 +101,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
             }
 
             // Skip spot price check if we already know token isn't tradable
-            if (isDexToken && isTokenTradable) {
+            if (token.tokenType === 'pool' && isTokenTradable) {
                 await checkTokenTradability();
             }
         } catch (error) {
@@ -125,7 +114,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
         if (!token.mintAddress) return;
 
         try {
-            if (isDexToken) {
+            if (token.tokenType === 'pool') {
                 const quote = await dexService.calculateTradePrice(
                     token.mintAddress,
                     1,  // Get price for 1 token
@@ -154,7 +143,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
             }
 
             try {
-                if (isDexToken) {
+                if (token.tokenType === 'pool') {
                     const appropriateConnection = getAppropriateConnection()
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
@@ -177,7 +166,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
         }
 
         updatePriceQuote()
-    }, [amount, isSelling, isDexToken, token.mintAddress, bondingCurve])
+    }, [amount, isSelling, token.tokenType, token.mintAddress, bondingCurve])
 
     // Initial balance fetch and periodic updates
     useEffect(() => {
@@ -222,7 +211,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
             const parsedAmount = new BN(parseFloat(amount) * (10 ** token.decimals))
             const appropriateConnection = getAppropriateConnection()
 
-            if (isDexToken) {
+            if (token.tokenType === 'pool') {
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
                     amount: parsedAmount,
@@ -262,10 +251,10 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
 
     useEffect(() => {
         console.log("Token type:", token.tokenType);
-        console.log("isDexToken:", isDexToken);
+        console.log("isDexToken:", token.tokenType === 'pool');
         console.log("isTokenTradable:", isTokenTradable);
         console.log("Token actual decimals:", token.decimals);
-    }, [token.tokenType, isDexToken, isTokenTradable, token.decimals]);
+    }, [token.tokenType, token.tokenType === 'pool', isTokenTradable, token.decimals]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">
@@ -425,7 +414,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                         </button>
                     </div>
 
-                    {isDexToken && (
+                    {token.tokenType !== 'pool' && (
                         <div className={`mb-4 p-3 ${isTokenTradable ? 'hidden' : 'bg-yellow-100 border border-yellow-200'} rounded-md`}>
                             <div className="text-yellow-800">
                                 This token cannot be traded at the moment. This could be because:
