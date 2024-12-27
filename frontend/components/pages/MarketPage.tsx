@@ -20,8 +20,11 @@ export function MarketPage() {
             const url = new URL(`${API_BASE_URL}/market/tokens`);
             url.searchParams.append('page', currentPage.toString());
             url.searchParams.append('limit', TOKENS_PER_PAGE.toString());
-            if (tokenType !== 'all') {
-                url.searchParams.append('type', tokenType);
+
+            if (tokenType === 'custom') {
+                url.searchParams.append('type', 'custom');
+            } else if (tokenType === 'dex') {
+                url.searchParams.append('type', 'pool');
             }
 
             const response = await fetch(url.toString());
@@ -34,7 +37,11 @@ export function MarketPage() {
                 mintAddress: token.mint_address,
                 name: token.name,
                 symbol: token.symbol,
-                tokenType: token.token_type || 'pool'
+                tokenType: token.token_type,
+                verified: token.verified,
+                imageUrl: token.image_url,
+                currentPrice: token.current_price,
+                volume24h: token.volume_24h
             })));
 
             setTotalPages(data.pagination?.total

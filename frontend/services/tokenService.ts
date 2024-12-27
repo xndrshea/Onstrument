@@ -13,14 +13,22 @@ export class TokenService {
             symbol: (token.symbol || '').trim(),
             description: token.description || '',
             metadataUri: token.metadata_url || token.metadataUri,
-            totalSupply: token.total_supply ? new BN(token.total_supply) : undefined,
+            totalSupply: token.supply || undefined,
             decimals: token.decimals || TOKEN_DECIMALS,
             curveAddress: token.curve_address || token.curveAddress,
             curveConfig: token.curve_config ? {
                 virtualSol: new BN(token.curve_config.virtual_sol || 30)
             } : { virtualSol: new BN(0) },
             createdAt: token.created_at || token.createdAt || new Date().toISOString(),
-            tokenType: token.tokenType || 'custom'
+            tokenType: token.token_type || token.tokenType || 'custom',
+            verified: token.verified || false,
+            imageUrl: token.image_url || token.imageUrl,
+            content: token.content,
+            attributes: token.attributes,
+            currentPrice: token.current_price || token.currentPrice,
+            volume24h: token.volume_24h || token.volume24h,
+            interface: token.interface,
+            metadataStatus: token.metadata_status
         };
 
         return transformedToken;
@@ -100,21 +108,7 @@ export class TokenService {
 
     async getByMintAddress(mintAddress: string, tokenType?: string): Promise<TokenRecord | null> {
         try {
-            let response;
-            console.log('Fetching token details for:', mintAddress, 'type:', tokenType);
-
-            // If tokenType is specified, try that endpoint first
-            if (tokenType === 'custom') {
-                response = await fetch(`${API_BASE_URL}/tokens/custom/${mintAddress}`);
-            } else if (tokenType === 'pool') {
-                response = await fetch(`${API_BASE_URL}/market/tokens/${mintAddress}`);
-            } else {
-                // If no type specified or unknown, try both endpoints
-                response = await fetch(`${API_BASE_URL}/tokens/custom/${mintAddress}`);
-                if (!response.ok) {
-                    response = await fetch(`${API_BASE_URL}/market/tokens/${mintAddress}`);
-                }
-            }
+            const response = await fetch(`${API_BASE_URL}/tokens/${mintAddress}${tokenType ? `?type=${tokenType}` : ''}`);
 
             if (!response.ok) {
                 if (response.status === 404) {
@@ -124,27 +118,7 @@ export class TokenService {
             }
 
             const data = await response.json();
-
-            // Ensure proper data transformation
-            const transformedToken = {
-                ...data,
-                mintAddress: data.mintAddress || data.mint_address,
-                tokenType: tokenType || data.tokenType || 'pool',
-                decimals: data.decimals,
-                description: data.description || '',
-                totalSupply: data.totalSupply || data.total_supply || '0',
-                name: data.name?.trim() || 'Unknown Token',
-                symbol: data.symbol?.trim() || 'UNKNOWN'
-            };
-
-            console.log('Transformed token data:', transformedToken);
-
-            // Validate required fields
-            if (!transformedToken.mintAddress) {
-                throw new Error(`Invalid token data: missing mintAddress for token ${transformedToken.name}`);
-            }
-
-            return transformedToken;
+            return this.transformToken(data);
         } catch (error) {
             console.error('Error fetching token:', error);
             throw error;

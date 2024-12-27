@@ -210,10 +210,12 @@ export class RaydiumProcessor extends BaseProcessor {
             await pool.query(
                 `INSERT INTO token_platform.tokens (
                     mint_address,
+                    decimals,
                     metadata_status,
-                    metadata_source
+                    metadata_source,
+                    token_type
                 )
-                VALUES ($1, 'pending', 'raydium')
+                VALUES ($1, $2, 'pending', 'raydium', 'pool')
                 ON CONFLICT (mint_address) 
                 DO UPDATE SET 
                     metadata_status = CASE 
@@ -221,10 +223,10 @@ export class RaydiumProcessor extends BaseProcessor {
                         THEN 'pending' 
                         ELSE token_platform.tokens.metadata_status 
                     END`,
-                [mintAddress]
+                [mintAddress, decimals]
             );
 
-            // Queue metadata update (which will now handle decimals)
+            // Queue metadata update
             const result = await pool.query(
                 `SELECT metadata_status FROM token_platform.tokens WHERE mint_address = $1`,
                 [mintAddress]
