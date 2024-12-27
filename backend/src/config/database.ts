@@ -33,59 +33,63 @@ pool.query('SELECT NOW()', (err) => {
 export async function initializeDatabase() {
     const client = await pool.connect()
     try {
-        // Part 1: Regular table creation in transaction
         await client.query('BEGIN')
-
-        // Create schema first
         await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform`)
-
-        // Enable TimescaleDB
         await client.query('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE')
 
-        // Drop existing continuous aggregates first
+        // Drop existing tables first
         await client.query(`
+            DROP TABLE IF EXISTS token_platform.tokens CASCADE;
+            DROP TABLE IF EXISTS token_platform.price_history CASCADE;
+            DROP TABLE IF EXISTS token_platform.trades CASCADE;
             DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1m CASCADE;
             DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1h CASCADE;
             DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1d CASCADE;
         `)
 
-        // Drop existing tables to recreate as hypertables
-        await client.query(`DROP TABLE IF EXISTS token_platform.price_history CASCADE`)
-        await client.query(`DROP TABLE IF EXISTS token_platform.trades CASCADE`)
-
-        // Create custom_tokens table (non-timeseries)
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS token_platform.custom_tokens (
-                mint_address VARCHAR(255) PRIMARY KEY,
-                curve_address VARCHAR(255) NOT NULL,
-                name VARCHAR(255) NOT NULL,
-                symbol VARCHAR(20) NOT NULL,
-                decimals INTEGER DEFAULT 6,
-                description TEXT,
-                metadata_url TEXT,
-                curve_config JSONB NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            )
-        `)
-
-        // Create or update tokens table
+        // Create tokens table first, THEN create indexes
         await client.query(`
             CREATE TABLE IF NOT EXISTS token_platform.tokens (
                 mint_address VARCHAR(255) PRIMARY KEY,
                 name VARCHAR(255),
                 symbol VARCHAR(20),
-                decimals INTEGER,
+                decimals INTEGER DEFAULT 6,
+                token_type VARCHAR(10) NOT NULL,
+                description TEXT,
                 metadata_url TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                curve_address VARCHAR(255),
+                curve_config JSONB,
+                interface VARCHAR(50),
+                content JSONB,
+                authorities JSONB,
+                compression JSONB,
+                grouping JSONB,
+                royalty JSONB,
+                creators JSONB,
+                ownership JSONB,
+                supply JSONB,
+                mutable BOOLEAN,
+                burnt BOOLEAN,
+                token_info JSONB,
+                verified BOOLEAN DEFAULT FALSE,
+                image_url TEXT,
+                attributes JSONB,
+                off_chain_metadata JSONB,
                 metadata_status VARCHAR(50),
                 metadata_source VARCHAR(50),
                 metadata_fetch_attempts INTEGER DEFAULT 0,
                 last_metadata_fetch TIMESTAMP WITH TIME ZONE,
-                verified BOOLEAN DEFAULT FALSE,
-                description TEXT,
-                image_url TEXT,
-                attributes JSONB,
-                off_chain_metadata JSONB
+                CONSTRAINT valid_token_type CHECK (token_type IN ('custom', 'pool'))
             );
+        `);
+
+        // Create indexes after table creation
+        await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_tokens_type ON token_platform.tokens(token_type);
+            CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON token_platform.tokens(symbol);
+            CREATE INDEX IF NOT EXISTS idx_tokens_verified ON token_platform.tokens(verified);
+            CREATE INDEX IF NOT EXISTS idx_tokens_metadata_status ON token_platform.tokens(metadata_status);
         `);
 
         // Add after tokens table creation, around line 73

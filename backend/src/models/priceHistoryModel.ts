@@ -152,19 +152,24 @@ export class PriceHistoryModel {
     }
 
     // This function gets called when loading the price chart
-    static async getPriceHistory(tokenMintAddress: string) {
+    static async getPriceHistory(tokenMintAddress: string, tokenType?: string) {
         try {
-            const result = await pool.query(`
+            const query = `
                 SELECT 
                     time_bucket('3 seconds', time) as time,
-                    last(price, time) as value  -- Take last price in each bucket
-                FROM token_platform.price_history
+                    last(price, time) as value
+                FROM token_platform.price_history ph
+                JOIN token_platform.tokens t ON t.mint_address = ph.mint_address
                 WHERE 
-                    mint_address = $1 
+                    ph.mint_address = $1
+                    ${tokenType ? 'AND t.token_type = $2' : ''}
                     AND time >= NOW() - INTERVAL '7 days'
                 GROUP BY 1
                 ORDER BY 1 ASC
-            `, [tokenMintAddress]);
+            `;
+
+            const params = tokenType ? [tokenMintAddress, tokenType] : [tokenMintAddress];
+            const result = await pool.query(query, params);
 
             return result.rows.map(row => ({
                 time: Math.floor(Date.parse(row.time) / 1000),

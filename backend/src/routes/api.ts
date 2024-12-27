@@ -61,7 +61,7 @@ router.post('/tokens', async (req, res) => {
         } = req.body;
 
         const result = await pool.query(`
-            INSERT INTO token_platform.custom_tokens (
+            INSERT INTO token_platform.tokens (
                 mint_address,
                 curve_address,
                 name,
@@ -69,8 +69,9 @@ router.post('/tokens', async (req, res) => {
                 description,
                 metadata_url,
                 curve_config,
-                decimals
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                decimals,
+                token_type
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom')
             RETURNING *
         `, [
             mintAddress,
@@ -90,12 +91,13 @@ router.post('/tokens', async (req, res) => {
     }
 });
 
-// Keep existing /tokens endpoint for TokenList component
+// Get custom tokens for homepage
 router.get('/tokens', async (req, res) => {
     try {
         logger.info('Fetching custom tokens');
         const result = await pool.query(`
-            SELECT * FROM token_platform.custom_tokens
+            SELECT * FROM token_platform.tokens
+            WHERE token_type = 'custom'
             ORDER BY created_at DESC
         `);
 
@@ -108,7 +110,8 @@ router.get('/tokens', async (req, res) => {
             description: token.description,
             metadataUri: token.metadata_url,
             curveConfig: token.curve_config,
-            createdAt: token.created_at
+            createdAt: token.created_at,
+            tokenType: token.token_type
         }));
 
         res.json({ tokens });
@@ -118,55 +121,187 @@ router.get('/tokens', async (req, res) => {
     }
 });
 
-// Add new endpoint for market page
-router.get('/market/tokens',
-    (req, res, next) => next(),
-    async (req, res) => {
-        try {
-            const page = parseInt(req.query.page as string) || 1;
-            const limit = parseInt(req.query.limit as string) || 10;
-            const offset = (page - 1) * limit;
+// Get DEX tokens for market page
+router.get('/market/tokens', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const offset = (page - 1) * limit;
+        const type = req.query.type as string;
 
-            // Only fetch from tokens table (DEX tokens)
-            const tokensQuery = `
-                SELECT 
-                    mint_address,
-                    name,
-                    symbol,
-                    'pool' as token_type
-                FROM token_platform.tokens
-                WHERE name IS NOT NULL 
-                AND symbol IS NOT NULL
-                ORDER BY name ASC
-                LIMIT $1 OFFSET $2
-            `;
+        // Debug log
+        logger.info(`Fetching market tokens. Type: ${type}, Page: ${page}, Limit: ${limit}`);
 
-            const countQuery = `
-                SELECT COUNT(*) 
-                FROM token_platform.tokens
-                WHERE name IS NOT NULL 
-                AND symbol IS NOT NULL
-            `;
+        const tokensQuery = `
+            SELECT 
+                t.mint_address,
+                t.name,
+                t.symbol,
+                t.decimals,
+                t.token_type,
+                t.verified,
+                t.image_url,
+                COALESCE(
+                    (SELECT price FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     ORDER BY time DESC LIMIT 1),
+                    0
+                ) as current_price,
+                COALESCE(
+                    (SELECT SUM(volume) FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     AND time > NOW() - INTERVAL '24 hours'),
+                    0
+                ) as volume_24h
+            FROM token_platform.tokens t
+            ${type ? 'WHERE t.token_type = $3' : ''}
+            ORDER BY t.verified DESC, t.name ASC NULLS LAST
+            LIMIT $1 OFFSET $2
+        `;
 
-            const [countResult, tokensResult] = await Promise.all([
-                pool.query(countQuery),
-                pool.query(tokensQuery, [limit, offset])
-            ]);
+        // Debug log the query and parameters
+        const params = type ? [limit, offset, type] : [limit, offset];
+        logger.info(`Query params:`, params);
 
-            res.json({
-                tokens: tokensResult.rows,
-                pagination: {
-                    total: parseInt(countResult.rows[0].count),
-                    page,
-                    limit
-                }
-            });
-        } catch (error) {
-            logger.error('Error fetching market tokens:', error);
-            res.status(500).json({ error: 'Internal server error' });
-        }
+        const result = await pool.query(tokensQuery, params);
+
+        // Debug log
+        logger.info(`Found ${result.rows.length} tokens`);
+
+        const countQuery = `
+            SELECT COUNT(*) FROM token_platform.tokens
+            ${type ? 'WHERE token_type = $1' : ''}
+        `;
+
+        const countResult = await pool.query(countQuery, type ? [type] : []);
+        const total = parseInt(countResult.rows[0].count);
+
+        res.json({
+            tokens: result.rows,
+            pagination: {
+                total,
+                page,
+                limit
+            }
+        });
+    } catch (error) {
+        logger.error('Error fetching market tokens:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-);
+});
+
+// Get single token (works for both custom and DEX tokens)
+router.get('/tokens/:mintAddress', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        const result = await pool.query(`
+            SELECT 
+                t.*,
+                COALESCE(
+                    (SELECT price FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     ORDER BY time DESC LIMIT 1),
+                    0
+                ) as current_price,
+                COALESCE(
+                    (SELECT SUM(volume) FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     AND time > NOW() - INTERVAL '24 hours'),
+                    0
+                ) as volume_24h
+            FROM token_platform.tokens t
+            WHERE t.mint_address = $1`,
+            [mintAddress]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Token not found' });
+        }
+
+        const token = result.rows[0];
+        res.json({
+            mintAddress: token.mint_address,
+            name: token.name?.trim(),
+            symbol: token.symbol?.trim(),
+            decimals: token.decimals,
+            description: token.description || '',
+            metadataUri: token.metadata_url,
+            tokenType: token.token_type,
+            verified: token.verified,
+            imageUrl: token.image_url,
+            attributes: token.attributes,
+            content: token.content,
+            authorities: token.authorities,
+            compression: token.compression,
+            grouping: token.grouping,
+            royalty: token.royalty,
+            creators: token.creators,
+            ownership: token.ownership,
+            supply: token.supply,
+            mutable: token.mutable,
+            burnt: token.burnt,
+            tokenInfo: token.token_info,
+            currentPrice: token.current_price,
+            volume24h: token.volume_24h,
+            offChainMetadata: token.off_chain_metadata,
+            interface: token.interface,
+            curveAddress: token.curve_address,
+            curveConfig: token.curve_config,
+            metadataStatus: token.metadata_status,
+            metadataSource: token.metadata_source,
+            metadataFetchAttempts: token.metadata_fetch_attempts,
+            lastMetadataFetch: token.last_metadata_fetch,
+            createdAt: token.created_at
+        });
+    } catch (error) {
+        logger.error('Error fetching token:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Search endpoint (searches both custom and DEX tokens)
+router.get('/search/tokens', async (req, res) => {
+    try {
+        const query = req.query.q as string;
+        const type = req.query.type as string;
+
+        if (!query || query.length < 1) {
+            return res.json({ tokens: [] });
+        }
+
+        const searchQuery = `
+            SELECT 
+                mint_address,
+                name,
+                symbol,
+                token_type,
+                verified,
+                image_url
+            FROM token_platform.tokens 
+            WHERE 
+                (LOWER(name) LIKE LOWER($1) OR 
+                LOWER(symbol) LIKE LOWER($1) OR 
+                mint_address LIKE $2)
+                ${type ? 'AND token_type = $3' : ''}
+            AND name IS NOT NULL 
+            AND symbol IS NOT NULL
+            ORDER BY 
+                verified DESC,
+                name ASC
+            LIMIT 10
+        `;
+
+        const params = type
+            ? [`%${query}%`, `${query}%`, type]
+            : [`%${query}%`, `${query}%`];
+
+        const result = await pool.query(searchQuery, params);
+        res.json({ tokens: result.rows });
+    } catch (error) {
+        logger.error('Search error:', error);
+        res.status(500).json({ error: 'Search failed' });
+    }
+});
 
 // For Lightweight Charts
 router.get('/price-history/:mintAddress', async (req, res) => {
@@ -350,56 +485,6 @@ router.get('/pools/:mintAddress', async (req, res) => {
     } catch (error) {
         logger.error('Error fetching pools:', error);
         res.status(500).json({ error: 'Failed to fetch pools' });
-    }
-});
-
-router.get('/search/tokens', async (req, res) => {
-    try {
-        const query = req.query.q as string;
-
-        if (!query || query.length < 1) {
-            return res.json({ tokens: [] });
-        }
-
-        // Query both custom tokens and DEX tokens
-        const result = await pool.query(`
-            (
-                SELECT 
-                    mint_address,
-                    name,
-                    symbol,
-                    'custom' as token_type
-                FROM token_platform.custom_tokens 
-                WHERE 
-                    (LOWER(name) LIKE LOWER($1) OR 
-                    LOWER(symbol) LIKE LOWER($1) OR 
-                    mint_address LIKE $2)
-                AND name IS NOT NULL 
-                AND symbol IS NOT NULL
-            )
-            UNION ALL
-            (
-                SELECT 
-                    mint_address,
-                    name,
-                    symbol,
-                    'pool' as token_type
-                FROM token_platform.tokens 
-                WHERE 
-                    (LOWER(name) LIKE LOWER($1) OR 
-                    LOWER(symbol) LIKE LOWER($1) OR 
-                    mint_address LIKE $2)
-                AND name IS NOT NULL 
-                AND symbol IS NOT NULL
-            )
-            ORDER BY name ASC
-            LIMIT 10
-        `, [`%${query}%`, `${query}%`]);
-
-        res.json({ tokens: result.rows });
-    } catch (error) {
-        logger.error('Search error:', error);
-        res.status(500).json({ error: 'Search failed' });
     }
 });
 
