@@ -1,105 +1,61 @@
 import { useEffect, useState } from 'react'
 import { TokenRecord } from '../../../shared/types/token'
-import { tokenService } from '../../services/tokenService'
-import { dexService } from '../../services/dexService'
 import { Link } from 'react-router-dom'
-import { BondingCurve } from '../../services/bondingCurve'
-import { PublicKey } from '@solana/web3.js'
-import { connection } from '../../config'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { API_BASE_URL } from '../../config'
 
 export function MarketPage() {
     const wallet = useWallet();
     const [tokens, setTokens] = useState<TokenRecord[]>([])
-    const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({})
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [tokenType, setTokenType] = useState<'all' | 'bonding_curve' | 'dex'>('all')
+    const [tokenType, setTokenType] = useState<'all' | 'custom' | 'dex'>('all')
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const TOKENS_PER_PAGE = 10
 
-    const fetchTokenPrices = async (validTokens: TokenRecord[]) => {
-        const prices: Record<string, number> = {};
-
-        await Promise.all(validTokens.map(async (token) => {
-            try {
-                if (token.token_type === 'dex') {
-                    const price = await dexService.getTokenPrice(token.mintAddress);
-                    prices[token.mintAddress] = price;
-                } else if (wallet.connected && wallet.publicKey) {
-                    // Only try to fetch bonding curve prices if wallet is connected
-                    const bondingCurve = new BondingCurve(
-                        connection,
-                        wallet,
-                        new PublicKey(token.mintAddress),
-                        new PublicKey(token.curveAddress)
-                    );
-                    const quote = await bondingCurve.getPriceQuote(1, true);
-                    prices[token.mintAddress] = quote.price;
-                }
-            } catch (error) {
-                console.error(`Error fetching price for ${token.symbol}:`, error);
-            }
-        }));
-
-        setTokenPrices(prices);
-    };
-
-    const renderTokenPrice = (token: TokenRecord) => {
-        const price = tokenPrices[token.mintAddress];
-        if (price === undefined) return null;
-
-        return (
-            <p className="text-sm">
-                Price: {price.toFixed(6)} SOL
-            </p>
-        );
-    };
-
-    const fetchAllTokens = async () => {
+    const fetchTokens = async () => {
         try {
             setIsLoading(true);
-            const [customTokens, dexTokens] = await Promise.allSettled([
-                tokenService.getAllTokens(),
-                dexService.getTopTokens()
-            ]);
-
-            const validTokens = [
-                ...(customTokens.status === 'fulfilled' ? customTokens.value : []),
-                ...(dexTokens.status === 'fulfilled' ? dexTokens.value : [])
-            ];
-
-            if (validTokens.length === 0) {
-                setError('No tokens available at the moment');
-            } else {
-                setTokens(validTokens);
-                await fetchTokenPrices(validTokens);
-                setError(null);
+            const url = new URL(`${API_BASE_URL}/market/tokens`);
+            url.searchParams.append('page', currentPage.toString());
+            url.searchParams.append('limit', TOKENS_PER_PAGE.toString());
+            if (tokenType !== 'all') {
+                url.searchParams.append('type', tokenType);
             }
+
+            const response = await fetch(url.toString());
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            setTokens(data.tokens.map((token: any) => ({
+                mintAddress: token.mint_address,
+                name: token.name,
+                symbol: token.symbol,
+                tokenType: token.token_type || 'pool'
+            })));
+
+            setTotalPages(data.pagination?.total
+                ? Math.ceil(data.pagination.total / TOKENS_PER_PAGE)
+                : 1);
         } catch (error) {
-            setError('Failed to fetch tokens');
-            console.error('Error fetching tokens:', error);
+            console.error('Error fetching market tokens:', error);
+            setError(error instanceof Error ? error.message : 'Failed to fetch tokens');
         } finally {
             setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchAllTokens();
-    }, []);
+        fetchTokens();
+    }, [currentPage, tokenType]);
 
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (tokens.length > 0) {
-                fetchTokenPrices(tokens);
-            }
-        }, 10000); // Update every 10 seconds
-
-        return () => clearInterval(interval);
-    }, [tokens]);
-
-    const filteredTokens = tokens.filter(token => {
-        if (tokenType === 'all') return true
-        return token.token_type === tokenType
-    })
+    const handlePageChange = (newPage: number) => {
+        setCurrentPage(newPage);
+        window.scrollTo(0, 0);
+    };
 
     if (isLoading) return <div className="p-4">Loading...</div>
     if (error) return <div className="p-4 text-red-500">{error}</div>
@@ -112,19 +68,23 @@ export function MarketPage() {
                     <select
                         className="bg-gray-700 text-white rounded px-3 py-1"
                         value={tokenType}
-                        onChange={(e) => setTokenType(e.target.value as any)}
+                        onChange={(e) => {
+                            setTokenType(e.target.value as any);
+                            setCurrentPage(1); // Reset to first page on filter change
+                        }}
                     >
                         <option value="all">All Tokens</option>
-                        <option value="bonding_curve">Custom Tokens</option>
+                        <option value="custom">Custom Tokens</option>
                         <option value="dex">DEX Tokens</option>
                     </select>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredTokens.map(token => (
+                    {tokens.map(token => (
                         <Link
                             key={token.mintAddress}
                             to={`/token/${token.mintAddress}`}
+                            state={{ tokenType: token.tokenType }}
                             className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors"
                         >
                             <div className="flex justify-between items-start mb-2">
@@ -133,14 +93,37 @@ export function MarketPage() {
                                     <p className="text-sm text-gray-400">{token.symbol}</p>
                                 </div>
                                 <span className="text-xs px-2 py-1 rounded bg-gray-700">
-                                    {token.token_type === 'dex' ? 'DEX' : 'Custom'}
+                                    {token.tokenType === 'pool' ? 'DEX' : 'Custom'}
                                 </span>
                             </div>
-                            {renderTokenPrice(token)}
+                            <p className="text-sm text-gray-400 mt-2">
+                                {token.mintAddress.slice(0, 4)}...{token.mintAddress.slice(-4)}
+                            </p>
                         </Link>
                     ))}
                 </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-center items-center mt-8 space-x-2">
+                    <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
+                    >
+                        Previous
+                    </button>
+                    <span className="px-4 py-2">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
+                    >
+                        Next
+                    </button>
+                </div>
             </div>
         </div>
-    )
+    );
 }
