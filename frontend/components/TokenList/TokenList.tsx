@@ -4,13 +4,15 @@ import { tokenService } from '../../services/tokenService'
 import { TokenRecord } from '../../../shared/types/token'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { Link } from 'react-router-dom'
+import { API_BASE_URL } from '../../config'
+import { priceClient } from '../../services/priceClient'
 
 interface TokenListProps {
     onCreateClick: () => void
 }
 
 const deduplicateTokens = (tokens: TokenRecord[]): TokenRecord[] => {
-    return Array.from(new Map(tokens.map(token => [token.mintAddress || token.mint_address, token])).values());
+    return Array.from(new Map(tokens.map(token => [token.mintAddress, token])).values());
 };
 
 export function TokenList({ onCreateClick }: TokenListProps) {
@@ -20,6 +22,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+    const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
 
     const refreshTokens = () => {
         fetchTokens()
@@ -28,28 +31,37 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
-            const tokens = await tokenService.getAllTokens();
-            if (!tokens) {
+            console.log('Fetching custom tokens from:', `${API_BASE_URL}/tokens`);
+            const response = await fetch(`${API_BASE_URL}/tokens`);
+            console.log('Token fetch response status:', response.status);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
+            }
+
+            const data = await response.json();
+            console.log('Custom tokens response data:', data);
+
+            if (!data.tokens) {
                 throw new Error('No data received from server');
             }
 
-            const validTokens = tokens.filter(token => {
-                if (!token || typeof token !== 'object') {
-                    console.warn('Invalid token object:', token);
-                    return false;
-                }
+            const normalizedTokens = data.tokens.map((token: TokenRecord & { mint_address?: string }) => ({
+                ...token,
+                mintAddress: token.mintAddress || token.mint_address,
+                curveAddress: token.curveAddress,
+                createdAt: token.createdAt,
+                totalSupply: token.totalSupply,
+                tokenType: 'custom',
+                price: token.price || 0,
+                volume24h: token.volume24h || 0
+            }));
 
-                const hasValidMint = Boolean(token.mintAddress || token.mint_address);
-                const hasValidName = Boolean(token.name);
-                const hasValidSymbol = Boolean(token.symbol);
-
-                return hasValidMint && hasValidName && hasValidSymbol;
-            });
-
-            setTokens(deduplicateTokens(validTokens));
+            setTokens(deduplicateTokens(normalizedTokens));
             setError(null);
         } catch (error) {
-            console.error('Error fetching tokens:', error);
+            console.error('Error fetching custom tokens:', error);
             setError(error instanceof Error ? error.message : 'An unexpected error occurred');
             setTokens([]);
         } finally {
@@ -68,6 +80,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     // Add this function to sort tokens
     const sortedTokens = useMemo(() => {
         if (!tokens.length) return [];
+        console.log('Tokens before sorting:', tokens);
         return [...tokens].sort((a, b) => {
             const dateA = new Date(a.createdAt || 0).getTime();
             const dateB = new Date(b.createdAt || 0).getTime();
@@ -107,41 +120,36 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                     </button>
                 </div>
             </div>
-            {tokens.length > 0 ? (
-                <div className="token-grid">
-                    {tokens.map(token => (
-                        <Link
-                            to={`/token/${token.mintAddress}`}
-                            key={token.mintAddress}
-                            className="token-card"
-                        >
-                            <h3>{token.name || 'Unnamed Token'}</h3>
-                            <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
-                            <p className="token-description">{token.description || 'No description available'}</p>
-                            <p className="token-mint">
-                                Mint: {token.mintAddress ?
-                                    `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
-                                    'N/A'}
-                            </p>
-                            <p className="token-date">
-                                {token.createdAt ?
-                                    new Date(token.createdAt).toLocaleDateString() :
-                                    'N/A'}
-                            </p>
-                            <p className="token-market-cap">
-                                Market Cap: {calculateMarketCap(token)}
-                            </p>
-                            <p className="token-supply">
-                                Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
-                            </p>
-                        </Link>
-                    ))}
-                </div>
-            ) : (
-                <div className="no-tokens">
-                    <p>No tokens have been created yet.</p>
-                </div>
-            )}
+            <div className="token-list-content">
+                {sortedTokens.map((token) => (
+                    <Link
+                        key={token.mintAddress}
+                        to={`/token/${token.mintAddress}`}
+                        state={{ tokenType: 'custom' }}
+                        className="token-item"
+                    >
+                        <h3>{token.name || 'Unnamed Token'}</h3>
+                        <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
+                        <p className="token-description">{token.description || 'No description available'}</p>
+                        <p className="token-mint">
+                            Mint: {token.mintAddress ?
+                                `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
+                                'N/A'}
+                        </p>
+                        <p className="token-date">
+                            {token.createdAt ?
+                                new Date(token.createdAt).toLocaleDateString() :
+                                'N/A'}
+                        </p>
+                        <p className="token-market-cap">
+                            Market Cap: {calculateMarketCap(token)}
+                        </p>
+                        <p className="token-supply">
+                            Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
+                        </p>
+                    </Link>
+                ))}
+            </div>
         </div>
     )
 } 

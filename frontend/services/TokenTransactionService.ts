@@ -51,7 +51,6 @@ export class TokenTransactionService {
 
             // Create token record with description
             const tokenRecord: TokenRecord = {
-                id: Date.now(),
                 mintAddress: mint.toString(),
                 curveAddress: curve.toString(),
                 name: params.name,
@@ -61,8 +60,8 @@ export class TokenTransactionService {
                 totalSupply: params.totalSupply,
                 decimals: TOKEN_DECIMALS,
                 curveConfig: params.curveConfig,
-                createdAt: new Date(),
-                token_type: 'bonding_curve'
+                createdAt: new Date().toISOString(),
+                tokenType: 'custom'
             };
 
             // Save to database through tokenService

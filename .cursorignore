@@ -4,3 +4,5 @@
 target/debug
 target/release
 target/sbf-solana-solana
+target/
+node_modules

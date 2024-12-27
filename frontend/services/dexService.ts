@@ -1,94 +1,174 @@
-import { TokenRecord } from '../../shared/types/token';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
-import { Liquidity, Market, Token } from '@raydium-io/raydium-sdk';
-import { connection } from '../config';
-
-const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
+import { Connection, VersionedTransaction, PublicKey } from '@solana/web3.js';
+import { WalletContextState } from '@solana/wallet-adapter-react';
+import { NATIVE_SOL_MINT } from '../constants';
+import { BN } from '@project-serum/anchor';
+import { mainnetConnection } from '../config';
+import { getMint } from '@solana/spl-token';
 
 interface TradeParams {
     mintAddress: string;
-    amount: number;
+    amount: BN;
     isSelling: boolean;
     slippageTolerance: number;
+    wallet: WalletContextState;
+    connection: Connection;
 }
 
-export class DexService {
-    private connection: Connection;
-
-    constructor() {
-        this.connection = connection;
-    }
-
-    async getTopTokens(): Promise<TokenRecord[]> {
+export const dexService = {
+    getTokenPrice: async (
+        mintAddress: string,
+        _connection: Connection
+    ): Promise<number | null> => {
         try {
-            const response = await fetch(`${API_BASE_URL}/dex/tokens`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return await response.json();
-        } catch (error) {
-            console.error('Error fetching DEX tokens:', error);
-            throw error;
-        }
-    }
+            const response = await fetch(
+                `https://price.jup.ag/v4/price?` +
+                `ids=${mintAddress}` +
+                `&vsToken=SOL`
+            );
 
-    async getTokenPrice(mintAddress: string): Promise<number> {
-        try {
-            const response = await fetch(`${API_BASE_URL}/dex/price/${mintAddress}`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-            return data.price;
+            if (!response.ok) return null;
+
+            const priceData = await response.json();
+            return priceData.data[mintAddress]?.price || null;
         } catch (error) {
             console.error('Error fetching token price:', error);
-            throw error;
+            return null;
         }
-    }
+    },
 
-    async executeTrade({ mintAddress, amount, isSelling, slippageTolerance }: TradeParams): Promise<string> {
+    calculateTradePrice: async (
+        mintAddress: string,
+        amount: number,
+        isSelling: boolean,
+        _connection: Connection
+    ) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/dex/pool/${mintAddress}`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch pool info`);
+            const mintInfo = await mainnetConnection.getParsedAccountInfo(
+                new PublicKey(mintAddress)
+            );
+
+            if (!mintInfo.value?.data || typeof mintInfo.value.data !== 'object') {
+                throw new Error('Failed to get mint info');
             }
-            const poolInfo = await response.json();
 
-            const tx = await this.createTradeTransaction({
-                poolAddress: new PublicKey(poolInfo.poolAddress),
-                mintAddress: new PublicKey(mintAddress),
-                amount,
-                isSelling,
-                slippageTolerance
+            const tokenDecimals = (mintInfo.value.data as any).parsed.info.decimals;
+            console.log('Token decimals from mint:', tokenDecimals);
+
+            // When buying, we want this many tokens as OUTPUT
+            // So we need to query with the output amount
+            const response = await fetch(
+                `https://quote-api.jup.ag/v6/quote?` +
+                `inputMint=${isSelling ? mintAddress : NATIVE_SOL_MINT}` +
+                `&outputMint=${isSelling ? NATIVE_SOL_MINT : mintAddress}` +
+                `&amount=${Math.floor(amount * 10 ** tokenDecimals)}` +
+                `&swapMode=${isSelling ? 'ExactIn' : 'ExactOut'}`
+            );
+
+            const quoteResponse = await response.json();
+            console.log('Jupiter quote response:', quoteResponse);
+
+            if (!response.ok || !quoteResponse.outAmount) {
+                console.error('Invalid quote response:', quoteResponse);
+                return { price: 0, totalCost: 0, isSelling };
+            }
+
+            let price, totalCost;
+
+            if (isSelling) {
+                const solReceived = Number(quoteResponse.outAmount) / 1e9;
+                price = solReceived / amount;  // Price per token
+                totalCost = solReceived;
+            } else {
+                const solNeeded = Number(quoteResponse.inAmount) / 1e9;
+                price = solNeeded;  // Total SOL needed
+                totalCost = solNeeded;
+            }
+
+            console.log('Price calculation:', {
+                rawInAmount: amount,
+                rawOutAmount: quoteResponse.outAmount,
+                inAmount: quoteResponse.inAmount,
+                tokenDecimals,
+                price,
+                actualSolCost: Number(quoteResponse.inAmount) / 1e9,  // Add this for clarity
+                totalCost,
+                isSelling
             });
 
-            await fetch(`${API_BASE_URL}/dex/trades`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tokenMintAddress: mintAddress,
-                    price: poolInfo.price,
-                    amount,
-                    type: isSelling ? 'sell' : 'buy'
-                })
-            });
-
-            return tx;
+            return {
+                price,
+                totalCost,
+                isSelling
+            };
         } catch (error) {
-            console.error('Trade execution error:', error);
-            throw new Error(error instanceof Error ? error.message : 'Trade failed');
+            console.error('Error calculating trade price:', error);
+            return { price: 0, totalCost: 0, isSelling };
         }
-    }
+    },
 
-    private async createTradeTransaction({
-        poolAddress,
+    executeTrade: async ({
         mintAddress,
         amount,
         isSelling,
-        slippageTolerance
-    }: any): Promise<string> {
-        throw new Error('Trade execution not yet implemented');
-    }
-}
+        slippageTolerance,
+        wallet,
+        connection
+    }: TradeParams) => {
+        try {
+            const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
+            const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
 
-export const dexService = new DexService();
+            const quoteResponse = await fetch(
+                `https://quote-api.jup.ag/v6/quote?` +
+                `inputMint=${inputMint}` +
+                `&outputMint=${outputMint}` +
+                `&amount=${amount}` +
+                `&slippageBps=${Math.floor(slippageTolerance * 10000)}`
+            ).then(res => res.json());
+
+            if (!quoteResponse || quoteResponse.error) {
+                throw new Error(quoteResponse.error || 'Failed to get quote');
+            }
+
+            const { swapTransaction } = await fetch('https://quote-api.jup.ag/v6/swap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    quoteResponse,
+                    userPublicKey: wallet.publicKey!.toString(),
+                    wrapAndUnwrapSol: true,
+                    dynamicSlippage: { maxBps: Math.floor(slippageTolerance * 10000) },
+                    dynamicComputeUnitLimit: true,
+                    prioritizationFeeLamports: 'auto'
+                })
+            }).then(res => res.json());
+
+            const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+            const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+
+            if (!wallet.signTransaction) {
+                throw new Error('Wallet does not support signing');
+            }
+
+            const signedTx = await wallet.signTransaction(transaction);
+            const latestBlockhash = await mainnetConnection.getLatestBlockhash();
+
+            const signature = await mainnetConnection.sendRawTransaction(signedTx.serialize(), {
+                skipPreflight: true,
+                maxRetries: 2
+            });
+
+            await mainnetConnection.confirmTransaction({
+                signature,
+                blockhash: latestBlockhash.blockhash,
+                lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+            });
+
+            return signature;
+
+        } catch (error) {
+            console.error('Swap error:', error);
+            throw new Error('Failed to execute swap');
+        }
+    }
+};
