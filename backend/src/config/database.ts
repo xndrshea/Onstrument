@@ -37,16 +37,6 @@ export async function initializeDatabase() {
         await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform`)
         await client.query('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE')
 
-        // Drop existing tables first
-        await client.query(`
-            DROP TABLE IF EXISTS token_platform.tokens CASCADE;
-            DROP TABLE IF EXISTS token_platform.price_history CASCADE;
-            DROP TABLE IF EXISTS token_platform.trades CASCADE;
-            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1m CASCADE;
-            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1h CASCADE;
-            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1d CASCADE;
-        `)
-
         // Create tokens table first, THEN create indexes
         await client.query(`
             CREATE TABLE IF NOT EXISTS token_platform.tokens (
@@ -154,7 +144,8 @@ export async function initializeDatabase() {
             );
 
             SELECT add_compression_policy('token_platform.price_history',
-                compress_after => INTERVAL '7 days');
+                compress_after => INTERVAL '7 days',
+                if_not_exists => TRUE);
         `)
 
         // Create trades as a hypertable
@@ -247,17 +238,20 @@ export async function initializeDatabase() {
             SELECT add_continuous_aggregate_policy('token_platform.price_history_1m',
                 start_offset => INTERVAL '1 hour',
                 end_offset => INTERVAL '1 minute',
-                schedule_interval => INTERVAL '1 minute');
+                schedule_interval => INTERVAL '1 minute',
+                if_not_exists => TRUE);
 
             SELECT add_continuous_aggregate_policy('token_platform.price_history_1h',
                 start_offset => INTERVAL '1 day',
                 end_offset => INTERVAL '1 hour',
-                schedule_interval => INTERVAL '1 hour');
+                schedule_interval => INTERVAL '1 hour',
+                if_not_exists => TRUE);
 
             SELECT add_continuous_aggregate_policy('token_platform.price_history_1d',
                 start_offset => INTERVAL '7 days',
                 end_offset => INTERVAL '1 day',
-                schedule_interval => INTERVAL '1 day');
+                schedule_interval => INTERVAL '1 day',
+                if_not_exists => TRUE);
         `);
 
         logger.info('Database initialized successfully')
