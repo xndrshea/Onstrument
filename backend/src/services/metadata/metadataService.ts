@@ -52,66 +52,132 @@ export class MetadataService {
         }
     }
 
-    private async processMetadata(mintAddress: string, source: string, retryCount = 0): Promise<void> {
-        const MAX_RETRIES = 3;
-
+    private async processMetadata(mintAddress: string, source: string): Promise<void> {
         try {
-            // Get decimals from mint account
-            const connection = new Connection(config.HELIUS_RPC_URL);
-            const mintInfo = await connection.getParsedAccountInfo(new PublicKey(mintAddress));
+            const metadata = await this.fetchMetadata(mintAddress);
 
-            if (!mintInfo.value?.data || typeof mintInfo.value.data !== 'object') {
-                throw new Error('Failed to get mint info');
-            }
+            // Extract supply as a number instead of JSON
+            const supply = typeof metadata.supply === 'number' ? metadata.supply : null;
 
-            const decimals = (mintInfo.value.data as any).parsed.info.decimals;
-            if (typeof decimals !== 'number') {
-                throw new Error('Invalid decimals from mint account');
-            }
+            // Validate and clean JSON data
+            const cleanMetadata = {
+                content: metadata.content ? JSON.stringify(metadata.content) : null,
+                authorities: metadata.authorities ? JSON.stringify(metadata.authorities) : null,
+                compression: metadata.compression ? JSON.stringify(metadata.compression) : null,
+                grouping: metadata.grouping ? JSON.stringify(metadata.grouping) : null,
+                royalty: metadata.royalty ? JSON.stringify(metadata.royalty) : null,
+                creators: metadata.creators ? JSON.stringify(metadata.creators) : null,
+                ownership: metadata.ownership ? JSON.stringify(metadata.ownership) : null,
+                token_info: metadata.token_info ? JSON.stringify(metadata.token_info) : null,
+                attributes: metadata.attributes ? JSON.stringify(metadata.attributes) : null,
+                off_chain_metadata: metadata.off_chain_metadata ? JSON.stringify(metadata.off_chain_metadata) : null
+            };
 
-            // Get metadata as before
-            const metadataPda = findMetadataPda(this.umi, { mint: publicKey(mintAddress) })[0];
-            const metadata = await fetchMetadata(this.umi, metadataPda);
-
-            // Update query to include decimals
             await pool.query(
                 `UPDATE token_platform.tokens 
                  SET 
-                    name = $2,
-                    symbol = $3,
+                    name = $1,
+                    symbol = $2,
+                    description = $3,
                     metadata_url = $4,
-                    decimals = $5,
-                    last_metadata_fetch = NOW(),
-                    metadata_status = 'success',
-                    metadata_source = $6,
-                    metadata_fetch_attempts = metadata_fetch_attempts + 1
-                 WHERE mint_address = $1`,
+                    interface = $5,
+                    content = $6::jsonb,
+                    authorities = $7::jsonb,
+                    compression = $8::jsonb,
+                    grouping = $9::jsonb,
+                    royalty = $10::jsonb,
+                    creators = $11::jsonb,
+                    ownership = $12::jsonb,
+                    supply = $13,
+                    mutable = $14,
+                    burnt = $15,
+                    token_info = $16::jsonb,
+                    verified = $17,
+                    image_url = $18,
+                    attributes = $19::jsonb,
+                    off_chain_metadata = $20::jsonb,
+                    metadata_status = 'fetched',
+                    metadata_source = $21,
+                    metadata_fetch_attempts = metadata_fetch_attempts + 1,
+                    last_metadata_fetch = CURRENT_TIMESTAMP
+                 WHERE mint_address = $22`,
                 [
-                    mintAddress,
-                    metadata?.name || 'Unknown',
-                    metadata?.symbol || 'UNKNOWN',
-                    metadata?.uri || '',
-                    decimals,
-                    source
+                    metadata.name || null,
+                    metadata.symbol || null,
+                    metadata.description || null,
+                    metadata.metadata_url || null,
+                    metadata.interface || null,
+                    cleanMetadata.content,
+                    cleanMetadata.authorities,
+                    cleanMetadata.compression,
+                    cleanMetadata.grouping,
+                    cleanMetadata.royalty,
+                    cleanMetadata.creators,
+                    cleanMetadata.ownership,
+                    supply,
+                    metadata.mutable || false,
+                    metadata.burnt || false,
+                    cleanMetadata.token_info,
+                    metadata.verified || false,
+                    metadata.image_url || null,
+                    cleanMetadata.attributes,
+                    cleanMetadata.off_chain_metadata,
+                    source,
+                    mintAddress
                 ]
             );
         } catch (error) {
             logger.error(`Error processing metadata for ${mintAddress}:`, error);
-
-            if (retryCount < MAX_RETRIES) {
-                logger.info(`Retrying metadata fetch for ${mintAddress}, attempt ${retryCount + 1}`);
-                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-                return this.processMetadata(mintAddress, source, retryCount + 1);
-            }
-
-            await pool.query(
-                `UPDATE token_platform.tokens 
-                 SET metadata_status = 'failed', 
-                     last_metadata_fetch = NOW(),
-                     metadata_fetch_attempts = metadata_fetch_attempts + 1
-                 WHERE mint_address = $1`,
-                [mintAddress]
-            );
+            throw error;
         }
+    }
+
+    private async fetchMetadata(mintAddress: string): Promise<any> {
+        const response = await fetch(config.HELIUS_RPC_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 'metadata',
+                method: 'getAsset',
+                params: {
+                    id: mintAddress,
+                    displayOptions: {
+                        showFungible: true
+                    }
+                }
+            }),
+        });
+
+        const { result } = await response.json();
+
+        // Get total supply based on token type
+        const totalSupply = result.interface === 'V1_NFT'
+            ? result.supply?.print_current_supply
+            : result.token_info?.supply;
+
+        // Transform Helius response to our schema
+        return {
+            name: result.content?.metadata?.name,
+            symbol: result.content?.metadata?.symbol,
+            description: result.content?.metadata?.description,
+            metadata_url: result.content?.json_uri,
+            interface: result.interface,
+            content: result.content,
+            authorities: result.authorities,
+            compression: result.compression,
+            grouping: result.grouping,
+            royalty: result.royalty,
+            creators: result.creators,
+            ownership: result.ownership,
+            supply: totalSupply,
+            decimals: result.token_info?.decimals,
+            mutable: result.mutable,
+            burnt: result.burnt,
+            token_info: result.token_info,
+            verified: false,
+            image_url: result.content?.files?.[0]?.uri || null,
+            attributes: result.content?.attributes
+        };
     }
 } 

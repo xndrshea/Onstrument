@@ -31,9 +31,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
-            console.log('Fetching custom tokens from:', `${API_BASE_URL}/tokens`);
             const response = await fetch(`${API_BASE_URL}/tokens`);
-            console.log('Token fetch response status:', response.status);
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -41,21 +39,18 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             }
 
             const data = await response.json();
-            console.log('Custom tokens response data:', data);
 
             if (!data.tokens) {
                 throw new Error('No data received from server');
             }
 
-            const normalizedTokens = data.tokens.map((token: TokenRecord & { mint_address?: string }) => ({
+            const normalizedTokens = data.tokens.map((token: TokenRecord) => ({
                 ...token,
-                mintAddress: token.mintAddress || token.mint_address,
-                curveAddress: token.curveAddress,
+                mintAddress: token.mintAddress,
+                tokenType: 'custom', // Always custom tokens in this component
                 createdAt: token.createdAt,
-                totalSupply: token.totalSupply,
-                tokenType: 'custom',
-                price: token.price || 0,
-                volume24h: token.volume24h || 0
+                curveConfig: token.curveConfig,
+                metadataUri: token.metadataUri
             }));
 
             setTokens(deduplicateTokens(normalizedTokens));

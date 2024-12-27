@@ -30,14 +30,29 @@ export interface TokenRecord {
     mintAddress: string;
     name: string;
     symbol: string;
+    decimals: number;
     description?: string;
     metadataUri?: string;
-    totalSupply?: BN;
-    decimals: number;
-    curveAddress: string;
-    curveConfig: curveConfig;
+    tokenType: 'pool' | 'custom';
+    verified: boolean;
+    imageUrl?: string;
+    attributes?: Record<string, any>;
+    content?: {
+        metadata?: {
+            image?: string;
+            collection?: {
+                name?: string;
+            };
+        };
+    };
+    curveAddress?: string;
+    curveConfig?: curveConfig;
+    totalSupply?: number;
+    currentPrice?: number;
+    volume24h?: number;
     createdAt: string;
-    tokenType: 'custom' | 'pool';
+    metadataStatus?: string;
+    interface?: string;
 }
 
 export interface TokenFormData {
