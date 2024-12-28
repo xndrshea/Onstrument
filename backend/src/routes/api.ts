@@ -325,6 +325,29 @@ router.get('/price-history/:mintAddress', async (req, res) => {
     }
 });
 
+// Get latest price
+router.get('/prices/:mintAddress/latest', async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        const result = await pool.query(`
+            SELECT price 
+            FROM token_platform.price_history 
+            WHERE mint_address = $1 
+            ORDER BY time DESC 
+            LIMIT 1
+        `, [mintAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No price data found' });
+        }
+
+        res.json({ price: Number(result.rows[0].price) });
+    } catch (error) {
+        logger.error('Error fetching latest price:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // For TradingView Advanced
 router.get('/ohlcv/:mintAddress', async (req, res) => {
     try {

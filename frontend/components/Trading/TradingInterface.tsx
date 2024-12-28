@@ -9,6 +9,7 @@ import { BN } from '@project-serum/anchor'
 import { dexService } from '../../services/dexService'
 import { mainnetConnection, devnetConnection } from '../../config'
 import { config } from '../../config'
+import { priceClient } from '../../services/priceClient'
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -110,30 +111,6 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
         }
     };
 
-    const updateSpotPrice = async () => {
-        if (!token.mintAddress) return;
-
-        try {
-            if (token.tokenType === 'pool') {
-                const quote = await dexService.calculateTradePrice(
-                    token.mintAddress,
-                    1,  // Get price for 1 token
-                    true,
-                    connection
-                );
-                setSpotPrice(quote.price);
-                onPriceUpdate?.(quote.price);
-            } else if (bondingCurve) {
-                // Get price quote for custom tokens using bonding curve
-                const quote = await bondingCurve.getPriceQuote(1, true);
-                setSpotPrice(quote.price);
-                onPriceUpdate?.(quote.price);
-            }
-        } catch (error) {
-            console.error('Error updating spot price:', error);
-        }
-    };
-
     // Price quote updates
     useEffect(() => {
         const updatePriceQuote = async () => {
@@ -172,11 +149,9 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     useEffect(() => {
         if (connected && publicKey) {
             updateBalances();
-            updateSpotPrice();
 
             const interval = setInterval(() => {
                 updateBalances();
-                updateSpotPrice();
             }, 10000);
 
             return () => clearInterval(interval);
@@ -255,6 +230,32 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
         console.log("isTokenTradable:", isTokenTradable);
         console.log("Token actual decimals:", token.decimals);
     }, [token.tokenType, token.tokenType === 'pool', isTokenTradable, token.decimals]);
+
+    useEffect(() => {
+        if (!token.mintAddress) return;
+
+        // Subscribe to real-time price updates
+        const unsubscribe = priceClient.subscribeToPrice(token.mintAddress, (price) => {
+            setSpotPrice(price);
+            onPriceUpdate?.(price);
+        });
+
+        // Initial price fetch from database
+        priceClient.getLatestPrice(token.mintAddress)
+            .then(price => {
+                if (price) {
+                    setSpotPrice(price);
+                    onPriceUpdate?.(price);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching initial price:', error);
+            });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [token.mintAddress]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">

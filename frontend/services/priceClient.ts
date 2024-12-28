@@ -119,10 +119,6 @@ class WebSocketClient {
 export const priceClient = {
     wsClient: WebSocketClient.getInstance(),
 
-    subscribeToPrice(mintAddress: string, callback: (price: number) => void): () => void {
-        return this.wsClient.subscribeToPrice(mintAddress, callback);
-    },
-
     // Only used for getting historical price data for charts
     async getPriceHistory(mintAddress: string): Promise<Array<{ time: number, value: number }>> {
         console.log('Fetching price history from API for:', mintAddress);
@@ -154,4 +150,21 @@ export const priceClient = {
             return { time, value };
         }).filter(Boolean);
     },
+
+    getLatestPrice: async (mintAddress: string): Promise<number | null> => {
+        try {
+            const response = await fetch(`/api/prices/${mintAddress}/latest`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            return data.price;
+        } catch (error) {
+            console.error('Error fetching latest price:', error);
+            return null;
+        }
+    },
+
+    subscribeToPrice: (mintAddress: string, callback: (price: number) => void): () => void => {
+        const wsClient = WebSocketClient.getInstance();
+        return wsClient.subscribeToPrice(mintAddress, callback);
+    }
 };
