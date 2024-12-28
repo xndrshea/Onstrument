@@ -13,6 +13,7 @@ export function TokenDetailsPage() {
     const [token, setToken] = useState<TokenRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isTokenInfoExpanded, setIsTokenInfoExpanded] = useState(false);
 
     useEffect(() => {
         if (!mintAddress) {
@@ -81,35 +82,49 @@ export function TokenDetailsPage() {
                     </div>
 
                     <div className="space-y-4">
-                        <div className="bg-[#232427] rounded-lg p-4">
-                            <h2 className="text-xl mb-4">Token Info</h2>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <p className="mb-2">Name: {token.name}</p>
-                                    <p className="mb-2">Symbol: {token.symbol}</p>
-                                    <p className="mb-2">Description: {token.description || 'No description available'}</p>
-                                    <p className="mb-2">Total Supply: {Number(token.totalSupply) / (10 ** token.decimals)} {token.symbol}</p>
-                                    <p className="mb-2">Decimals: {token.decimals}</p>
-                                    <p className="mb-2">Token Type: {token.tokenType}</p>
-                                    <p className="mb-2">Verified: {token.verified ? 'Yes' : 'No'}</p>
+                        <div className="bg-[#232427] rounded-lg p-4 hover:bg-[#2a2b2f] transition-colors duration-200">
+                            <button
+                                onClick={() => setIsTokenInfoExpanded(!isTokenInfoExpanded)}
+                                className="w-full flex justify-between items-center text-xl font-medium text-gray-200 hover:text-white transition-colors duration-200"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span>Token Info</span>
+                                    <span className="text-sm text-gray-400 font-normal">Click to {isTokenInfoExpanded ? 'collapse' : 'expand'}</span>
                                 </div>
-                                <div>
-                                    <p className="mb-2">Mint Address: {token.mintAddress}</p>
-                                    {token.curveAddress && (
-                                        <p className="mb-2">Curve Address: {token.curveAddress}</p>
-                                    )}
-                                    {token.curveConfig && (
-                                        <p className="mb-2">Virtual SOL: {token.curveConfig.virtualSol?.toString()}</p>
-                                    )}
-                                    {token.content?.metadata?.collection?.name && (
-                                        <p className="mb-2">Collection: {token.content.metadata.collection.name}</p>
-                                    )}
-                                    {token.metadataUri && (
-                                        <p className="mb-2">Metadata URI: {token.metadataUri}</p>
-                                    )}
-                                    <p className="mb-2">Created: {new Date(token.createdAt).toLocaleString()}</p>
+                                <span className="text-2xl text-gray-400 hover:text-white transition-colors duration-200">
+                                    {isTokenInfoExpanded ? '−' : '+'}
+                                </span>
+                            </button>
+
+                            {isTokenInfoExpanded && (
+                                <div className="grid grid-cols-2 gap-4 mt-4 text-gray-300">
+                                    <div className="space-y-3">
+                                        <p>Name: <span className="text-white">{token.name}</span></p>
+                                        <p>Symbol: <span className="text-white">{token.symbol}</span></p>
+                                        <p>Description: <span className="text-white">{token.description || 'No description available'}</span></p>
+                                        <p>Total Supply: <span className="text-white">{Number(token.totalSupply) / (10 ** token.decimals)} {token.symbol}</span></p>
+                                        <p>Decimals: <span className="text-white">{token.decimals}</span></p>
+                                        <p>Token Type: <span className="text-white">{token.tokenType}</span></p>
+                                        <p>Verified: <span className="text-white">{token.verified ? 'Yes' : 'No'}</span></p>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <p>Mint Address: <span className="text-white">{token.mintAddress}</span></p>
+                                        {token.curveAddress && (
+                                            <p>Curve Address: <span className="text-white">{token.curveAddress}</span></p>
+                                        )}
+                                        {token.curveConfig && (
+                                            <p>Virtual SOL: <span className="text-white">{token.curveConfig.virtualSol?.toString()}</span></p>
+                                        )}
+                                        {token.content?.metadata?.collection?.name && (
+                                            <p>Collection: <span className="text-white">{token.content.metadata.collection.name}</span></p>
+                                        )}
+                                        {token.metadataUri && (
+                                            <p>Metadata URI: <span className="text-white">{token.metadataUri}</span></p>
+                                        )}
+                                        <p>Created: <span className="text-white">{new Date(token.createdAt).toLocaleString()}</span></p>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         <div className="bg-[#232427] rounded-lg p-4">

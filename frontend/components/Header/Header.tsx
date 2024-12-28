@@ -4,8 +4,8 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { SearchBar } from '../Search/SearchBar';
 
 const navigation = [
-    { name: 'Home', href: '/' },
-    { name: 'Market', href: '/market' },
+    { name: 'Token Factory', href: '/' },
+    { name: 'Solana Market', href: '/market' },
     { name: 'Roadmap', href: '/roadmap' }
 ];
 
