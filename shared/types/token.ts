@@ -3,7 +3,8 @@ import BN from 'bn.js';
 
 
 export interface curveConfig {
-    virtualSol: BN;
+    migrationStatus: string;
+    isSubscribed: boolean;
 }
 
 export interface BondingCurveAccount {
@@ -61,7 +62,6 @@ export interface TokenFormData {
     description: string;
     image: File | null;
     supply: number;
-    virtualSol: number;
 }
 
 export interface DexToken {

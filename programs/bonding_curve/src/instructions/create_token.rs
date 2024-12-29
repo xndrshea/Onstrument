@@ -51,6 +51,7 @@ pub fn handler(ctx: Context<CreateToken>, params: CreateTokenParams) -> Result<(
     let curve = &mut ctx.accounts.curve;
     curve.mint = ctx.accounts.mint.key();
     curve.config = params.curve_config;
+    curve.config.developer = ctx.accounts.creator.key();
     curve.bump = ctx.bumps.curve;
 
     // Mint initial supply

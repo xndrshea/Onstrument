@@ -5,6 +5,7 @@ pub mod state;
 pub mod utils;
 
 use crate::instructions::*;
+use crate::state::MigrationStatus;
 
 declare_id!("6M1WSZeEAGtc8oTkdTNWruMsW58XPByzuf6ayoN16cEq");
 
@@ -20,15 +21,23 @@ pub mod bonding_curve {
         create_metadata::handler(ctx, params)
     }
 
-    pub fn buy(ctx: Context<Buy>, amount: u64, max_sol_cost: u64) -> Result<()> {
-        buy::handler(ctx, amount, max_sol_cost)
+    pub fn buy(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed: bool) -> Result<()> {
+        buy::handler(ctx, amount, max_sol_cost, is_subscribed)
     }
 
-    pub fn sell(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<()> {
-        sell::handler(ctx, amount, min_sol_return)
+    pub fn sell(ctx: Context<Sell>, amount: u64, min_sol_return: u64, is_subscribed: bool) -> Result<()> {
+        sell::handler(ctx, amount, min_sol_return, is_subscribed)
     }
 
     pub fn calculate_price(ctx: Context<GetPrice>, amount: u64, is_buy: bool) -> Result<u64> {
         price::calculate_price(ctx, amount, is_buy)
+    }
+
+    pub fn migrate_to_raydium(ctx: Context<MigrateLiquidity>) -> Result<()> {
+        migrate::handler(ctx)
+    }
+
+    pub fn get_migration_status(ctx: Context<GetPrice>) -> Result<MigrationStatus> {
+        Ok(ctx.accounts.curve.config.migration_status)
     }
 }

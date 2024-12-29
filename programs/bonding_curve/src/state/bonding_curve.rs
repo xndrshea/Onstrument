@@ -3,7 +3,8 @@ use anchor_spl::token::TokenAccount;
 use crate::utils::error::ErrorCode;
 use crate::state::curve_config::CurveConfig;
 
-const MIGRATION_THRESHOLD: u64 = 80_000_000_000; // 80 SOL in lamports
+pub const MIGRATION_THRESHOLD: u64 = 80_000_000_000; // 80 SOL in lamports
+pub const VIRTUAL_SOL_AMOUNT: u64 = 30_000_000_000; // 30 SOL in lamports
 const PRECISION_FACTOR: u64 = 1_000_000; // 6 decimal places
 
 #[account]
@@ -15,9 +16,9 @@ pub struct BondingCurve {
 
 impl BondingCurve {
     pub fn get_effective_amounts(&self, token_vault: &Account<TokenAccount>, curve_lamports: u64) -> Result<(u64, u64)> {
-        // We just need total effective SOL for price calculations
+        // Now using constant VIRTUAL_SOL_AMOUNT instead of config value
         let effective_sol = curve_lamports
-            .checked_add(self.config.virtual_sol)
+            .checked_add(VIRTUAL_SOL_AMOUNT)
             .ok_or(error!(ErrorCode::MathOverflow))?;
 
         Ok((effective_sol, token_vault.amount))

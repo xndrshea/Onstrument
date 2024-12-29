@@ -36,3 +36,7 @@ pub fn calculate_price(ctx: Context<GetPrice>, amount: u64, is_buy: bool) -> Res
         curve.calculate_sell_price(token_vault, amount, curve_lamports)
     }
 }
+
+pub fn get_migration_status(ctx: Context<GetPrice>) -> Result<MigrationStatus> {
+    Ok(ctx.accounts.curve.config.migration_status)
+}
