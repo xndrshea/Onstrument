@@ -4,6 +4,8 @@ import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 
+const VIRTUAL_SOL_AMOUNT = BigInt(30_000_000_000); // 30 SOL in lamports
+
 export class BondingCurveProcessor extends BaseProcessor {
     private connection: Connection;
 
@@ -35,7 +37,7 @@ export class BondingCurveProcessor extends BaseProcessor {
             if (totalTokens === 0n) return;
 
             // Calculate effective SOL (real + virtual)
-            const effectiveSol = BigInt(curveBalance) + virtualSol;
+            const effectiveSol = BigInt(curveBalance) + VIRTUAL_SOL_AMOUNT;
 
             // Calculate price using the bonding curve formula
             // Based on programs/bonding_curve/src/state/bonding_curve.rs

@@ -30,4 +30,6 @@ pub enum ErrorCode {
     InvalidOwner,
     #[msg("Invalid metadata program")]
     InvalidMetadataProgram,
+    #[msg("Migration required before operation")]
+    MigrationRequired,
 }

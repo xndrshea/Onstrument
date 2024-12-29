@@ -17,8 +17,9 @@ export class TokenService {
             decimals: token.decimals || TOKEN_DECIMALS,
             curveAddress: token.curve_address || token.curveAddress,
             curveConfig: token.curve_config ? {
-                virtualSol: new BN(token.curve_config.virtual_sol || 30)
-            } : { virtualSol: new BN(0) },
+                migrationStatus: token.curve_config.migration_status || "Active",
+                isSubscribed: token.curve_config.is_subscribed || false
+            } : { migrationStatus: "Active", isSubscribed: false },
             createdAt: token.created_at || token.createdAt || new Date().toISOString(),
             tokenType: token.token_type || token.tokenType || 'custom',
             verified: token.verified || false,

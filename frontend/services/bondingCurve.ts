@@ -93,7 +93,8 @@ export class BondingCurve {
             const createTokenIx = await this.program.methods
                 .createToken({
                     curveConfig: {
-                        virtualSol: params.curveConfig.virtualSol
+                        migrationStatus: "Active",
+                        isSubscribed: false
                     },
                     totalSupply: params.totalSupply
                 })
@@ -221,6 +222,10 @@ export class BondingCurve {
         amount: InstanceType<typeof BN> | number;
         maxSolCost: InstanceType<typeof BN> | number;
     }) {
+        if (await this.shouldUseRaydium()) {
+            throw new Error('This token has migrated to Raydium. Please use Jupiter/Raydium for trading.');
+        }
+
         if (!this.mintAddress) throw new Error('Mint address is required');
         if (!this.curveAddress) throw new Error('Curve address is required');
 
@@ -281,6 +286,10 @@ export class BondingCurve {
         amount: InstanceType<typeof BN> | number;
         minSolReturn: InstanceType<typeof BN> | number;
     }) {
+        if (await this.shouldUseRaydium()) {
+            throw new Error('This token has migrated to Raydium. Please use Jupiter/Raydium for trading.');
+        }
+
         if (!this.mintAddress) throw new Error('Mint address is required');
         if (!this.curveAddress) throw new Error('Curve address is required');
 
@@ -413,6 +422,28 @@ export class BondingCurve {
             [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
             this.program.programId
         )[0];
+    }
+
+    async shouldUseRaydium(): Promise<boolean> {
+        if (!this.mintAddress || !this.curveAddress) {
+            throw new Error('Mint address and curve address are required');
+        }
+
+        try {
+            const migrationStatus = await this.program.methods
+                .getMigrationStatus()
+                .accounts({
+                    mint: this.mintAddress,
+                    curve: this.curveAddress,
+                    tokenVault: this.getTokenVault(),
+                })
+                .view();
+
+            return migrationStatus === "Migrated";
+        } catch (error) {
+            console.error('Error checking migration status:', error);
+            return false;
+        }
     }
 
 }
