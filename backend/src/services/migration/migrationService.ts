@@ -97,10 +97,14 @@ export class MigrationService {
         });
 
         const feeConfigs = await sdk.api.getCpmmConfigs();
-        const feeConfig = feeConfigs[0];
 
-        if (!feeConfig) {
-            throw new Error('No active fee config found!');
+        if (sdk.cluster === 'devnet') {
+            feeConfigs.forEach((config) => {
+                config.id = getCpmmPdaAmmConfigId(
+                    DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM,
+                    config.index
+                ).publicKey.toBase58();
+            });
         }
 
         const mintAInfo = await sdk.token.getTokenInfo(params.tokenMint.toString());
@@ -121,7 +125,8 @@ export class MigrationService {
             associatedOnly: false,
             ownerInfo: {
                 useSOLBalance: true,
-            }
+            },
+            txVersion,
         });
 
         const { txId } = await execute({ sendAndConfirm: true });
