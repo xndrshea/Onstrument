@@ -1,3 +1,9 @@
+import { Connection } from "@solana/web3.js";
+
+import { PublicKey } from "@solana/web3.js";
+import { BondingCurve } from "./bondingCurve";
+import { WalletContextState } from "@solana/wallet-adapter-react";
+
 export class MigrationService {
     constructor(
         private connection: Connection,
