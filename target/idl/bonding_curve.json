@@ -26,6 +26,18 @@
           "signer": true
         },
         {
+          "name": "fee_collector",
+          "writable": true
+        },
+        {
+          "name": "migration_admin",
+          "writable": true
+        },
+        {
+          "name": "migration_admin_token_account",
+          "writable": true
+        },
+        {
           "name": "mint"
         },
         {
@@ -107,6 +119,10 @@
         {
           "name": "max_sol_cost",
           "type": "u64"
+        },
+        {
+          "name": "is_subscribed",
+          "type": "bool"
         }
       ]
     },
@@ -477,6 +493,10 @@
           }
         },
         {
+          "name": "fee_collector",
+          "writable": true
+        },
+        {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -493,6 +513,10 @@
         {
           "name": "min_sol_return",
           "type": "u64"
+        },
+        {
+          "name": "is_subscribed",
+          "type": "bool"
         }
       ]
     }
@@ -582,6 +606,16 @@
       "code": 6013,
       "name": "InvalidMetadataProgram",
       "msg": "Invalid metadata program"
+    },
+    {
+      "code": 6014,
+      "name": "MigrationRequired",
+      "msg": "Migration required before operation"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidMigrationAdmin",
+      "msg": "Invalid migration admin"
     }
   ],
   "types": [
@@ -655,8 +689,34 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "virtual_sol",
-            "type": "u64"
+            "name": "migration_status",
+            "type": {
+              "defined": {
+                "name": "MigrationStatus"
+              }
+            }
+          },
+          {
+            "name": "is_subscribed",
+            "type": "bool"
+          },
+          {
+            "name": "developer",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MigrationStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Migrated"
           }
         ]
       }

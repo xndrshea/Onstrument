@@ -4,7 +4,6 @@ use solana_program::rent::Rent;
 use std::str::FromStr;
 use crate::state::*;
 use crate::utils::error::ErrorCode;
-use solana_program::system_instruction;
 use crate::utils::constants::{TRADE_FEE_BPS, FEE_COLLECTOR};
 
 #[derive(Accounts)]

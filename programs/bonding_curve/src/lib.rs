@@ -5,7 +5,6 @@ pub mod state;
 pub mod utils;
 
 use crate::instructions::*;
-use crate::state::MigrationStatus;
 
 declare_id!("6M1WSZeEAGtc8oTkdTNWruMsW58XPByzuf6ayoN16cEq");
 
@@ -31,13 +30,5 @@ pub mod bonding_curve {
 
     pub fn calculate_price(ctx: Context<GetPrice>, amount: u64, is_buy: bool) -> Result<u64> {
         price::calculate_price(ctx, amount, is_buy)
-    }
-
-    pub fn migrate_to_raydium(ctx: Context<MigrateLiquidity>) -> Result<()> {
-        migrate::handler(ctx)
-    }
-
-    pub fn get_migration_status(ctx: Context<GetPrice>) -> Result<MigrationStatus> {
-        Ok(ctx.accounts.curve.config.migration_status)
     }
 }

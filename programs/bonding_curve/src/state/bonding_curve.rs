@@ -5,7 +5,6 @@ use crate::state::curve_config::CurveConfig;
 
 pub const MIGRATION_THRESHOLD: u64 = 80_000_000_000; // 80 SOL in lamports
 pub const VIRTUAL_SOL_AMOUNT: u64 = 30_000_000_000; // 30 SOL in lamports
-const PRECISION_FACTOR: u64 = 1_000_000; // 6 decimal places
 
 #[account]
 pub struct BondingCurve {
