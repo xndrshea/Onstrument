@@ -113,19 +113,10 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
             real_sol_amount: all_lamports,
             virtual_sol_amount: VIRTUAL_SOL_AMOUNT,
             token_amount: transfer_amount,
-            effective_price: price::calculate_price(
-                Context::new(
-                    &ctx.program_id,
-                    &GetPrice {
-                        mint: ctx.accounts.mint.clone(),
-                        curve: ctx.accounts.curve.clone(),
-                        token_vault: ctx.accounts.token_vault.clone(),
-                    },
-                    &[],
-                    &ctx.bumps
-                ),
+            effective_price: ctx.accounts.curve.calculate_buy_price(
+                &ctx.accounts.token_vault,
                 1, // Calculate price for 1 token
-                true // is_buy
+                all_lamports
             )?,
             developer: ctx.accounts.curve.config.developer,
             is_subscribed: ctx.accounts.curve.config.is_subscribed

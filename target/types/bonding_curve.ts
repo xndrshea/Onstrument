@@ -542,6 +542,21 @@ export type BondingCurve = {
       ]
     }
   ],
+  "events": [
+    {
+      "name": "migrationEvent",
+      "discriminator": [
+        255,
+        202,
+        76,
+        147,
+        91,
+        231,
+        73,
+        22
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -709,6 +724,42 @@ export type BondingCurve = {
           {
             "name": "developer",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "migrationEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "realSolAmount",
+            "type": "u64"
+          },
+          {
+            "name": "virtualSolAmount",
+            "type": "u64"
+          },
+          {
+            "name": "tokenAmount",
+            "type": "u64"
+          },
+          {
+            "name": "effectivePrice",
+            "type": "u64"
+          },
+          {
+            "name": "developer",
+            "type": "pubkey"
+          },
+          {
+            "name": "isSubscribed",
+            "type": "bool"
           }
         ]
       }
