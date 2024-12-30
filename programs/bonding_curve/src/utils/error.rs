@@ -32,4 +32,6 @@ pub enum ErrorCode {
     InvalidMetadataProgram,
     #[msg("Migration required before operation")]
     MigrationRequired,
+    #[msg("Invalid migration admin")]
+    InvalidMigrationAdmin,
 }

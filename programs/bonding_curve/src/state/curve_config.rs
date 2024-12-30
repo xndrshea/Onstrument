@@ -6,8 +6,7 @@ use solana_program::pubkey::Pubkey;
 pub enum MigrationStatus {
     #[default]
     Active,
-    Migrated,
-    Failed
+    Migrated
 }
 
 #[account]
