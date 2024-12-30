@@ -1,16 +1,38 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import {
+    Connection,
+    PublicKey,
+    Keypair,
+    Cluster
+} from '@solana/web3.js';
+import BN from 'bn.js';
+import { Raydium } from '@raydium-io/raydium-sdk-v2';
+import {
+    CREATE_CPMM_POOL_PROGRAM,
+    CREATE_CPMM_POOL_FEE_ACC,
+    DEVNET_PROGRAM_ID,
+    getCpmmPdaAmmConfigId,
+} from '@raydium-io/raydium-sdk-v2';
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
-import { RaydiumService } from '../raydium/raydiumService';
 import { config } from '../../config/env';
+
+const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+const txVersion = 0;
 
 export class MigrationService {
     private connection: Connection;
-    private raydiumService: RaydiumService;
+    private poolCreatorKeypair: Keypair;
 
     constructor() {
-        this.connection = new Connection(config.HELIUS_RPC_URL);
-        this.raydiumService = new RaydiumService();
+        this.connection = new Connection(config.HELIUS_RPC_URL, 'confirmed');
+
+        if (!process.env.POOL_CREATOR_PRIVATE_KEY) {
+            throw new Error('POOL_CREATOR_PRIVATE_KEY is required');
+        }
+
+        this.poolCreatorKeypair = Keypair.fromSecretKey(
+            Buffer.from(JSON.parse(process.env.POOL_CREATOR_PRIVATE_KEY))
+        );
     }
 
     async handleMigrationEvent(event: {
@@ -23,8 +45,7 @@ export class MigrationService {
         isSubscribed: boolean;
     }) {
         try {
-            // 1. Create Raydium liquidity pool
-            const poolAddress = await this.raydiumService.createLiquidityPool({
+            const poolAddress = await this.createRaydiumPool({
                 tokenMint: new PublicKey(event.mint),
                 initialLiquidity: {
                     tokenAmount: event.tokenAmount,
@@ -32,7 +53,13 @@ export class MigrationService {
                 }
             });
 
-            // 2. Update token record in database
+            const latestBlockhash = await this.connection.getLatestBlockhash();
+            await this.connection.confirmTransaction({
+                signature: poolAddress.toString(),
+                blockhash: latestBlockhash.blockhash,
+                lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+            });
+
             await pool.query(`
                 UPDATE token_platform.tokens
                 SET 
@@ -40,39 +67,14 @@ export class MigrationService {
                         curve_config::jsonb,
                         '{migrationStatus}',
                         '"migrated"'
-                    ),
-                    interface = 'raydium'
+                    )
                 WHERE mint_address = $1
             `, [event.mint]);
 
-            // 3. Create pool record
-            await pool.query(`
-                INSERT INTO token_platform.raydium_pools (
-                    pool_address,
-                    base_mint,
-                    quote_mint,
-                    base_decimals,
-                    quote_decimals,
-                    program_id,
-                    version,
-                    pool_type
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8
-                )
-            `, [
-                poolAddress.toString(),
-                event.mint,
-                config.WSOL_MINT, // Native SOL wrapped address
-                6, // Standard SPL token decimals
-                9, // SOL decimals
-                config.RAYDIUM_PROGRAMS.V4_AMM,
-                4,
-                'STANDARD_AMM'
-            ]);
-
             logger.info('Migration completed successfully', {
                 mint: event.mint,
-                poolAddress: poolAddress.toString()
+                poolAddress: poolAddress.toString(),
+                effectivePrice: event.effectivePrice
             });
 
         } catch (error) {
@@ -80,4 +82,58 @@ export class MigrationService {
             throw error;
         }
     }
-} 
+
+    private async createRaydiumPool(params: {
+        tokenMint: PublicKey,
+        initialLiquidity: {
+            tokenAmount: number,
+            solAmount: number
+        }
+    }): Promise<PublicKey> {
+        const sdk = await Raydium.load({
+            connection: this.connection,
+            owner: this.poolCreatorKeypair.publicKey,
+            cluster: 'mainnet'
+        });
+
+        const feeConfigs = await sdk.api.getCpmmConfigs();
+        const feeConfig = feeConfigs[0];
+
+        if (!feeConfig) {
+            throw new Error('No active fee config found!');
+        }
+
+        const mintAInfo = await sdk.token.getTokenInfo(params.tokenMint.toString());
+        const mintBInfo = await sdk.token.getTokenInfo(WSOL_MINT.toString());
+
+        const mintAAmount = new BN(params.initialLiquidity.tokenAmount * (10 ** mintAInfo.decimals));
+        const mintBAmount = new BN(params.initialLiquidity.solAmount * (10 ** mintBInfo.decimals));
+
+        const { execute, extInfo } = await sdk.cpmm.createPool({
+            programId: CREATE_CPMM_POOL_PROGRAM,
+            poolFeeAccount: CREATE_CPMM_POOL_FEE_ACC,
+            mintA: mintAInfo,
+            mintB: mintBInfo,
+            mintAAmount,
+            mintBAmount,
+            startTime: new BN(Math.floor(Date.now() / 1000)),
+            feeConfig: feeConfigs[0],
+            associatedOnly: false,
+            ownerInfo: {
+                useSOLBalance: true,
+            }
+        });
+
+        const { txId } = await execute({ sendAndConfirm: true });
+        console.log('Transaction sent:', txId);
+
+        const latestBlockhash = await this.connection.getLatestBlockhash();
+        await this.connection.confirmTransaction({
+            signature: txId,
+            blockhash: latestBlockhash.blockhash,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+        });
+
+        return new PublicKey(extInfo.address.poolId);
+    }
+}
