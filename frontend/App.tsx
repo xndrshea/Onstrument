@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
@@ -10,11 +10,28 @@ import { Footer } from './components/Footer/Footer'
 import { TokenDetailsPage } from './components/pages/TokenDetailsPage'
 import { MarketPage } from './components/pages/MarketPage'
 import { Header } from './components/Header/Header'
+import { UserService } from './services/userService'
+import { User } from './services/userService'
 
 function App() {
     const { connected, publicKey } = useWallet()
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    const [user, setUser] = useState<User | null>(null)
+
+    useEffect(() => {
+        if (connected && publicKey) {
+            UserService.getOrCreateUser(publicKey.toString())
+                .then(userData => {
+                    setUser(userData)
+                })
+                .catch(error => {
+                    console.error('Failed to get/create user:', error)
+                })
+        } else {
+            setUser(null)
+        }
+    }, [connected, publicKey])
 
     const handleCreateClick = () => {
         if (!connected) {

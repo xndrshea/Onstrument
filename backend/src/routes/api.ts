@@ -511,4 +511,44 @@ router.get('/pools/:mintAddress', async (req, res) => {
     }
 });
 
+router.post('/users', async (req, res) => {
+    try {
+        const { walletAddress } = req.body;
+
+        const result = await pool.query(`
+            INSERT INTO token_platform.users (wallet_address)
+            VALUES ($1)
+            ON CONFLICT (wallet_address) 
+            DO UPDATE SET last_seen = CURRENT_TIMESTAMP
+            RETURNING user_id, wallet_address, is_subscribed, subscription_expires_at, created_at, last_seen
+        `, [walletAddress]);
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error creating/updating user:', error);
+        res.status(500).json({ error: 'Failed to create/update user' });
+    }
+});
+
+router.get('/users/:walletAddress', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+
+        const result = await pool.query(`
+            SELECT user_id, wallet_address, is_subscribed, subscription_expires_at, created_at, last_seen
+            FROM token_platform.users
+            WHERE wallet_address = $1
+        `, [walletAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error fetching user:', error);
+        res.status(500).json({ error: 'Failed to fetch user' });
+    }
+});
+
 export default router; 
