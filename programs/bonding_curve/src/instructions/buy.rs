@@ -6,6 +6,9 @@ use crate::utils::error::ErrorCode;
 use crate::state::bonding_curve::MIGRATION_THRESHOLD;
 use crate::utils::constants::{TRADE_FEE_BPS, FEE_COLLECTOR, MIGRATION_ADMIN};
 use anchor_lang::ToAccountInfo;
+use crate::instructions::price;
+use crate::state::events::MigrationEvent;
+use crate::instructions::price::GetPrice;
 
 #[derive(Accounts)]
 pub struct Buy<'info> {
@@ -103,6 +106,30 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
 
         // Update migration status to halt trading
         ctx.accounts.curve.config.migration_status = MigrationStatus::Migrated;
+        
+        // Emit migration event before returning
+        emit!(MigrationEvent {
+            mint: ctx.accounts.mint.key(),
+            real_sol_amount: all_lamports,
+            virtual_sol_amount: VIRTUAL_SOL_AMOUNT,
+            token_amount: transfer_amount,
+            effective_price: price::calculate_price(
+                Context::new(
+                    &ctx.program_id,
+                    &GetPrice {
+                        mint: ctx.accounts.mint.clone(),
+                        curve: ctx.accounts.curve.clone(),
+                        token_vault: ctx.accounts.token_vault.clone(),
+                    },
+                    &[],
+                    &ctx.bumps
+                ),
+                1, // Calculate price for 1 token
+                true // is_buy
+            )?,
+            developer: ctx.accounts.curve.config.developer,
+            is_subscribed: ctx.accounts.curve.config.is_subscribed
+        });
         
         return Ok(());
     }
