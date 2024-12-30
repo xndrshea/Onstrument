@@ -6,7 +6,8 @@ import { Program, AnchorProvider } from '@coral-xyz/anchor';
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { BN } from 'bn.js';
-import { createTokenParams } from '../../shared/types/token';
+import { createTokenParams, TokenRecord } from '../../shared/types/token';
+import { dexService } from './dexService';
 
 // Add this constant at the top of the file
 export const TOKEN_DECIMALS = 6;
@@ -14,6 +15,7 @@ const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
 
 // Required Program IDs
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
+
 export class BondingCurve {
     public readonly program: Program<BondingCurveIDL>;
     private connection: Connection;
@@ -93,8 +95,9 @@ export class BondingCurve {
             const createTokenIx = await this.program.methods
                 .createToken({
                     curveConfig: {
-                        migrationStatus: "Active",
-                        isSubscribed: false
+                        migrationStatus: { active: {} },
+                        isSubscribed: false,
+                        developer: this.wallet!.publicKey!
                     },
                     totalSupply: params.totalSupply
                 })
@@ -222,11 +225,21 @@ export class BondingCurve {
         amount: InstanceType<typeof BN> | number;
         maxSolCost: InstanceType<typeof BN> | number;
     }) {
+        if (!this.mintAddress) throw new Error('Mint address is required');
+
+        // Check if migrated to Raydium
         if (await this.shouldUseRaydium()) {
-            throw new Error('This token has migrated to Raydium. Please use Jupiter/Raydium for trading.');
+            // Use dexService to execute trade
+            return await dexService.executeTrade({
+                mintAddress: this.mintAddress.toString(),
+                amount: BN.isBN(params.amount) ? params.amount : new BN(params.amount),
+                isSelling: false,
+                slippageTolerance: 0.01, // 1% default slippage
+                wallet: this.wallet!,
+                connection: this.connection
+            });
         }
 
-        if (!this.mintAddress) throw new Error('Mint address is required');
         if (!this.curveAddress) throw new Error('Curve address is required');
 
         // Convert amount to raw token units (considering TOKEN_DECIMALS)
@@ -260,8 +273,9 @@ export class BondingCurve {
 
             const tx = await this.program.methods
                 .buy(
-                    rawAmount,      // amount in raw token units
-                    rawMaxSolCost   // max cost in lamports
+                    rawAmount,          // amount in raw token units
+                    rawMaxSolCost,      // max cost in lamports
+                    false               // isSubscribed parameter
                 )
                 .accounts({
                     buyer: this.wallet!.publicKey!,
@@ -286,11 +300,21 @@ export class BondingCurve {
         amount: InstanceType<typeof BN> | number;
         minSolReturn: InstanceType<typeof BN> | number;
     }) {
+        if (!this.mintAddress) throw new Error('Mint address is required');
+
+        // Check if migrated to Raydium
         if (await this.shouldUseRaydium()) {
-            throw new Error('This token has migrated to Raydium. Please use Jupiter/Raydium for trading.');
+            // Use dexService to execute trade
+            return await dexService.executeTrade({
+                mintAddress: this.mintAddress.toString(),
+                amount: BN.isBN(params.amount) ? params.amount : new BN(params.amount),
+                isSelling: true,
+                slippageTolerance: 0.01, // 1% default slippage
+                wallet: this.wallet!,
+                connection: this.connection
+            });
         }
 
-        if (!this.mintAddress) throw new Error('Mint address is required');
         if (!this.curveAddress) throw new Error('Curve address is required');
 
         // Convert to BN if number provided, with additional safety checks
@@ -323,7 +347,7 @@ export class BondingCurve {
 
         try {
             const tx = await this.program.methods
-                .sell(scaledAmount, scaledMinReturn)
+                .sell(scaledAmount, scaledMinReturn, false)
                 .accounts({
                     seller: this.wallet!.publicKey!,
                     mint: this.mintAddress,
@@ -349,14 +373,25 @@ export class BondingCurve {
         }
     }
 
-    async getPriceQuote(amount: number, isBuy: boolean): Promise<{
+    async getPriceQuote(amount: number, isSelling: boolean): Promise<{
         price: number;
         totalCost: number;
-        isBuy: boolean;
+        isSelling: boolean;
     }> {
-        if (!this.mintAddress || !this.curveAddress) {
-            throw new Error('Mint address and curve address are required');
+        if (!this.mintAddress) throw new Error('Mint address is required');
+
+        // Check if migrated to Raydium
+        if (await this.shouldUseRaydium()) {
+            return await dexService.calculateTradePrice(
+                this.mintAddress.toString(),
+                amount,
+                isSelling,
+                this.connection
+            );
         }
+
+        // Original bonding curve logic
+        if (!this.curveAddress) throw new Error('Curve address is required');
 
         try {
             const scaledAmount = new BN(amount * TOKEN_DECIMAL_MULTIPLIER);
@@ -375,7 +410,7 @@ export class BondingCurve {
 
             try {
                 const price = await this.program.methods
-                    .calculatePrice(scaledAmount, isBuy)
+                    .calculatePrice(scaledAmount, isSelling)
                     .accounts({
                         mint: this.mintAddress,
                         curve: this.curveAddress,
@@ -386,13 +421,13 @@ export class BondingCurve {
                 return {
                     price: price.toNumber() / LAMPORTS_PER_SOL,
                     totalCost: price.toNumber(),
-                    isBuy
+                    isSelling
                 };
             } catch (viewError: any) {
                 console.error('View method error:', viewError);
                 // If the view method fails, try simulating the transaction
                 const priceSimulation = await this.program.methods
-                    .calculatePrice(scaledAmount, isBuy)
+                    .calculatePrice(scaledAmount, isSelling)
                     .accounts({
                         mint: this.mintAddress,
                         curve: this.curveAddress,
@@ -425,21 +460,13 @@ export class BondingCurve {
     }
 
     async shouldUseRaydium(): Promise<boolean> {
-        if (!this.mintAddress || !this.curveAddress) {
-            throw new Error('Mint address and curve address are required');
-        }
+        if (!this.mintAddress) throw new Error('Mint address is required');
 
         try {
-            const migrationStatus = await this.program.methods
-                .getMigrationStatus()
-                .accounts({
-                    mint: this.mintAddress,
-                    curve: this.curveAddress,
-                    tokenVault: this.getTokenVault(),
-                })
-                .view();
-
-            return migrationStatus === "Migrated";
+            // Just check database
+            const response = await fetch(`/api/tokens/${this.mintAddress}`);
+            const token = await response.json() as TokenRecord;
+            return token.curveConfig?.migrationStatus === "migrated";
         } catch (error) {
             console.error('Error checking migration status:', error);
             return false;
