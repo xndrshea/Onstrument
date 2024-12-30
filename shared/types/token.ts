@@ -3,8 +3,9 @@ import BN from 'bn.js';
 
 
 export interface curveConfig {
-    migrationStatus: string;
+    migrationStatus: "active" | "migrated";
     isSubscribed: boolean;
+    developer: string;
 }
 
 export interface BondingCurveAccount {
