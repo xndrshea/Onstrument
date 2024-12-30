@@ -24,7 +24,7 @@ export class MigrationService {
     private poolCreatorKeypair: Keypair;
 
     constructor() {
-        this.connection = new Connection(config.HELIUS_RPC_URL, 'confirmed');
+        this.connection = new Connection("https://api.devnet.solana.com", 'confirmed');
 
         if (!process.env.POOL_CREATOR_PRIVATE_KEY) {
             throw new Error('POOL_CREATOR_PRIVATE_KEY is required');
@@ -93,7 +93,7 @@ export class MigrationService {
         const sdk = await Raydium.load({
             connection: this.connection,
             owner: this.poolCreatorKeypair.publicKey,
-            cluster: 'mainnet'
+            cluster: 'devnet'
         });
 
         const feeConfigs = await sdk.api.getCpmmConfigs();
@@ -114,8 +114,8 @@ export class MigrationService {
         const mintBAmount = new BN(params.initialLiquidity.solAmount * (10 ** mintBInfo.decimals));
 
         const { execute, extInfo } = await sdk.cpmm.createPool({
-            programId: CREATE_CPMM_POOL_PROGRAM,
-            poolFeeAccount: CREATE_CPMM_POOL_FEE_ACC,
+            programId: DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM,
+            poolFeeAccount: DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_FEE_ACC,
             mintA: mintAInfo,
             mintB: mintBInfo,
             mintAAmount,
