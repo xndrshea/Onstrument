@@ -52,33 +52,14 @@ function App() {
                 flexDirection: 'column'
             }}>
                 <Header />
-                <div className="flex justify-end items-center gap-2 p-4">
-                    {connected && (
-                        <button
-                            onClick={() => setIsProfileOpen(true)}
-                            className="bg-[#232427] text-white px-4 py-2 rounded hover:bg-[#2a2b2f]"
-                        >
-                            Profile
-                        </button>
-                    )}
-                    <WalletMultiButton />
-                </div>
 
                 <main style={{ padding: '20px', color: 'white', flex: 1 }}>
                     <Routes>
                         <Route path="/" element={
-                            <>
-                                {connected && (
-                                    <div className="wallet-info">
-                                        <p>✅ Wallet Connected</p>
-                                        <p>Address: {publicKey?.toString()}</p>
-                                    </div>
-                                )}
-                                <TokenList
-                                    onCreateClick={handleCreateClick}
-                                    key={refreshTrigger}
-                                />
-                            </>
+                            <TokenList
+                                onCreateClick={handleCreateClick}
+                                key={refreshTrigger}
+                            />
                         } />
                         <Route path="/market" element={<MarketPage />} />
                         <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
