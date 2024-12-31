@@ -13,6 +13,7 @@ export class TokenTransactionService {
     // private storageService: StorageService;
     private tokenService: TokenService;
     private connection: Connection;
+    private wallet: WalletContextState;
 
     constructor(
         connection: Connection,
@@ -27,6 +28,7 @@ export class TokenTransactionService {
         this.bondingCurve = new BondingCurve(connection, wallet);
         this.tokenService = new TokenService();
         // this.storageService = new StorageService();
+        this.wallet = wallet;
     }
 
     async createToken(params: createTokenParams, description: string): Promise<TokenRecord> {
@@ -49,19 +51,25 @@ export class TokenTransactionService {
                 throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
             }
 
-            // Create token record with description
+            // Create new bonding curve instance with the new addresses
+            const newBondingCurve = new BondingCurve(this.connection, this.wallet, mint, curve);
+            const initialPrice = await newBondingCurve.getInitialPrice();
+
+            // Create token record with description and initial price
             const tokenRecord: TokenRecord = {
                 mintAddress: mint.toString(),
                 curveAddress: curve.toString(),
+                verified: false,
                 name: params.name,
                 symbol: params.symbol,
                 description: description,
                 metadataUri: params.metadataUri || '',
-                totalSupply: params.totalSupply,
+                totalSupply: params.totalSupply.toNumber(),
                 decimals: TOKEN_DECIMALS,
                 curveConfig: params.curveConfig,
                 createdAt: new Date().toISOString(),
-                tokenType: 'custom'
+                tokenType: 'custom',
+                initialPrice: initialPrice
             };
 
             // Save to database through tokenService

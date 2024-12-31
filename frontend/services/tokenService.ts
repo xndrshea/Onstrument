@@ -2,11 +2,21 @@ import { TokenRecord } from '../../shared/types/token';
 import { logger } from '../utils/logger';
 import BN from 'bn.js';
 import { TOKEN_DECIMALS } from './bondingCurve';
+import { WalletContextState } from '@solana/wallet-adapter-react';
+import { UserService } from './userService';
 
 const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export class TokenService {
-    private transformToken(token: any): TokenRecord {
+    constructor(private wallet?: WalletContextState) { }
+
+    async transformToken(token: any): Promise<TokenRecord> {
+        let isSubscribed = false;
+        if (this.wallet?.publicKey) {
+            const user = await UserService.getUser(this.wallet.publicKey.toString());
+            isSubscribed = user?.isSubscribed || false;
+        }
+
         const transformedToken = {
             mintAddress: token.mint_address || token.mintAddress,
             name: (token.name || '').trim(),
@@ -17,8 +27,10 @@ export class TokenService {
             decimals: token.decimals || TOKEN_DECIMALS,
             curveAddress: token.curve_address || token.curveAddress,
             curveConfig: token.curve_config ? {
-                virtualSol: new BN(token.curve_config.virtual_sol || 30)
-            } : { virtualSol: new BN(0) },
+                migrationStatus: token.curve_config.migration_status || "Active",
+                isSubscribed: isSubscribed,
+                developer: token.curve_config.developer || ''
+            } : { migrationStatus: "Active", isSubscribed: isSubscribed, developer: '' },
             createdAt: token.created_at || token.createdAt || new Date().toISOString(),
             tokenType: token.token_type || token.tokenType || 'custom',
             verified: token.verified || false,
@@ -45,7 +57,8 @@ export class TokenService {
                 metadataUri: token.metadataUri || '',
                 totalSupply: token.totalSupply?.toString() || '0',
                 decimals: token.decimals || 6,
-                curveConfig: token.curveConfig
+                curveConfig: token.curveConfig,
+                initialPrice: token.initialPrice
             };
 
             console.log('Sending token creation request:', requestData);

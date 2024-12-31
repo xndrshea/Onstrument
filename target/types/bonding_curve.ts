@@ -32,6 +32,18 @@ export type BondingCurve = {
           "signer": true
         },
         {
+          "name": "feeCollector",
+          "writable": true
+        },
+        {
+          "name": "migrationAdmin",
+          "writable": true
+        },
+        {
+          "name": "migrationAdminTokenAccount",
+          "writable": true
+        },
+        {
           "name": "mint"
         },
         {
@@ -113,6 +125,10 @@ export type BondingCurve = {
         {
           "name": "maxSolCost",
           "type": "u64"
+        },
+        {
+          "name": "isSubscribed",
+          "type": "bool"
         }
       ]
     },
@@ -483,6 +499,10 @@ export type BondingCurve = {
           }
         },
         {
+          "name": "feeCollector",
+          "writable": true
+        },
+        {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -499,6 +519,10 @@ export type BondingCurve = {
         {
           "name": "minSolReturn",
           "type": "u64"
+        },
+        {
+          "name": "isSubscribed",
+          "type": "bool"
         }
       ]
     }
@@ -515,6 +539,21 @@ export type BondingCurve = {
         216,
         172,
         96
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "migrationEvent",
+      "discriminator": [
+        255,
+        202,
+        76,
+        147,
+        91,
+        231,
+        73,
+        22
       ]
     }
   ],
@@ -588,6 +627,16 @@ export type BondingCurve = {
       "code": 6013,
       "name": "invalidMetadataProgram",
       "msg": "Invalid metadata program"
+    },
+    {
+      "code": 6014,
+      "name": "migrationRequired",
+      "msg": "Migration required before operation"
+    },
+    {
+      "code": 6015,
+      "name": "invalidMigrationAdmin",
+      "msg": "Invalid migration admin"
     }
   ],
   "types": [
@@ -661,8 +710,70 @@ export type BondingCurve = {
         "kind": "struct",
         "fields": [
           {
-            "name": "virtualSol",
+            "name": "migrationStatus",
+            "type": {
+              "defined": {
+                "name": "migrationStatus"
+              }
+            }
+          },
+          {
+            "name": "isSubscribed",
+            "type": "bool"
+          },
+          {
+            "name": "developer",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "migrationEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "realSolAmount",
             "type": "u64"
+          },
+          {
+            "name": "virtualSolAmount",
+            "type": "u64"
+          },
+          {
+            "name": "tokenAmount",
+            "type": "u64"
+          },
+          {
+            "name": "effectivePrice",
+            "type": "u64"
+          },
+          {
+            "name": "developer",
+            "type": "pubkey"
+          },
+          {
+            "name": "isSubscribed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "migrationStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "active"
+          },
+          {
+            "name": "migrated"
           }
         ]
       }

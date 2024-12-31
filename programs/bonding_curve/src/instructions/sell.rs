@@ -1,10 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount, Transfer, Mint};
 use solana_program::rent::Rent;
+use std::str::FromStr;
 use crate::state::*;
 use crate::utils::error::ErrorCode;
-use solana_program::program::invoke_signed;
-use solana_program::system_instruction;
+use crate::utils::constants::{TRADE_FEE_BPS, FEE_COLLECTOR};
 
 #[derive(Accounts)]
 pub struct Sell<'info> {
@@ -36,11 +36,18 @@ pub struct Sell<'info> {
     )]
     pub token_vault: Account<'info, TokenAccount>,
 
+    /// CHECK: Static fee collector address
+    #[account(
+        mut,
+        constraint = fee_collector.key() == Pubkey::from_str(FEE_COLLECTOR).unwrap()
+    )]
+    pub fee_collector: AccountInfo<'info>,
+
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<()> {
+pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64, is_subscribed: bool) -> Result<()> {
     // Get the current lamports before mutable borrow
     let curve_lamports = ctx.accounts.curve.to_account_info().lamports();
     
@@ -59,8 +66,15 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<(
         available_liquidity
     )?;
     
-    require!(price >= min_sol_return, ErrorCode::PriceBelowMinReturn);
-    require!(price <= available_liquidity, ErrorCode::InsufficientLiquidity);
+    let (final_price, fee_amount) = if !is_subscribed {
+        let fee = (price * TRADE_FEE_BPS) / 10000;
+        (price - fee, fee)
+    } else {
+        (price, 0)
+    };
+
+    require!(final_price >= min_sol_return, ErrorCode::PriceBelowMinReturn);
+    require!(final_price <= available_liquidity, ErrorCode::InsufficientLiquidity);
 
     // Transfer tokens from seller to vault
     let transfer_ctx = CpiContext::new(
@@ -73,9 +87,15 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64) -> Result<(
     );
     anchor_spl::token::transfer(transfer_ctx, amount)?;
 
-    // Transfer SOL from curve to seller using direct lamport transfer
-    **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? -= price;
-    **ctx.accounts.seller.to_account_info().try_borrow_mut_lamports()? += price;
+    // Transfer SOL to seller
+    **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? -= final_price;
+    **ctx.accounts.seller.to_account_info().try_borrow_mut_lamports()? += final_price;
+
+    // Transfer fee if applicable
+    if fee_amount > 0 {
+        **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? -= fee_amount;
+        **ctx.accounts.fee_collector.to_account_info().try_borrow_mut_lamports()? += fee_amount;
+    }
 
     Ok(())
 }

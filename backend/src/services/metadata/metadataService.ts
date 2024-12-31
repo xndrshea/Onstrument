@@ -1,12 +1,9 @@
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { publicKey } from '@metaplex-foundation/umi';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
-import { findMetadataPda, fetchMetadata } from '@metaplex-foundation/mpl-token-metadata';
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import { config } from '../../config/env';
-import { Connection } from '@solana/web3.js';
-import { PublicKey } from '@solana/web3.js';
+
 
 export class MetadataService {
     private static instance: MetadataService;

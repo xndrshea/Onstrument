@@ -79,7 +79,7 @@ export class HeliusManager extends EventEmitter {
 
     private subscribeToPrograms(): void {
         const programs = [
-            ...Object.values(config.RAYDIUM_PROGRAMS),
+            //...Object.values(config.RAYDIUM_PROGRAMS),
             config.BONDING_CURVE_PROGRAM_ID
         ];
 

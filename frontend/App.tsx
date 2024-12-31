@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
@@ -10,11 +10,30 @@ import { Footer } from './components/Footer/Footer'
 import { TokenDetailsPage } from './components/pages/TokenDetailsPage'
 import { MarketPage } from './components/pages/MarketPage'
 import { Header } from './components/Header/Header'
+import { UserService } from './services/userService'
+import { User } from './services/userService'
+import { ProfileModal } from './components/Profile/ProfileModal'
 
 function App() {
     const { connected, publicKey } = useWallet()
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    const [user, setUser] = useState<User | null>(null)
+
+    useEffect(() => {
+        if (connected && publicKey) {
+            UserService.getOrCreateUser(publicKey.toString())
+                .then(userData => {
+                    setUser(userData)
+                })
+                .catch(error => {
+                    console.error('Failed to get/create user:', error)
+                })
+        } else {
+            setUser(null)
+        }
+    }, [connected, publicKey])
 
     const handleCreateClick = () => {
         if (!connected) {
@@ -33,7 +52,15 @@ function App() {
                 flexDirection: 'column'
             }}>
                 <Header />
-                <div className="flex justify-end p-4">
+                <div className="flex justify-end items-center gap-2 p-4">
+                    {connected && (
+                        <button
+                            onClick={() => setIsProfileOpen(true)}
+                            className="bg-[#232427] text-white px-4 py-2 rounded hover:bg-[#2a2b2f]"
+                        >
+                            Profile
+                        </button>
+                    )}
                     <WalletMultiButton />
                 </div>
 
@@ -80,6 +107,11 @@ function App() {
                         />
                     </Modal>
                 )}
+
+                <ProfileModal
+                    isOpen={isProfileOpen}
+                    onClose={() => setIsProfileOpen(false)}
+                />
             </div>
         </Router>
     )
