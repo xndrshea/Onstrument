@@ -1,50 +1,52 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { SearchBar } from '../Search/SearchBar';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { ProfileModal } from '../Profile/ProfileModal';
 
-const navigation = [
-    { name: 'Token Factory', href: '/' },
-    { name: 'Solana Market', href: '/market' },
-    { name: 'Roadmap', href: '/roadmap' }
-];
 
 export function Header() {
-    const location = useLocation();
+    const { connected } = useWallet();
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
 
     return (
-        <header className="bg-dark-lighter border-b border-gray-800">
+        <header className="bg-[#232427] border-b border-gray-800">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
                     <div className="flex items-center space-x-8">
-                        <Link to="/" className="flex items-center">
-                            <span className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-blue-500 text-transparent bg-clip-text">
-                                Launchpad
-                            </span>
+                        <Link to="/" className="text-purple-500 font-bold text-xl">
+                            Launchpad
                         </Link>
-                        <nav className="hidden md:flex md:space-x-4">
-                            {navigation.map((item) => (
-                                <Link
-                                    key={item.name}
-                                    to={item.href}
-                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150 ease-in-out
-                                        ${location.pathname === item.href
-                                            ? 'bg-primary text-white'
-                                            : 'text-gray-300 hover:bg-primary/10 hover:text-white'
-                                        }`}
-                                >
-                                    {item.name}
-                                </Link>
-                            ))}
+                        <nav className="hidden md:flex space-x-4">
+                            <Link to="/market" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
+                                Solana Market
+                            </Link>
+                            <Link to="/roadmap" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
+                                Roadmap
+                            </Link>
                         </nav>
                     </div>
 
                     <div className="flex items-center space-x-4">
                         <SearchBar />
                         <WalletMultiButton className="!bg-primary hover:!bg-primary-hover transition-colors duration-200" />
+                        {connected && (
+                            <button
+                                onClick={() => setIsProfileOpen(true)}
+                                className="text-gray-300 hover:text-white px-3 py-2 rounded-md"
+                            >
+                                Profile
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
+
+            <ProfileModal
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
+            />
         </header>
     );
 } 

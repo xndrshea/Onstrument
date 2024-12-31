@@ -16,6 +16,37 @@ interface TradingInterfaceProps {
     onPriceUpdate?: (price: number) => void
 }
 
+// Helper function to format small numbers with subscript notation
+const formatSmallNumber = (num: number): JSX.Element | string => {
+    if (num === 0) return '0';
+
+    // For very small numbers
+    if (num < 0.01) {
+        const numStr = num.toFixed(8); // Keep full precision
+        // Find position of first non-zero digit after decimal
+        let zeroCount = 0;
+        for (let i = 2; i < numStr.length; i++) { // Start at 2 to skip "0."
+            if (numStr[i] === '0') {
+                zeroCount++;
+            } else {
+                break;
+            }
+        }
+
+        // Get all digits after zeros to maintain full precision
+        const remainingDigits = numStr.slice(2 + zeroCount);
+
+        return (
+            <span>
+                0.0<sub>{zeroCount}</sub>{remainingDigits} SOL
+            </span>
+        );
+    }
+
+    // For regular numbers, show full precision
+    return `${num.toFixed(8)} SOL`;
+};
+
 export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
@@ -289,7 +320,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                             <span className="text-sm text-gray-700">Current Token Price</span>
                             <span className="font-medium text-gray-900">
                                 {spotPrice !== null
-                                    ? `${spotPrice.toFixed(6)} SOL`
+                                    ? formatSmallNumber(spotPrice)
                                     : 'Loading...'}
                             </span>
                         </div>
