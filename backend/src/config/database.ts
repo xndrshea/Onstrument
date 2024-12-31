@@ -186,8 +186,10 @@ export async function initializeDatabase() {
 
         // Add users table without touching anything else
         await client.query(`
+            CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
             CREATE TABLE IF NOT EXISTS token_platform.users (
-                user_id SERIAL PRIMARY KEY,
+                user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 wallet_address TEXT UNIQUE NOT NULL,
                 is_subscribed BOOLEAN DEFAULT false,
                 subscription_expires_at TIMESTAMP WITH TIME ZONE,

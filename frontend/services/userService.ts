@@ -4,7 +4,7 @@ export interface User {
     userId: string;
     walletAddress: string;
     isSubscribed: boolean;
-    subscriptionExpiresAt?: string;
+    subscriptionExpiresAt: string | null;
     createdAt: string;
     lastSeen: string;
 }

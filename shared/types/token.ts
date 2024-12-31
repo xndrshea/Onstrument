@@ -61,8 +61,10 @@ export interface TokenFormData {
     name: string;
     symbol: string;
     description: string;
-    image: File | null;
+    image?: string | null;
     supply: number;
+    totalSupply: BN;
+    curveConfig: curveConfig;
 }
 
 export interface DexToken {

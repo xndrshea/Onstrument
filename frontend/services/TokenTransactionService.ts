@@ -53,11 +53,12 @@ export class TokenTransactionService {
             const tokenRecord: TokenRecord = {
                 mintAddress: mint.toString(),
                 curveAddress: curve.toString(),
+                verified: false,
                 name: params.name,
                 symbol: params.symbol,
                 description: description,
                 metadataUri: params.metadataUri || '',
-                totalSupply: params.totalSupply,
+                totalSupply: params.totalSupply.toNumber(),
                 decimals: TOKEN_DECIMALS,
                 curveConfig: params.curveConfig,
                 createdAt: new Date().toISOString(),
