@@ -57,7 +57,9 @@ router.post('/tokens', async (req, res) => {
             description,
             metadataUri,
             curveConfig,
-            decimals
+            decimals,
+            totalSupply,
+            initialPrice
         } = req.body;
 
         const result = await pool.query(`
@@ -70,8 +72,9 @@ router.post('/tokens', async (req, res) => {
                 metadata_url,
                 curve_config,
                 decimals,
-                token_type
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom')
+                token_type,
+                supply
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom', $9)
             RETURNING *
         `, [
             mintAddress,
@@ -81,10 +84,32 @@ router.post('/tokens', async (req, res) => {
             description,
             metadataUri,
             curveConfig,
-            decimals
+            decimals,
+            totalSupply
         ]);
 
-        res.status(201).json(result.rows[0]);
+        // Record the initial price
+        await PriceHistoryModel.recordPrice({
+            mintAddress,
+            price: initialPrice,
+            volume: 0,
+            timestamp: new Date()
+        });
+
+        const token = result.rows[0];
+        res.status(201).json({
+            mintAddress: token.mint_address,
+            curveAddress: token.curve_address,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            description: token.description,
+            metadataUri: token.metadata_url,
+            curveConfig: token.curve_config,
+            supply: token.supply,
+            tokenType: token.token_type,
+            createdAt: token.created_at
+        });
     } catch (error) {
         logger.error('Error creating token:', error);
         res.status(500).json({ error: 'Failed to create token' });
@@ -111,7 +136,9 @@ router.get('/tokens', async (req, res) => {
             metadataUri: token.metadata_url,
             curveConfig: token.curve_config,
             createdAt: token.created_at,
-            tokenType: token.token_type
+            tokenType: token.token_type,
+            supply: token.supply,
+            totalSupply: token.supply
         }));
 
         res.json({ tokens });

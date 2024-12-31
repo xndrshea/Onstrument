@@ -57,7 +57,8 @@ export class TokenService {
                 metadataUri: token.metadataUri || '',
                 totalSupply: token.totalSupply?.toString() || '0',
                 decimals: token.decimals || 6,
-                curveConfig: token.curveConfig
+                curveConfig: token.curveConfig,
+                initialPrice: token.initialPrice
             };
 
             console.log('Sending token creation request:', requestData);

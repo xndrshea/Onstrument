@@ -473,4 +473,22 @@ export class BondingCurve {
         }
     }
 
+    async getInitialPrice(): Promise<number> {
+        if (!this.mintAddress || !this.curveAddress) throw new Error('Addresses required');
+
+        const tokenVault = this.getTokenVault();
+        const scaledAmount = new BN(1 * TOKEN_DECIMAL_MULTIPLIER);
+
+        const price = await this.program.methods
+            .calculatePrice(scaledAmount, false)
+            .accounts({
+                mint: this.mintAddress,
+                curve: this.curveAddress,
+                tokenVault: tokenVault,
+            })
+            .view();
+
+        return price.toNumber() / LAMPORTS_PER_SOL;
+    }
+
 }

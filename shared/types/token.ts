@@ -55,6 +55,7 @@ export interface TokenRecord {
     createdAt: string;
     metadataStatus?: string;
     interface?: string;
+    initialPrice?: number;
 }
 
 export interface TokenFormData {
