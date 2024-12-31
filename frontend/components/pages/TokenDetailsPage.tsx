@@ -112,9 +112,6 @@ export function TokenDetailsPage() {
                                         {token.curveAddress && (
                                             <p>Curve Address: <span className="text-white">{token.curveAddress}</span></p>
                                         )}
-                                        {token.curveConfig && (
-                                            <p>Virtual SOL: <span className="text-white">{token.curveConfig.virtualSol?.toString()}</span></p>
-                                        )}
                                         {token.content?.metadata?.collection?.name && (
                                             <p>Collection: <span className="text-white">{token.content.metadata.collection.name}</span></p>
                                         )}

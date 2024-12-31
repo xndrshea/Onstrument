@@ -2,11 +2,11 @@ import React, { useState } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { createTokenParams } from '../../../shared/types/token'
 import { BN } from 'bn.js'
-import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
-import { TokenFormData } from '../../../shared/types/token';
+import { TokenFormData } from '../../../shared/types/token'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
+
 interface TokenCreationFormProps {
     onSuccess?: () => void
     onTokenCreated?: () => void
@@ -25,11 +25,20 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         symbol: '',
         description: '',
         image: null,
-        supply: 1000000,
-        virtualSol: 30,
+        supply: 0,
+        totalSupply: new BN(0),
+        curveConfig: {
+            migrationStatus: 'active',
+            isSubscribed: false,
+            developer: wallet.publicKey?.toString() || ''
+        }
     })
 
     const validateForm = (): boolean => {
+        if (!wallet.publicKey) {
+            setError('Please connect your wallet')
+            return false
+        }
         if (!formData.name.trim()) {
             setError('Token name is required')
             return false
@@ -42,80 +51,51 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             setError('Token symbol must be 10 characters or less')
             return false
         }
-        if (formData.supply <= 0) {
-            setError('Supply must be greater than 0')
-            return false
-        }
-        if (formData.virtualSol <= 0) {
-            setError('Base price must be greater than 0')
-            return false
-        }
         return true
     }
 
     const handleSubmit = async (event: React.FormEvent) => {
-        event.preventDefault();
+        event.preventDefault()
+        if (!validateForm()) return
 
-        if (!validateForm()) {
-            return;
-        }
-
-        setIsLoading(true);
-        setError(null);
-        setSuccess(false);
+        setIsLoading(true)
+        setError(null)
+        setSuccess(false)
 
         try {
-            // Create the params object for on-chain creation
             const params: createTokenParams = {
                 name: formData.name,
                 symbol: formData.symbol,
-                totalSupply: new BN(formData.supply * (10 ** TOKEN_DECIMALS)),
+                totalSupply: formData.totalSupply,
                 metadataUri: `https://arweave.net/test-metadata`,
                 curveConfig: {
-                    virtualSol: new BN(formData.virtualSol * LAMPORTS_PER_SOL),
+                    migrationStatus: 'active',
+                    isSubscribed: false,
+                    developer: wallet.publicKey!.toString()
                 }
-            };
+            }
 
-            // Pass both the params and the description
-            const result = await tokenTransactionService.createToken(params, formData.description);
+            const result = await tokenTransactionService.createToken(params, formData.description)
 
-            // Verify the transaction was successful
             if (!result || !result.mintAddress) {
-                throw new Error('Transaction failed - invalid result');
+                throw new Error('Transaction failed - invalid result')
             }
 
-            // Additional verification could be added here
-            const mintAccount = await connection.getAccountInfo(new PublicKey(result.mintAddress));
+            const mintAccount = await connection.getAccountInfo(new PublicKey(result.mintAddress))
             if (!mintAccount) {
-                throw new Error('Failed to verify mint account creation');
+                throw new Error('Failed to verify mint account creation')
             }
 
-            console.log('Token created successfully:', result);
-            setSuccess(true);
-            onSuccess?.();
-            onTokenCreated?.();
+            setSuccess(true)
+            onSuccess?.()
+            onTokenCreated?.()
         } catch (error: any) {
-            console.error('Token creation failed:', error);
-
-            // Enhanced error handling
-            let errorMessage = 'Failed to create token';
-
-            if (error.message?.includes('Simulation failed')) {
-                errorMessage = 'Transaction simulation failed. Please check your wallet balance and parameters.';
-            } else if (error.message?.includes('0x1')) {
-                errorMessage = 'Insufficient balance to create token';
-            } else if (error.message?.includes('6007')) {
-                errorMessage = 'Invalid curve configuration parameters';
-            } else if (error instanceof Error) {
-                errorMessage = error.message;
-            }
-
-            setError(errorMessage);
-            setSuccess(false);
+            console.error('Token creation failed:', error)
+            setError(error.message || 'Failed to create token')
         } finally {
-            setIsLoading(false);
+            setIsLoading(false)
         }
-    };
+    }
 
     return (
         <form onSubmit={handleSubmit} className="token-creation-form">
@@ -166,24 +146,14 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             </div>
 
             <div className="form-group">
-                <label>Supply</label>
+                <label>Total Supply</label>
                 <input
                     type="number"
-                    value={formData.supply}
-                    onChange={e => setFormData({ ...formData, supply: parseInt(e.target.value) })}
+                    onChange={e => setFormData({
+                        ...formData,
+                        totalSupply: new BN(parseInt(e.target.value) * (10 ** TOKEN_DECIMALS))
+                    })}
                     min="1"
-                    required
-                />
-            </div>
-
-            <div className="form-group">
-                <label>Starting Market Cap (in SOL)</label>
-                <input
-                    type="number"
-                    value={formData.virtualSol}
-                    onChange={e => setFormData({ ...formData, virtualSol: parseFloat(e.target.value) })}
-                    min="0.000001"
-                    step="0.000001"
                     required
                 />
             </div>
@@ -192,5 +162,5 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 {isLoading ? 'Creating Token...' : 'Create Token'}
             </button>
         </form>
-    );
+    )
 } 

@@ -57,7 +57,9 @@ router.post('/tokens', async (req, res) => {
             description,
             metadataUri,
             curveConfig,
-            decimals
+            decimals,
+            totalSupply,
+            initialPrice
         } = req.body;
 
         const result = await pool.query(`
@@ -70,8 +72,9 @@ router.post('/tokens', async (req, res) => {
                 metadata_url,
                 curve_config,
                 decimals,
-                token_type
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom')
+                token_type,
+                supply
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom', $9)
             RETURNING *
         `, [
             mintAddress,
@@ -81,10 +84,32 @@ router.post('/tokens', async (req, res) => {
             description,
             metadataUri,
             curveConfig,
-            decimals
+            decimals,
+            totalSupply
         ]);
 
-        res.status(201).json(result.rows[0]);
+        // Record the initial price
+        await PriceHistoryModel.recordPrice({
+            mintAddress,
+            price: initialPrice,
+            volume: 0,
+            timestamp: new Date()
+        });
+
+        const token = result.rows[0];
+        res.status(201).json({
+            mintAddress: token.mint_address,
+            curveAddress: token.curve_address,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            description: token.description,
+            metadataUri: token.metadata_url,
+            curveConfig: token.curve_config,
+            supply: token.supply,
+            tokenType: token.token_type,
+            createdAt: token.created_at
+        });
     } catch (error) {
         logger.error('Error creating token:', error);
         res.status(500).json({ error: 'Failed to create token' });
@@ -111,7 +136,9 @@ router.get('/tokens', async (req, res) => {
             metadataUri: token.metadata_url,
             curveConfig: token.curve_config,
             createdAt: token.created_at,
-            tokenType: token.token_type
+            tokenType: token.token_type,
+            supply: token.supply,
+            totalSupply: token.supply
         }));
 
         res.json({ tokens });
@@ -508,6 +535,46 @@ router.get('/pools/:mintAddress', async (req, res) => {
     } catch (error) {
         logger.error('Error fetching pools:', error);
         res.status(500).json({ error: 'Failed to fetch pools' });
+    }
+});
+
+router.post('/users', async (req, res) => {
+    try {
+        const { walletAddress } = req.body;
+
+        const result = await pool.query(`
+            INSERT INTO token_platform.users (wallet_address)
+            VALUES ($1)
+            ON CONFLICT (wallet_address) 
+            DO UPDATE SET last_seen = CURRENT_TIMESTAMP
+            RETURNING user_id, wallet_address, is_subscribed, subscription_expires_at, created_at, last_seen
+        `, [walletAddress]);
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error creating/updating user:', error);
+        res.status(500).json({ error: 'Failed to create/update user' });
+    }
+});
+
+router.get('/users/:walletAddress', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+
+        const result = await pool.query(`
+            SELECT user_id, wallet_address, is_subscribed, subscription_expires_at, created_at, last_seen
+            FROM token_platform.users
+            WHERE wallet_address = $1
+        `, [walletAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error fetching user:', error);
+        res.status(500).json({ error: 'Failed to fetch user' });
     }
 });
 

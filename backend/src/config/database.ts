@@ -184,6 +184,22 @@ export async function initializeDatabase() {
             ON token_platform.trades (token_address, time DESC);
         `)
 
+        // Add users table without touching anything else
+        await client.query(`
+            CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+            CREATE TABLE IF NOT EXISTS token_platform.users (
+                user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                wallet_address TEXT UNIQUE NOT NULL,
+                is_subscribed BOOLEAN DEFAULT false,
+                subscription_expires_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                last_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_users_wallet ON token_platform.users(wallet_address);
+        `);
+
         await client.query('COMMIT')
 
         // Part 2: Create continuous aggregates outside transaction
