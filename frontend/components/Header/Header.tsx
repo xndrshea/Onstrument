@@ -5,31 +5,33 @@ import { SearchBar } from '../Search/SearchBar';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { ProfileModal } from '../Profile/ProfileModal';
 
-
 export function Header() {
     const { connected } = useWallet();
     const [isProfileOpen, setIsProfileOpen] = useState(false);
 
     return (
         <header className="bg-[#232427] border-b border-gray-800">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between items-center h-16">
-                    <div className="flex items-center space-x-8">
+            <div className="w-full px-4">
+                <div className="flex items-center h-16">
+                    <div className="flex items-center space-x-4">
                         <Link to="/" className="text-purple-500 font-bold text-xl">
                             Launchpad
                         </Link>
-                        <nav className="hidden md:flex space-x-4">
-                            <Link to="/market" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
-                                Solana Market
-                            </Link>
-                            <Link to="/roadmap" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
-                                Roadmap
-                            </Link>
-                        </nav>
+                        <Link to="/market" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
+                            Solana Market
+                        </Link>
+                        <Link to="/roadmap" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
+                            Roadmap
+                        </Link>
+                    </div>
+
+                    <div className="flex-1 flex justify-center">
+                        <div className="w-[400px]">
+                            <SearchBar />
+                        </div>
                     </div>
 
                     <div className="flex items-center space-x-4">
-                        <SearchBar />
                         <WalletMultiButton className="!bg-primary hover:!bg-primary-hover transition-colors duration-200" />
                         {connected && (
                             <button
