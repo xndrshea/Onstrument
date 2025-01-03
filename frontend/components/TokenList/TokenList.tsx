@@ -118,7 +118,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             </div>
             <div className="token-list-content">
                 <div className="w-full p-4">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {tokens.map(token => (
                             <TokenCard key={token.mintAddress} token={token} />
                         ))}

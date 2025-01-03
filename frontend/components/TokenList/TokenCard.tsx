@@ -35,14 +35,14 @@ export function TokenCard({ token }: TokenCardProps) {
     }, [token.metadataUri, token.name]);
 
     return (
-        <div className="bg-[#232427] rounded-lg border border-transparent hover:border-gray-700 transition-colors">
+        <div className="bg-[#232427] rounded-lg border border-transparent hover:border-white transition-colors">
             <Link
                 to={`/token/${token.mintAddress}`}
                 state={{ tokenType: 'custom' }}
-                className="flex p-6 gap-6"
+                className="flex flex-col sm:flex-row p-4 gap-4"
             >
                 {/* Image container */}
-                <div className="w-40 h-40 md:w-48 md:h-48 flex-shrink-0">
+                <div className="w-full sm:w-40 h-40 sm:h-40 md:w-48 md:h-48 flex-shrink-0">
                     {imageUrl && (
                         <img
                             src={imageUrl}
@@ -60,13 +60,12 @@ export function TokenCard({ token }: TokenCardProps) {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                         <h3 className="text-white font-medium truncate">{token.name || 'Unnamed Token'}</h3>
-                        <span className="text-gray-400 text-sm">({token.symbol || 'UNKNOWN'})</span>
+                        <span className="text-gray-400 text-sm whitespace-nowrap">({token.symbol || 'UNKNOWN'})</span>
                     </div>
 
                     <p className="text-sm text-gray-400 line-clamp-2 mb-2">
                         {token.description || 'No description available'}
                     </p>
-
                 </div>
             </Link>
         </div>

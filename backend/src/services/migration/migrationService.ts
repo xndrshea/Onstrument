@@ -2,37 +2,32 @@ import {
     Connection,
     PublicKey,
     Keypair,
-    Cluster
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Raydium } from '@raydium-io/raydium-sdk-v2';
 import {
-    CREATE_CPMM_POOL_PROGRAM,
-    CREATE_CPMM_POOL_FEE_ACC,
     DEVNET_PROGRAM_ID,
     getCpmmPdaAmmConfigId,
 } from '@raydium-io/raydium-sdk-v2';
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
-import { config } from '../../config/env';
+import fs from 'fs';
 
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const txVersion = 0;
 
 export class MigrationService {
     private connection: Connection;
-    private poolCreatorKeypair: Keypair;
+    private migrationAdmin: Keypair;
 
     constructor() {
         this.connection = new Connection("https://api.devnet.solana.com", 'confirmed');
 
-        if (!process.env.POOL_CREATOR_PRIVATE_KEY) {
-            throw new Error('POOL_CREATOR_PRIVATE_KEY is required');
-        }
-
-        this.poolCreatorKeypair = Keypair.fromSecretKey(
-            Buffer.from(JSON.parse(process.env.POOL_CREATOR_PRIVATE_KEY))
-        );
+        const rawKey = JSON.parse(fs.readFileSync(
+            process.env.MIGRATION_ADMIN_KEYPAIR_PATH!,
+            'utf-8'
+        ));
+        this.migrationAdmin = Keypair.fromSecretKey(new Uint8Array(rawKey));
     }
 
     async handleMigrationEvent(event: {
@@ -92,7 +87,7 @@ export class MigrationService {
     }): Promise<PublicKey> {
         const sdk = await Raydium.load({
             connection: this.connection,
-            owner: this.poolCreatorKeypair.publicKey,
+            owner: this.migrationAdmin.publicKey,
             cluster: 'devnet'
         });
 
