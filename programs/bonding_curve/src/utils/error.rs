@@ -34,4 +34,6 @@ pub enum ErrorCode {
     MigrationRequired,
     #[msg("Invalid migration admin")]
     InvalidMigrationAdmin,
+    #[msg("Trading disabled - token has migrated to Raydium")]
+    MigrationComplete,
 }

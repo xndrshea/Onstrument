@@ -4,16 +4,20 @@ import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 import { MigrationService } from '../../migration/migrationService';
+import { BN } from '@project-serum/anchor';
+import { createHash } from 'crypto';
 
 const VIRTUAL_SOL_AMOUNT = BigInt(30_000_000_000); // 30 SOL in lamports
-const MIGRATION_EVENT_DISCRIMINATOR = '00000000';
+const MIGRATION_EVENT_DISCRIMINATOR = createHash('sha256').update('event:MigrationEvent').digest('hex').slice(0, 8); // f015ae6d
 
 export class BondingCurveProcessor extends BaseProcessor {
     private connection: Connection;
+    private migrationService: MigrationService;
 
     constructor() {
         super();
         this.connection = new Connection(config.HELIUS_RPC_URL);
+        this.migrationService = new MigrationService();
     }
 
     async processEvent(buffer: Buffer, curveAddress: string, programId: string): Promise<void> {
@@ -57,24 +61,77 @@ export class BondingCurveProcessor extends BaseProcessor {
 
             await PriceHistoryModel.recordPrice(update);
 
-            if (buffer.length >= 8 + 32 + 8 + 1) {
+            // Check if this is a migration event
+            if (buffer.length >= 8) {
                 const discriminator = buffer.subarray(0, 8);
-                // Check if this is a migration event
                 if (discriminator.toString('hex') === MIGRATION_EVENT_DISCRIMINATOR) {
-                    const migrationService = new MigrationService();
-                    await migrationService.handleMigrationEvent({
-                        mint: mintAddress.toString(),
-                        realSolAmount: Number(curveBalance),
-                        virtualSolAmount: Number(VIRTUAL_SOL_AMOUNT),
-                        tokenAmount: Number(totalTokens),
-                        effectivePrice: price,
-                        developer: buffer.subarray(40, 72).toString(), // Read developer pubkey
-                        isSubscribed: Boolean(buffer[72]) // Read isSubscribed bool
-                    });
+                    logger.info('Migration event detected!');
+
+                    const migrationEvent = this.parseMigrationEvent(
+                        Buffer.from(buffer.subarray(8, 40)),
+                        Buffer.from(buffer.subarray(40))
+                    );
+
+                    if (migrationEvent) {
+                        logger.info('Parsed migration event:', {
+                            mint: migrationEvent.mint.toString(),
+                            realSolAmount: migrationEvent.realSolAmount.toString(),
+                            virtualSolAmount: migrationEvent.virtualSolAmount.toString(),
+                            tokenAmount: migrationEvent.tokenAmount.toString(),
+                            effectivePrice: migrationEvent.effectivePrice.toString(),
+                            developer: migrationEvent.developer.toString(),
+                            isSubscribed: migrationEvent.isSubscribed
+                        });
+                    }
                 }
             }
         } catch (error) {
             logger.error(`Error processing Bonding Curve event: ${error}`);
+        }
+    }
+
+    private parseMigrationEvent(accountKeys: Buffer, data: Buffer): {
+        mint: PublicKey;
+        realSolAmount: BN;
+        virtualSolAmount: BN;
+        tokenAmount: BN;
+        effectivePrice: BN;
+        developer: PublicKey;
+        isSubscribed: boolean;
+    } | null {
+        try {
+            const mint = new PublicKey(accountKeys);
+            let offset = 8; // Skip discriminator
+
+            const realSolAmount = new BN(data.subarray(offset, offset + 8), 'le');
+            offset += 8;
+
+            const virtualSolAmount = new BN(data.subarray(offset, offset + 8), 'le');
+            offset += 8;
+
+            const tokenAmount = new BN(data.subarray(offset, offset + 8), 'le');
+            offset += 8;
+
+            const effectivePrice = new BN(data.subarray(offset, offset + 8), 'le');
+            offset += 8;
+
+            const developer = new PublicKey(data.subarray(offset, offset + 32));
+            offset += 32;
+
+            const isSubscribed = data.readUInt8(offset) === 1;
+
+            return {
+                mint,
+                realSolAmount,
+                virtualSolAmount,
+                tokenAmount,
+                effectivePrice,
+                developer,
+                isSubscribed
+            };
+        } catch (error) {
+            logger.error('Error parsing migration event:', error);
+            return null;
         }
     }
 }
