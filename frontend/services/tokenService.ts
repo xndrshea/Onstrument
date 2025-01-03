@@ -3,7 +3,6 @@ import { logger } from '../utils/logger';
 import BN from 'bn.js';
 import { TOKEN_DECIMALS } from './bondingCurve';
 import { WalletContextState } from '@solana/wallet-adapter-react';
-import { UserService } from './userService';
 
 const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -11,11 +10,7 @@ export class TokenService {
     constructor(private wallet?: WalletContextState) { }
 
     async transformToken(token: any): Promise<TokenRecord> {
-        let isSubscribed = false;
-        if (this.wallet?.publicKey) {
-            const user = await UserService.getUser(this.wallet.publicKey.toString());
-            isSubscribed = user?.isSubscribed || false;
-        }
+
 
         const transformedToken = {
             mintAddress: token.mint_address || token.mintAddress,
@@ -28,9 +23,9 @@ export class TokenService {
             curveAddress: token.curve_address || token.curveAddress,
             curveConfig: token.curve_config ? {
                 migrationStatus: token.curve_config.migration_status || "Active",
-                isSubscribed: isSubscribed,
+                isSubscribed: token.curve_config.is_subscribed,
                 developer: token.curve_config.developer || ''
-            } : { migrationStatus: "Active", isSubscribed: isSubscribed, developer: '' },
+            } : undefined,
             createdAt: token.created_at || token.createdAt || new Date().toISOString(),
             tokenType: token.token_type || token.tokenType || 'custom',
             verified: token.verified || false,
