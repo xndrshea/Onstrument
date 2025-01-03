@@ -10,6 +10,7 @@ import { dexService } from '../../services/dexService'
 import { mainnetConnection, devnetConnection } from '../../config'
 import { config } from '../../config'
 import { priceClient } from '../../services/priceClient'
+import { UserService } from '../../services/userService'
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -63,6 +64,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05)
     const [spotPrice, setSpotPrice] = useState<number | null>(null)
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
+    const [isUserSubscribed, setIsUserSubscribed] = useState(false)
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -231,7 +233,8 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                     const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)))
                     await bondingCurve.sell({
                         amount: parsedAmount,
-                        minSolReturn: minReturn
+                        minSolReturn: minReturn,
+                        isSubscribed: isUserSubscribed
                     })
                 } else {
                     const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL)
@@ -241,6 +244,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                     await bondingCurve.buy({
                         amount: parsedAmount,
                         maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
+                        isSubscribed: isUserSubscribed
                     })
                 }
             }
@@ -287,6 +291,16 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
             unsubscribe();
         };
     }, [token.mintAddress]);
+
+    useEffect(() => {
+        async function checkSubscription() {
+            if (publicKey) {
+                const user = await UserService.getUser(publicKey.toString());
+                setIsUserSubscribed(user?.isSubscribed || false);
+            }
+        }
+        checkSubscription();
+    }, [publicKey]);
 
     return (
         <div className="p-4 bg-white rounded-lg shadow">
