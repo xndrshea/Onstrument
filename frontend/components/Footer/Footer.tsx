@@ -6,7 +6,7 @@ export function Footer() {
         <footer className="footer">
             <div className="footer-content">
                 <div className="footer-copyright">
-                    © {new Date().getFullYear()} Solana Token Launchpad
+                    © {new Date().getFullYear()} Onstrument - Onchain Instrument
                 </div>
             </div>
         </footer>

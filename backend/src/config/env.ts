@@ -9,4 +9,6 @@ export const config = {
         V4_AMM: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',    // V4 AMM (OpenBook)
     } as const,
     BONDING_CURVE_PROGRAM_ID: '6M1WSZeEAGtc8oTkdTNWruMsW58XPByzuf6ayoN16cEq',
+    MIGRATION_ADMIN_KEYPAIR_PATH: process.env.MIGRATION_ADMIN_KEYPAIR_PATH,
+    FEE_COLLECTOR_ADDRESS: process.env.FEE_COLLECTOR_ADDRESS,
 } as const; 
