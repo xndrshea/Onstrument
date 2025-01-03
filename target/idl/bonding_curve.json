@@ -631,6 +631,11 @@
       "code": 6015,
       "name": "InvalidMigrationAdmin",
       "msg": "Invalid migration admin"
+    },
+    {
+      "code": 6016,
+      "name": "MigrationComplete",
+      "msg": "Trading disabled - token has migrated to Raydium"
     }
   ],
   "types": [

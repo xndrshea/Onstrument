@@ -637,6 +637,11 @@ export type BondingCurve = {
       "code": 6015,
       "name": "invalidMigrationAdmin",
       "msg": "Invalid migration admin"
+    },
+    {
+      "code": 6016,
+      "name": "migrationComplete",
+      "msg": "Trading disabled - token has migrated to Raydium"
     }
   ],
   "types": [

@@ -18,16 +18,22 @@ const txVersion = 0;
 
 export class MigrationService {
     private connection: Connection;
-    private migrationAdmin: Keypair;
+    private keypair: Keypair;
 
     constructor() {
-        this.connection = new Connection("https://api.devnet.solana.com", 'confirmed');
+        if (process.env.NODE_ENV === 'production' && !process.env.MIGRATION_ADMIN_KEYPAIR_PATH) {
+            throw new Error('MIGRATION_ADMIN_KEYPAIR_PATH not set in production');
+        }
 
-        const rawKey = JSON.parse(fs.readFileSync(
-            process.env.MIGRATION_ADMIN_KEYPAIR_PATH!,
-            'utf-8'
-        ));
-        this.migrationAdmin = Keypair.fromSecretKey(new Uint8Array(rawKey));
+        if (!process.env.MIGRATION_ADMIN_KEYPAIR_PATH) {
+            this.keypair = Keypair.generate();
+            this.connection = new Connection('https://api.devnet.solana.com');
+            return;
+        }
+
+        const rawKey = fs.readFileSync(process.env.MIGRATION_ADMIN_KEYPAIR_PATH);
+        this.keypair = Keypair.fromSecretKey(Buffer.from(JSON.parse(rawKey.toString())));
+        this.connection = new Connection(process.env.RPC_ENDPOINT || 'https://api.devnet.solana.com');
     }
 
     async handleMigrationEvent(event: {
@@ -87,7 +93,7 @@ export class MigrationService {
     }): Promise<PublicKey> {
         const sdk = await Raydium.load({
             connection: this.connection,
-            owner: this.migrationAdmin.publicKey,
+            owner: this.keypair.publicKey,
             cluster: 'devnet'
         });
 
