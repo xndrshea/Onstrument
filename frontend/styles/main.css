@@ -104,8 +104,8 @@ button[type="submit"]:disabled {
 }
 
 .token-list {
-    max-width: 1200px;
-    margin: 2rem auto;
+    width: 100%;
+    padding: 1rem;
 }
 
 .token-list-header {
@@ -291,10 +291,10 @@ button[type="submit"]:disabled {
 }
 
 .search-results {
-    max-height: 400px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #4a5568 #2d3748;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    width: 100%;
 }
 
 .search-results::-webkit-scrollbar {
@@ -308,4 +308,16 @@ button[type="submit"]:disabled {
 .search-results::-webkit-scrollbar-thumb {
     background-color: #4a5568;
     border-radius: 4px;
+}
+
+.token-item {
+    background-color: #232427;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 0.75rem 1rem;
+    transition: border-color 0.2s ease;
+}
+
+.token-item:hover {
+    border-color: white;
 }

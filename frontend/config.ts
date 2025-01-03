@@ -2,7 +2,7 @@ import { Connection, clusterApiUrl } from '@solana/web3.js';
 
 // Environment-specific configurations
 export const config = {
-    HELIUS_RPC_URL: import.meta.env.VITE_HELIUS_RPC_URL,
+    HELIUS_RPC_URL: undefined,
     API_BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:3001'
 };
 
@@ -17,7 +17,7 @@ export const DEVNET_URL = clusterApiUrl('devnet');
 export const devnetConnection = new Connection(DEVNET_URL);
 
 // Default connection for wallet adapter
-export const defaultConnection = config.HELIUS_RPC_URL ? mainnetConnection : devnetConnection;
+export const defaultConnection = devnetConnection;
 
 // Constants
 export const BONDING_CURVE_PROGRAM_ID = 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw';

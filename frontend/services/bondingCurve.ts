@@ -3,7 +3,7 @@ import type { BondingCurve as BondingCurveIDL } from '../../target/types/bonding
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider } from '@coral-xyz/anchor';
 
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { BN } from 'bn.js';
 import { createTokenParams, TokenRecord } from '../../shared/types/token';
@@ -70,6 +70,7 @@ export class BondingCurve {
     async createTokenWithCurve(params: createTokenParams) {
         try {
             const mintKeypair = Keypair.generate();
+            const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
             const [curveAddress] = PublicKey.findProgramAddressSync(
                 [Buffer.from("bonding_curve"), mintKeypair.publicKey.toBuffer()],
@@ -96,7 +97,7 @@ export class BondingCurve {
                 .createToken({
                     curveConfig: {
                         migrationStatus: { active: {} },
-                        isSubscribed: false,
+                        isSubscribed: params.curveConfig.isSubscribed,
                         developer: this.wallet!.publicKey!
                     },
                     totalSupply: params.totalSupply
@@ -130,9 +131,21 @@ export class BondingCurve {
                 } as any)
                 .instruction();
 
+            // Create admin token account instruction
+            const adminTokenAccount = await getAssociatedTokenAddress(
+                mintKeypair.publicKey,
+                migrationAdmin
+            );
+            const createAdminAtaIx = createAssociatedTokenAccountInstruction(
+                this.wallet!.publicKey!,  // payer
+                adminTokenAccount,
+                migrationAdmin,           // owner
+                mintKeypair.publicKey     // mint
+            );
+
             // Build and send transaction
             const tx = await this.buildAndSendTransaction(
-                [createTokenIx, createMetadataIx],
+                [createTokenIx, createMetadataIx, createAdminAtaIx],
                 [mintKeypair]
             );
 
@@ -154,7 +167,7 @@ export class BondingCurve {
     }
 
     private async buildAndSendTransaction(
-        instructions: any[],
+        instructions: TransactionInstruction[],
         signers: Keypair[]
     ) {
         const latestBlockhash = await this.connection.getLatestBlockhash();
@@ -162,6 +175,19 @@ export class BondingCurve {
         const tx = new Transaction();
         tx.feePayer = this.wallet!.publicKey!;
         tx.recentBlockhash = latestBlockhash.blockhash;
+
+        // Add lamports for ATA creation if needed
+        if (instructions.some(ix => ix.programId.equals(TOKEN_PROGRAM_ID))) {
+            const rent = await this.connection.getMinimumBalanceForRentExemption(165); // 165 bytes for token account
+            tx.add(
+                SystemProgram.transfer({
+                    fromPubkey: this.wallet!.publicKey!,
+                    toPubkey: this.wallet!.publicKey!,
+                    lamports: rent
+                })
+            );
+        }
+
         tx.add(...instructions);
 
         if (!this.wallet?.signTransaction) {
@@ -224,6 +250,7 @@ export class BondingCurve {
     async buy(params: {
         amount: InstanceType<typeof BN> | number;
         maxSolCost: InstanceType<typeof BN> | number;
+        isSubscribed: boolean;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
@@ -273,9 +300,9 @@ export class BondingCurve {
 
             const tx = await this.program.methods
                 .buy(
-                    rawAmount,          // amount in raw token units
-                    rawMaxSolCost,      // max cost in lamports
-                    false               // isSubscribed parameter
+                    rawAmount,
+                    rawMaxSolCost,
+                    params.isSubscribed
                 )
                 .accounts({
                     buyer: this.wallet!.publicKey!,
@@ -286,6 +313,12 @@ export class BondingCurve {
                     tokenVault: tokenVault,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
+                    feeCollector: new PublicKey('E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L'),
+                    migrationAdmin: new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu'),
+                    migrationAdminTokenAccount: await getAssociatedTokenAddress(
+                        this.mintAddress!,
+                        new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu')
+                    )
                 })
                 .rpc();
 
@@ -299,6 +332,7 @@ export class BondingCurve {
     async sell(params: {
         amount: InstanceType<typeof BN> | number;
         minSolReturn: InstanceType<typeof BN> | number;
+        isSubscribed: boolean;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
@@ -347,7 +381,7 @@ export class BondingCurve {
 
         try {
             const tx = await this.program.methods
-                .sell(scaledAmount, scaledMinReturn, false)
+                .sell(scaledAmount, scaledMinReturn, params.isSubscribed)
                 .accounts({
                     seller: this.wallet!.publicKey!,
                     mint: this.mintAddress,
@@ -357,6 +391,7 @@ export class BondingCurve {
                     tokenVault: tokenVault,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
+                    feeCollector: new PublicKey('E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L')
                 })
                 .rpc();
 

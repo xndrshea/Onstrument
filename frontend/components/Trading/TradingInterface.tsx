@@ -10,11 +10,43 @@ import { dexService } from '../../services/dexService'
 import { mainnetConnection, devnetConnection } from '../../config'
 import { config } from '../../config'
 import { priceClient } from '../../services/priceClient'
+import { UserService } from '../../services/userService'
 
 interface TradingInterfaceProps {
     token: TokenRecord
     onPriceUpdate?: (price: number) => void
 }
+
+// Helper function to format small numbers with subscript notation
+const formatSmallNumber = (num: number): JSX.Element | string => {
+    if (num === 0) return '0';
+
+    // For very small numbers
+    if (num < 0.01) {
+        const numStr = num.toFixed(8); // Keep full precision
+        // Find position of first non-zero digit after decimal
+        let zeroCount = 0;
+        for (let i = 2; i < numStr.length; i++) { // Start at 2 to skip "0."
+            if (numStr[i] === '0') {
+                zeroCount++;
+            } else {
+                break;
+            }
+        }
+
+        // Get all digits after zeros to maintain full precision
+        const remainingDigits = numStr.slice(2 + zeroCount);
+
+        return (
+            <span>
+                0.0<sub>{zeroCount}</sub>{remainingDigits} SOL
+            </span>
+        );
+    }
+
+    // For regular numbers, show full precision
+    return `${num.toFixed(8)} SOL`;
+};
 
 export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps) {
     const { connection } = useConnection()
@@ -32,6 +64,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05)
     const [spotPrice, setSpotPrice] = useState<number | null>(null)
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
+    const [isUserSubscribed, setIsUserSubscribed] = useState(false)
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -200,7 +233,8 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                     const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)))
                     await bondingCurve.sell({
                         amount: parsedAmount,
-                        minSolReturn: minReturn
+                        minSolReturn: minReturn,
+                        isSubscribed: isUserSubscribed
                     })
                 } else {
                     const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL)
@@ -210,6 +244,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                     await bondingCurve.buy({
                         amount: parsedAmount,
                         maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
+                        isSubscribed: isUserSubscribed
                     })
                 }
             }
@@ -257,6 +292,16 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
         };
     }, [token.mintAddress]);
 
+    useEffect(() => {
+        async function checkSubscription() {
+            if (publicKey) {
+                const user = await UserService.getUser(publicKey.toString());
+                setIsUserSubscribed(user?.isSubscribed || false);
+            }
+        }
+        checkSubscription();
+    }, [publicKey]);
+
     return (
         <div className="p-4 bg-white rounded-lg shadow">
             {/* Connection Status */}
@@ -289,7 +334,7 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                             <span className="text-sm text-gray-700">Current Token Price</span>
                             <span className="font-medium text-gray-900">
                                 {spotPrice !== null
-                                    ? `${spotPrice.toFixed(6)} SOL`
+                                    ? formatSmallNumber(spotPrice)
                                     : 'Loading...'}
                             </span>
                         </div>

@@ -18,14 +18,14 @@ pub struct Buy<'info> {
     /// CHECK: Static fee collector address
     #[account(
         mut,
-        constraint = fee_collector.key() == Pubkey::from_str(FEE_COLLECTOR).unwrap()
+        constraint = fee_collector.key() == FEE_COLLECTOR
     )]
     pub fee_collector: AccountInfo<'info>,
 
     /// CHECK: Static migration admin address
     #[account(
         mut,
-        constraint = migration_admin.key() == Pubkey::from_str(MIGRATION_ADMIN).unwrap()
+        constraint = migration_admin.key() == MIGRATION_ADMIN
     )]
     pub migration_admin: AccountInfo<'info>,
 
@@ -134,12 +134,15 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
 
     let (curve_amount, fee_amount) = if !is_subscribed {
         let fee = (base_price * TRADE_FEE_BPS) / 10000;
-        (base_price - fee, fee)  // Fee is deducted from base_price instead of added
+        (base_price, fee)  // Fee is added to base_price, not subtracted
     } else {
         (base_price, 0)
     };
 
-    require!(base_price <= max_sol_cost, ErrorCode::PriceExceedsMaxCost);
+    // Check total cost against max_sol_cost
+    let total_cost = curve_amount.checked_add(fee_amount)
+        .ok_or(error!(ErrorCode::MathOverflow))?;
+    require!(total_cost <= max_sol_cost, ErrorCode::PriceExceedsMaxCost);
 
     // Transfer SOL to curve (reduced by fee amount)
     let transfer_sol_ix = anchor_lang::system_program::Transfer {

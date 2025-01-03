@@ -6,6 +6,7 @@ import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { Link } from 'react-router-dom'
 import { API_BASE_URL } from '../../config'
 import { priceClient } from '../../services/priceClient'
+import { TokenCard } from './TokenCard'
 
 interface TokenListProps {
     onCreateClick: () => void
@@ -116,34 +117,13 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 </div>
             </div>
             <div className="token-list-content">
-                {sortedTokens.map((token) => (
-                    <Link
-                        key={token.mintAddress}
-                        to={`/token/${token.mintAddress}`}
-                        state={{ tokenType: 'custom' }}
-                        className="token-item"
-                    >
-                        <h3>{token.name || 'Unnamed Token'}</h3>
-                        <p className="token-symbol">{token.symbol || 'UNKNOWN'}</p>
-                        <p className="token-description">{token.description || 'No description available'}</p>
-                        <p className="token-mint">
-                            Mint: {token.mintAddress ?
-                                `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}` :
-                                'N/A'}
-                        </p>
-                        <p className="token-date">
-                            {token.createdAt ?
-                                new Date(token.createdAt).toLocaleDateString() :
-                                'N/A'}
-                        </p>
-                        <p className="token-market-cap">
-                            Market Cap: {calculateMarketCap(token)}
-                        </p>
-                        <p className="token-supply">
-                            Supply: {Number(token.totalSupply) / (10 ** TOKEN_DECIMALS)} {token.symbol}
-                        </p>
-                    </Link>
-                ))}
+                <div className="w-full p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {tokens.map(token => (
+                            <TokenCard key={token.mintAddress} token={token} />
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     )

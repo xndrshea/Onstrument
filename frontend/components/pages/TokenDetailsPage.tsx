@@ -55,7 +55,7 @@ export function TokenDetailsPage() {
 
     return (
         <div className="p-4 text-white">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-[1920px] mx-auto">
                 <div className="flex items-center gap-4 mb-4">
                     {imageUrl && (
                         <img
@@ -63,7 +63,6 @@ export function TokenDetailsPage() {
                             alt={token.name}
                             className="w-16 h-16 rounded-full object-cover"
                             onError={(e) => {
-                                // Fallback if image fails to load
                                 (e.target as HTMLImageElement).style.display = 'none';
                             }}
                         />
@@ -71,17 +70,21 @@ export function TokenDetailsPage() {
                     <h1 className="text-2xl font-bold">{token.name} ({token.symbol})</h1>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className="bg-[#232427] rounded-lg p-4 mb-4">
-                        <h2 className="text-xl mb-4">Price Chart</h2>
-                        <PriceChart
-                            token={token}
-                            width={window.innerWidth > 1024 ? 500 : window.innerWidth - 48}
-                            height={300}
-                        />
+                <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6">
+                    <div className="bg-[#232427] rounded-lg p-4">
+                        <TradingInterface token={token} />
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-6">
+                        <div className="bg-[#232427] rounded-lg p-4">
+                            <h2 className="text-xl mb-4">Price Chart</h2>
+                            <PriceChart
+                                token={token}
+                                width={window.innerWidth > 1024 ? window.innerWidth - 500 : window.innerWidth - 48}
+                                height={400}
+                            />
+                        </div>
+
                         <div className="bg-[#232427] rounded-lg p-4 hover:bg-[#2a2b2f] transition-colors duration-200">
                             <button
                                 onClick={() => setIsTokenInfoExpanded(!isTokenInfoExpanded)}
@@ -122,10 +125,6 @@ export function TokenDetailsPage() {
                                     </div>
                                 </div>
                             )}
-                        </div>
-
-                        <div className="bg-[#232427] rounded-lg p-4">
-                            <TradingInterface token={token} />
                         </div>
                     </div>
                 </div>

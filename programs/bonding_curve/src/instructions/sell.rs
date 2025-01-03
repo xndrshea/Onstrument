@@ -39,7 +39,7 @@ pub struct Sell<'info> {
     /// CHECK: Static fee collector address
     #[account(
         mut,
-        constraint = fee_collector.key() == Pubkey::from_str(FEE_COLLECTOR).unwrap()
+        constraint = fee_collector.key() == FEE_COLLECTOR
     )]
     pub fee_collector: AccountInfo<'info>,
 
@@ -55,46 +55,69 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64, is_subscrib
     let rent = Rent::get()?;
     let rent_exempt_balance = rent.minimum_balance(ctx.accounts.curve.to_account_info().data_len());
     
-    // Calculate actual available liquidity (excluding rent)
-    let available_liquidity = curve_lamports.checked_sub(rent_exempt_balance)
-        .ok_or(ErrorCode::InsufficientLiquidity)?;
+    // Calculate actual available liquidity (excluding rent) - use saturating_sub instead of checked_sub
+    let available_liquidity = curve_lamports.saturating_sub(rent_exempt_balance);
     
-    // Get the price first before any mutable borrows
-    let price = ctx.accounts.curve.calculate_sell_price(
+    // Calculate base price and fee
+    let base_price = ctx.accounts.curve.calculate_sell_price(
         &ctx.accounts.token_vault,
         amount,
-        available_liquidity
+        curve_lamports
     )?;
-    
-    let (final_price, fee_amount) = if !is_subscribed {
-        let fee = (price * TRADE_FEE_BPS) / 10000;
-        (price - fee, fee)
+
+    let (curve_amount, fee_amount) = if !is_subscribed {
+        let fee = (base_price * TRADE_FEE_BPS) / 10000;
+        (base_price, fee)
     } else {
-        (price, 0)
+        (base_price, 0)
     };
 
-    require!(final_price >= min_sol_return, ErrorCode::PriceBelowMinReturn);
-    require!(final_price <= available_liquidity, ErrorCode::InsufficientLiquidity);
+    // Ensure we don't transfer more than available liquidity
+    let actual_transfer = std::cmp::min(curve_amount, available_liquidity);
+    
+    // Check total return against min_sol_return (after fees)
+    let total_return = actual_transfer.saturating_sub(fee_amount);
+    require!(total_return >= min_sol_return, ErrorCode::PriceBelowMinReturn);
 
     // Transfer tokens from seller to vault
-    let transfer_ctx = CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
-        Transfer {
-            from: ctx.accounts.seller_token_account.to_account_info(),
-            to: ctx.accounts.token_vault.to_account_info(),
-            authority: ctx.accounts.seller.to_account_info(),
-        },
-    );
-    anchor_spl::token::transfer(transfer_ctx, amount)?;
+    anchor_spl::token::transfer(
+        CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.seller_token_account.to_account_info(),
+                to: ctx.accounts.token_vault.to_account_info(),
+                authority: ctx.accounts.seller.to_account_info(),
+            },
+        ),
+        amount,
+    )?;
 
-    // Transfer SOL to seller
-    **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? -= final_price;
-    **ctx.accounts.seller.to_account_info().try_borrow_mut_lamports()? += final_price;
+    // Transfer SOL from curve to seller and fee collector
+    **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? = ctx
+        .accounts
+        .curve
+        .to_account_info()
+        .lamports()
+        .checked_sub(actual_transfer)
+        .ok_or(error!(ErrorCode::MathOverflow))?;
 
-    // Transfer fee if applicable
+    // Transfer to seller
+    **ctx.accounts.seller.to_account_info().try_borrow_mut_lamports()? = ctx
+        .accounts
+        .seller
+        .to_account_info()
+        .lamports()
+        .checked_add(total_return)
+        .ok_or(error!(ErrorCode::MathOverflow))?;
+
+    // Always transfer fee if applicable (even if amount was adjusted)
     if fee_amount > 0 {
-        **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? -= fee_amount;
-        **ctx.accounts.fee_collector.to_account_info().try_borrow_mut_lamports()? += fee_amount;
+        **ctx.accounts.fee_collector.try_borrow_mut_lamports()? = ctx
+            .accounts
+            .fee_collector
+            .lamports()
+            .checked_add(actual_transfer.saturating_sub(total_return))
+            .ok_or(error!(ErrorCode::MathOverflow))?;
     }
 
     Ok(())
