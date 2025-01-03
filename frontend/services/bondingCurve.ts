@@ -3,7 +3,7 @@ import type { BondingCurve as BondingCurveIDL } from '../../target/types/bonding
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider } from '@coral-xyz/anchor';
 
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { BN } from 'bn.js';
 import { createTokenParams, TokenRecord } from '../../shared/types/token';
@@ -15,6 +15,9 @@ const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
 
 // Required Program IDs
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
+
+// Add these constants at the top of the file
+const MIGRATION_ADMIN = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu'); // Replace with actual address
 
 export class BondingCurve {
     public readonly program: Program<BondingCurveIDL>;
@@ -182,41 +185,67 @@ export class BondingCurve {
         return signature;
     }
 
-    async ensureTokenAccount(): Promise<PublicKey> {
+    /**
+     * Ensures both user and admin have Associated Token Accounts (ATAs) for the token
+     * @returns Object containing both ATAs
+     */
+    async ensureTokenAccounts(): Promise<{ userAta: PublicKey, adminAta: PublicKey }> {
         if (!this.mintAddress) throw new Error('Mint address is required');
+        if (!this.wallet?.publicKey) throw new Error('Wallet not connected');
 
-        const buyerTokenAccount = await getAssociatedTokenAddress(
-            this.mintAddress,
-            this.wallet!.publicKey!
-        );
+        // Get ATAs for both user and admin
+        const [userAta, adminAta] = await Promise.all([
+            getAssociatedTokenAddress(
+                this.mintAddress,
+                this.wallet.publicKey
+            ),
+            getAssociatedTokenAddress(
+                this.mintAddress,
+                MIGRATION_ADMIN
+            )
+        ]);
 
         try {
-            const tokenAccountInfo = await this.connection.getAccountInfo(buyerTokenAccount);
-            if (!tokenAccountInfo) {
-                const createAtaIx = createAssociatedTokenAccountInstruction(
-                    this.wallet!.publicKey!,
-                    buyerTokenAccount,
-                    this.wallet!.publicKey!,
-                    this.mintAddress
+            // Check both accounts
+            const [userAccountInfo, adminAccountInfo] = await Promise.all([
+                this.connection.getAccountInfo(userAta),
+                this.connection.getAccountInfo(adminAta)
+            ]);
+
+            const instructions: TransactionInstruction[] = [];
+
+            // Create user ATA if needed
+            if (!userAccountInfo) {
+                instructions.push(
+                    createAssociatedTokenAccountInstruction(
+                        this.wallet.publicKey,
+                        userAta,
+                        this.wallet.publicKey,
+                        this.mintAddress
+                    )
                 );
-
-                const latestBlockhash = await this.connection.getLatestBlockhash();
-                const tx = new Transaction();
-                tx.feePayer = this.wallet!.publicKey!;
-                tx.recentBlockhash = latestBlockhash.blockhash;
-                tx.add(createAtaIx);
-
-                const signedTx = await this.wallet!.signTransaction!(tx);
-                const signature = await this.connection.sendRawTransaction(signedTx.serialize());
-                await this.connection.confirmTransaction({
-                    signature,
-                    blockhash: latestBlockhash.blockhash,
-                    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-                });
             }
-            return buyerTokenAccount;
+
+            // Create admin ATA if needed
+            if (!adminAccountInfo) {
+                instructions.push(
+                    createAssociatedTokenAccountInstruction(
+                        this.wallet.publicKey,
+                        adminAta,
+                        MIGRATION_ADMIN,
+                        this.mintAddress
+                    )
+                );
+            }
+
+            // If any ATAs need to be created
+            if (instructions.length > 0) {
+                await this.buildAndSendTransaction(instructions, []);
+            }
+
+            return { userAta, adminAta };
         } catch (error) {
-            console.error('Error ensuring token account:', error);
+            console.error('Error ensuring token accounts:', error);
             throw error;
         }
     }
@@ -229,12 +258,11 @@ export class BondingCurve {
 
         // Check if migrated to Raydium
         if (await this.shouldUseRaydium()) {
-            // Use dexService to execute trade
             return await dexService.executeTrade({
                 mintAddress: this.mintAddress.toString(),
                 amount: BN.isBN(params.amount) ? params.amount : new BN(params.amount),
                 isSelling: false,
-                slippageTolerance: 0.01, // 1% default slippage
+                slippageTolerance: 0.01,
                 wallet: this.wallet!,
                 connection: this.connection
             });
@@ -242,27 +270,23 @@ export class BondingCurve {
 
         if (!this.curveAddress) throw new Error('Curve address is required');
 
-        // Convert amount to raw token units (considering TOKEN_DECIMALS)
         const rawAmount = BN.isBN(params.amount)
             ? params.amount
             : new BN(Math.floor(params.amount * TOKEN_DECIMAL_MULTIPLIER));
 
-        // Get price quote first
         const priceQuote = await this.getPriceQuote(
             Number(rawAmount) / TOKEN_DECIMAL_MULTIPLIER,
             true
         );
 
-        // Use the actual price from the quote for maxSolCost
-        const rawMaxSolCost = new BN(Math.ceil(priceQuote.totalCost * 1.01)); // 1% slippage
+        const rawMaxSolCost = new BN(Math.ceil(priceQuote.totalCost * 1.01));
 
-        // Validate inputs
         if (rawAmount.lten(0)) {
             throw new Error('Amount must be greater than 0');
         }
 
-        // Get buyer's token account
-        const buyerTokenAccount = await this.ensureTokenAccount();
+        // Get both ATAs
+        const { userAta: buyerTokenAccount, adminAta: adminTokenAccount } = await this.ensureTokenAccounts();
 
         const [tokenVault] = PublicKey.findProgramAddressSync(
             [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
@@ -270,23 +294,23 @@ export class BondingCurve {
         );
 
         try {
-
             const tx = await this.program.methods
                 .buy(
-                    rawAmount,          // amount in raw token units
-                    rawMaxSolCost,      // max cost in lamports
-                    false               // isSubscribed parameter
+                    rawAmount,
+                    rawMaxSolCost,
+                    false
                 )
                 .accounts({
                     buyer: this.wallet!.publicKey!,
                     mint: this.mintAddress,
                     buyerTokenAccount,
-                    // @ts-ignore - Anchor types mismatch
+                    migrationAdmin: MIGRATION_ADMIN,
+                    migrationAdminTokenAccount: adminTokenAccount,
                     curve: this.curveAddress,
                     tokenVault: tokenVault,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
-                })
+                } as any)
                 .rpc();
 
             console.log('Buy transaction successful:', tx);
@@ -302,14 +326,12 @@ export class BondingCurve {
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
-        // Check if migrated to Raydium
         if (await this.shouldUseRaydium()) {
-            // Use dexService to execute trade
             return await dexService.executeTrade({
                 mintAddress: this.mintAddress.toString(),
                 amount: BN.isBN(params.amount) ? params.amount : new BN(params.amount),
                 isSelling: true,
-                slippageTolerance: 0.01, // 1% default slippage
+                slippageTolerance: 0.01,
                 wallet: this.wallet!,
                 connection: this.connection
             });
@@ -317,7 +339,6 @@ export class BondingCurve {
 
         if (!this.curveAddress) throw new Error('Curve address is required');
 
-        // Convert to BN if number provided, with additional safety checks
         const scaledAmount = BN.isBN(params.amount)
             ? params.amount
             : new BN(Math.floor(Math.max(0, params.amount * TOKEN_DECIMAL_MULTIPLIER)).toString());
@@ -330,8 +351,8 @@ export class BondingCurve {
             throw new Error('Amount must be greater than 0');
         }
 
-        // Get seller token account first
-        const sellerTokenAccount = await this.ensureTokenAccount();
+        // Get both ATAs
+        const { userAta: sellerTokenAccount, adminAta: adminTokenAccount } = await this.ensureTokenAccounts();
 
         // Verify token account has sufficient balance
         const tokenAccountInfo = await this.connection.getTokenAccountBalance(sellerTokenAccount);
@@ -351,13 +372,14 @@ export class BondingCurve {
                 .accounts({
                     seller: this.wallet!.publicKey!,
                     mint: this.mintAddress,
-                    // @ts-ignore - Anchor types mismatch
                     curve: this.curveAddress,
                     sellerTokenAccount: sellerTokenAccount,
+                    migrationAdmin: MIGRATION_ADMIN,
+                    migrationAdminTokenAccount: adminTokenAccount,
                     tokenVault: tokenVault,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
-                })
+                } as any)
                 .rpc();
 
             console.log('Sell transaction:', tx);
