@@ -237,6 +237,7 @@ export class BondingCurve {
     async buy(params: {
         amount: InstanceType<typeof BN> | number;
         maxSolCost: InstanceType<typeof BN> | number;
+        isSubscribed: boolean;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
@@ -288,7 +289,7 @@ export class BondingCurve {
                 .buy(
                     rawAmount,          // amount in raw token units
                     rawMaxSolCost,      // max cost in lamports
-                    false               // isSubscribed parameter
+                    params.isSubscribed // isSubscribed parameter
                 )
                 .accounts({
                     buyer: this.wallet!.publicKey!,
@@ -312,6 +313,7 @@ export class BondingCurve {
     async sell(params: {
         amount: InstanceType<typeof BN> | number;
         minSolReturn: InstanceType<typeof BN> | number;
+        isSubscribed: boolean;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
@@ -360,7 +362,7 @@ export class BondingCurve {
 
         try {
             const tx = await this.program.methods
-                .sell(scaledAmount, scaledMinReturn, false)
+                .sell(scaledAmount, scaledMinReturn, params.isSubscribed)
                 .accounts({
                     seller: this.wallet!.publicKey!,
                     mint: this.mintAddress,
