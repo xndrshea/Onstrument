@@ -98,21 +98,34 @@ export class BondingCurveProcessor extends BaseProcessor {
         try {
             // Skip 8-byte discriminator
             const mint = new PublicKey(buffer.subarray(8, 40));
-            const realSolAmount = buffer.readBigUInt64LE(40);
-            const virtualSolAmount = buffer.readBigUInt64LE(48);
-            const tokenAmount = buffer.readBigUInt64LE(56);
-            const effectivePrice = buffer.readBigUInt64LE(64);
+            const realSolAmount = Number(buffer.readBigUInt64LE(40));
+            const virtualSolAmount = Number(buffer.readBigUInt64LE(48));
+            const tokenAmount = Number(buffer.readBigUInt64LE(56));
+            const effectivePrice = Number(buffer.readBigUInt64LE(64));
             const developer = new PublicKey(buffer.subarray(72, 104));
             const isSubscribed = buffer.readUInt8(104) === 1;
 
             logger.info('Decoded MigrationEvent:', {
                 mint: mint.toString(),
-                realSolAmount: realSolAmount.toString(),
-                virtualSolAmount: virtualSolAmount.toString(),
-                tokenAmount: tokenAmount.toString(),
-                effectivePrice: effectivePrice.toString(),
+                realSolAmount,
+                virtualSolAmount,
+                tokenAmount,
+                effectivePrice,
                 developer: developer.toString(),
                 isSubscribed
+            });
+
+            // Forward to MigrationService
+            this.migrationService.handleMigrationEvent({
+                mint: mint.toString(),
+                realSolAmount,
+                virtualSolAmount,
+                tokenAmount,
+                effectivePrice,
+                developer: developer.toString(),
+                isSubscribed
+            }).catch(error => {
+                logger.error('Error in MigrationService.handleMigrationEvent:', error);
             });
 
         } catch (error) {
