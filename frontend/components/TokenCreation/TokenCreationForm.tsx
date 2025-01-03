@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { createTokenParams } from '../../../shared/types/token'
 import { BN } from 'bn.js'
@@ -7,6 +7,7 @@ import { TokenFormData } from '../../../shared/types/token'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { pinataService } from '../../services/pinataService'
+import { UserService } from '../../services/userService'
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
@@ -27,6 +28,17 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
     const [imageFile, setImageFile] = useState<File | null>(null)
     const [imagePreview, setImagePreview] = useState<string | null>(null)
     const [uploadingImage, setUploadingImage] = useState(false)
+    const [isSubscribed, setIsSubscribed] = useState(false)
+
+    useEffect(() => {
+        async function checkSubscription() {
+            if (wallet.publicKey) {
+                const user = await UserService.getUser(wallet.publicKey.toString())
+                setIsSubscribed(user?.isSubscribed || false)
+            }
+        }
+        checkSubscription()
+    }, [wallet.publicKey])
 
     const [formData, setFormData] = useState<TokenFormData>({
         name: '',
@@ -37,7 +49,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         totalSupply: new BN(0),
         curveConfig: {
             migrationStatus: 'active',
-            isSubscribed: false,
+            isSubscribed: isSubscribed,
             developer: wallet.publicKey?.toString() || ''
         }
     })
@@ -126,7 +138,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 metadataUri: metadataUri,
                 curveConfig: {
                     migrationStatus: 'active',
-                    isSubscribed: false,
+                    isSubscribed: isSubscribed,
                     developer: wallet.publicKey!.toString()
                 }
             }
