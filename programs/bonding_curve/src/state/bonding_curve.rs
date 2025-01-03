@@ -3,7 +3,7 @@ use anchor_spl::token::TokenAccount;
 use crate::utils::error::ErrorCode;
 use crate::state::curve_config::CurveConfig;
 
-pub const MIGRATION_THRESHOLD: u64 = 3_000_000_000; // 80 SOL in lamports
+pub const MIGRATION_THRESHOLD: u64 = 1_000_000_000; // 80 SOL in lamports
 pub const VIRTUAL_SOL_AMOUNT: u64 = 30_000_000_000; // 30 SOL in lamports
 
 #[account]

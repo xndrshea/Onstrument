@@ -63,7 +63,10 @@ export class HeliusManager extends EventEmitter {
             this.subscribeToPrograms();
         });
 
-        this.wsClient.on('message', (data) => this.handleMessage(data));
+        this.wsClient.on('message', (data) => {
+            logger.info('Raw WebSocket message:', data.toString());
+            this.handleMessage(data);
+        });
 
         // Standard WebSocket error handling
         this.wsClient.on('close', () => {
@@ -95,23 +98,24 @@ export class HeliusManager extends EventEmitter {
         });
     }
 
-    private async handleMessage(data: any) {
-        this.messageCount++;
+    private handleMessage(data: any): void {
         try {
-            const messageObj = JSON.parse(data.toString());
-            if (messageObj.method === "programNotification") {
-                const programId = messageObj.params.result.value.account.owner;
-                const buffer = Buffer.from(messageObj.params.result.value.account.data[0], 'base64');
-                const accountKey = messageObj.params.result.value.pubkey;
+            const message = JSON.parse(data.toString());
+            logger.info('Parsed WebSocket message:', message);
+
+            if (message.result?.data) {
+                const accountKeys = message.result.data.accountData.map((d: any) => d.account);
+                const programId = message.result.data.programId;
+                logger.info('Program event received:', { programId, accountKeys });
 
                 if (Object.values(config.RAYDIUM_PROGRAMS).includes(programId)) {
-                    await this.raydiumProcessor.processEvent(buffer, accountKey, programId);
+                    this.raydiumProcessor.processEvent(Buffer.from(message.result.data.accountData[0], 'base64'), accountKeys[0], programId);
                 } else if (programId === config.BONDING_CURVE_PROGRAM_ID) {
-                    await this.bondingCurveProcessor.processEvent(buffer, accountKey, programId);
+                    this.bondingCurveProcessor.processEvent(Buffer.from(message.result.data.accountData[0], 'base64'), accountKeys[0], programId);
                 }
             }
         } catch (error) {
-            logger.error('Error handling Helius message:', error);
+            logger.error('Error handling WebSocket message:', error);
         }
     }
 
