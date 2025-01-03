@@ -66,6 +66,12 @@ pub struct Buy<'info> {
 }
 
 pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed: bool) -> Result<()> {
+    // Check migration status first
+    require!(
+        ctx.accounts.curve.config.migration_status == MigrationStatus::Active,
+        ErrorCode::MigrationComplete
+    );
+
     let curve_lamports = ctx.accounts.curve.to_account_info().lamports();
     
     // Check if we need to migrate

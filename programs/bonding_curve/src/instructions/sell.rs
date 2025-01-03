@@ -48,6 +48,12 @@ pub struct Sell<'info> {
 }
 
 pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64, is_subscribed: bool) -> Result<()> {
+    // Check migration status first
+    require!(
+        ctx.accounts.curve.config.migration_status == MigrationStatus::Active,
+        ErrorCode::MigrationComplete
+    );
+
     // Get the current lamports before mutable borrow
     let curve_lamports = ctx.accounts.curve.to_account_info().lamports();
     
