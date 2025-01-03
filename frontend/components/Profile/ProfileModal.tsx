@@ -10,6 +10,7 @@ interface ProfileModalProps {
 export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     const { publicKey } = useWallet();
     const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         if (publicKey) {
@@ -24,6 +25,20 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 });
         }
     }, [publicKey]);
+
+    const handleToggleSubscription = async () => {
+        if (!user) return;
+
+        setIsLoading(true);
+        try {
+            const updatedUser = await UserService.toggleSubscription(user.walletAddress);
+            setUser(updatedUser);
+        } catch (error) {
+            console.error('Error toggling subscription:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -40,7 +55,21 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                     <div className="space-y-4 text-white">
                         <p>User ID: <span className="text-gray-300">{user.userId}</span></p>
                         <p>Wallet: <span className="text-gray-300">{user.walletAddress}</span></p>
-                        <p>Subscription: <span className="text-gray-300">{user.isSubscribed ? 'Active' : 'Inactive'}</span></p>
+
+                        <div className="flex items-center justify-between">
+                            <span>Subscription Status:</span>
+                            <button
+                                onClick={handleToggleSubscription}
+                                disabled={isLoading}
+                                className={`px-4 py-2 rounded-md transition-colors ${user.isSubscribed
+                                    ? 'bg-green-500 hover:bg-green-600'
+                                    : 'bg-gray-500 hover:bg-gray-600'
+                                    }`}
+                            >
+                                {isLoading ? 'Loading...' : user.isSubscribed ? 'Subscribed' : 'Not Subscribed'}
+                            </button>
+                        </div>
+
                         {user.subscriptionExpiresAt && (
                             <p>Expires: <span className="text-gray-300">
                                 {new Date(user.subscriptionExpiresAt).toLocaleDateString()}

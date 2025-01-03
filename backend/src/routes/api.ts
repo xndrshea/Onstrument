@@ -578,4 +578,31 @@ router.get('/users/:walletAddress', async (req, res) => {
     }
 });
 
+router.post('/users/:walletAddress/toggle-subscription', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+
+        const result = await pool.query(`
+            UPDATE token_platform.users 
+            SET 
+                is_subscribed = NOT is_subscribed,
+                subscription_expires_at = CASE 
+                    WHEN NOT is_subscribed THEN CURRENT_TIMESTAMP + INTERVAL '365 days'
+                    ELSE NULL 
+                END
+            WHERE wallet_address = $1
+            RETURNING user_id, wallet_address, is_subscribed, subscription_expires_at, created_at, last_seen
+        `, [walletAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error toggling subscription:', error);
+        res.status(500).json({ error: 'Failed to toggle subscription' });
+    }
+});
+
 export default router; 
