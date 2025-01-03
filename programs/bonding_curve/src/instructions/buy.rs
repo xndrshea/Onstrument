@@ -74,63 +74,6 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
 
     let curve_lamports = ctx.accounts.curve.to_account_info().lamports();
     
-    // Check if we need to migrate
-    if curve_lamports >= MIGRATION_THRESHOLD 
-        && ctx.accounts.curve.config.migration_status == MigrationStatus::Active 
-    {
-        // Transfer ALL SOL to migration admin (including rent-exempt)
-        let all_lamports = ctx.accounts.curve.to_account_info().lamports();
-        **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? = 0;
-        **ctx.accounts.migration_admin.to_account_info().try_borrow_mut_lamports()? = ctx
-            .accounts
-            .migration_admin
-            .to_account_info()
-            .lamports()
-            .checked_add(all_lamports)
-            .unwrap();
-
-        // Transfer all tokens from vault to migration admin
-        let transfer_amount = ctx.accounts.token_vault.amount;
-        if transfer_amount > 0 {
-            anchor_spl::token::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
-                    Transfer {
-                        from: ctx.accounts.token_vault.to_account_info(),
-                        to: ctx.accounts.migration_admin_token_account.to_account_info(),
-                        authority: ctx.accounts.curve.to_account_info(),
-                    },
-                    &[&[
-                        b"bonding_curve",
-                        ctx.accounts.mint.key().as_ref(),
-                        &[ctx.bumps.curve],
-                    ]],
-                ),
-                transfer_amount,
-            )?;
-        }
-
-        // Update migration status to halt trading
-        ctx.accounts.curve.config.migration_status = MigrationStatus::Migrated;
-        
-        // Emit migration event before returning
-        emit!(MigrationEvent {
-            mint: ctx.accounts.mint.key(),
-            real_sol_amount: all_lamports,
-            virtual_sol_amount: VIRTUAL_SOL_AMOUNT,
-            token_amount: transfer_amount,
-            effective_price: ctx.accounts.curve.calculate_buy_price(
-                &ctx.accounts.token_vault,
-                1, // Calculate price for 1 token
-                all_lamports
-            )?,
-            developer: ctx.accounts.curve.config.developer,
-            is_subscribed: ctx.accounts.curve.config.is_subscribed
-        });
-        
-        return Ok(());
-    }
-
     // Calculate base price and fee
     let base_price = ctx.accounts.curve.calculate_buy_price(
         &ctx.accounts.token_vault,
@@ -150,7 +93,7 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
         .ok_or(error!(ErrorCode::MathOverflow))?;
     require!(total_cost <= max_sol_cost, ErrorCode::PriceExceedsMaxCost);
 
-    // Transfer SOL to curve (reduced by fee amount)
+    // Transfer SOL to curve first
     let transfer_sol_ix = anchor_lang::system_program::Transfer {
         from: ctx.accounts.buyer.to_account_info(),
         to: ctx.accounts.curve.to_account_info(),
@@ -161,7 +104,7 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
             ctx.accounts.system_program.to_account_info(),
             transfer_sol_ix,
         ),
-        curve_amount,  // Send the amount minus fee to curve
+        curve_amount,
     )?;
 
     // Transfer fee to collector if applicable
@@ -180,7 +123,7 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
         )?;
     }
 
-    // Transfer tokens to buyer
+    // Complete the buy by transferring tokens to buyer FIRST
     anchor_spl::token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -197,6 +140,62 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
         ),
         amount,
     )?;
+
+    // NOW check if we need to migrate with the NEW balance
+    let new_curve_lamports = ctx.accounts.curve.to_account_info().lamports();
+    if new_curve_lamports >= MIGRATION_THRESHOLD 
+        && ctx.accounts.curve.config.migration_status == MigrationStatus::Active 
+    {
+        // Transfer ALL remaining SOL to migration admin (including rent-exempt)
+        let all_lamports = ctx.accounts.curve.to_account_info().lamports();
+        **ctx.accounts.curve.to_account_info().try_borrow_mut_lamports()? = 0;
+        **ctx.accounts.migration_admin.to_account_info().try_borrow_mut_lamports()? = ctx
+            .accounts
+            .migration_admin
+            .to_account_info()
+            .lamports()
+            .checked_add(all_lamports)
+            .unwrap();
+
+        // Transfer all REMAINING tokens from vault to migration admin
+        let remaining_tokens = ctx.accounts.token_vault.amount;
+        if remaining_tokens > 0 {
+            anchor_spl::token::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    Transfer {
+                        from: ctx.accounts.token_vault.to_account_info(),
+                        to: ctx.accounts.migration_admin_token_account.to_account_info(),
+                        authority: ctx.accounts.curve.to_account_info(),
+                    },
+                    &[&[
+                        b"bonding_curve",
+                        ctx.accounts.mint.key().as_ref(),
+                        &[ctx.bumps.curve],
+                    ]],
+                ),
+                remaining_tokens,
+            )?;
+        }
+
+        // Update migration status to halt trading
+        ctx.accounts.curve.config.migration_status = MigrationStatus::Migrated;
+        
+        // Emit migration event
+        emit!(MigrationEvent {
+            mint: ctx.accounts.mint.key(),
+            real_sol_amount: all_lamports,
+            virtual_sol_amount: VIRTUAL_SOL_AMOUNT,
+            token_amount: remaining_tokens,
+            effective_price: ctx.accounts.curve.calculate_buy_price(
+                &ctx.accounts.token_vault,
+                1, // Calculate price for 1 token
+                all_lamports
+            )?,
+            developer: ctx.accounts.curve.config.developer,
+            is_subscribed: ctx.accounts.curve.config.is_subscribed
+        });
+    }
 
     Ok(())
 }
