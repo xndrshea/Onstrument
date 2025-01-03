@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { createTokenParams } from '../../../shared/types/token'
 import { BN } from 'bn.js'
@@ -6,11 +6,16 @@ import { TokenTransactionService } from '../../services/TokenTransactionService'
 import { TokenFormData } from '../../../shared/types/token'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
+import { pinataService } from '../../services/pinataService'
+import { UserService } from '../../services/userService'
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
     onTokenCreated?: () => void
 }
+
+const MAX_SUPPLY = 1_000_000_000_000; // 1 trillion
+const MIN_SUPPLY = 10;
 
 export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFormProps) {
     const { connection } = useConnection()
@@ -19,6 +24,21 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
+    const [supplyError, setSupplyError] = useState<string | null>(null)
+    const [imageFile, setImageFile] = useState<File | null>(null)
+    const [imagePreview, setImagePreview] = useState<string | null>(null)
+    const [uploadingImage, setUploadingImage] = useState(false)
+    const [isSubscribed, setIsSubscribed] = useState(false)
+
+    useEffect(() => {
+        async function checkSubscription() {
+            if (wallet.publicKey) {
+                const user = await UserService.getUser(wallet.publicKey.toString())
+                setIsSubscribed(user?.isSubscribed || false)
+            }
+        }
+        checkSubscription()
+    }, [wallet.publicKey])
 
     const [formData, setFormData] = useState<TokenFormData>({
         name: '',
@@ -29,10 +49,30 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         totalSupply: new BN(0),
         curveConfig: {
             migrationStatus: 'active',
-            isSubscribed: false,
+            isSubscribed: isSubscribed,
             developer: wallet.publicKey?.toString() || ''
         }
     })
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                setError('Please upload an image file')
+                return
+            }
+            // Validate file size (e.g., 5MB limit)
+            if (file.size > 5 * 1024 * 1024) {
+                setError('Image must be less than 5MB')
+                return
+            }
+
+            setImageFile(file)
+            setImagePreview(URL.createObjectURL(file))
+            setError(null)
+        }
+    }
 
     const validateForm = (): boolean => {
         if (!wallet.publicKey) {
@@ -51,6 +91,15 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             setError('Token symbol must be 10 characters or less')
             return false
         }
+        const supply = parseInt(formData.totalSupply.toString()) / (10 ** TOKEN_DECIMALS);
+        if (supply < MIN_SUPPLY) {
+            setError(`Minimum supply is ${MIN_SUPPLY} tokens`)
+            return false
+        }
+        if (supply > MAX_SUPPLY) {
+            setError(`Maximum supply is ${MAX_SUPPLY.toLocaleString()} tokens`)
+            return false
+        }
         return true
     }
 
@@ -61,16 +110,35 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         setIsLoading(true)
         setError(null)
         setSuccess(false)
+        setUploadingImage(true)
 
         try {
+            // Upload image to IPFS if provided
+            let imageUrl = ''
+            if (imageFile) {
+                imageUrl = await pinataService.uploadImage(imageFile)
+            }
+
+            // Create metadata
+            const metadata = {
+                name: formData.name,
+                symbol: formData.symbol,
+                description: formData.description,
+                image: imageUrl,
+                attributes: []
+            }
+
+            // Upload metadata to IPFS
+            const metadataUri = await pinataService.uploadMetadata(metadata)
+
             const params: createTokenParams = {
                 name: formData.name,
                 symbol: formData.symbol,
                 totalSupply: formData.totalSupply,
-                metadataUri: `https://arweave.net/test-metadata`,
+                metadataUri: metadataUri,
                 curveConfig: {
                     migrationStatus: 'active',
-                    isSubscribed: false,
+                    isSubscribed: isSubscribed,
                     developer: wallet.publicKey!.toString()
                 }
             }
@@ -94,6 +162,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             setError(error.message || 'Failed to create token')
         } finally {
             setIsLoading(false)
+            setUploadingImage(false)
         }
     }
 
@@ -112,6 +181,25 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                     <p>Token created successfully!</p>
                 </div>
             )}
+
+            <div className="form-group">
+                <label>Token Image</label>
+                <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="file-input"
+                />
+                {imagePreview && (
+                    <div className="image-preview">
+                        <img
+                            src={imagePreview}
+                            alt="Token preview"
+                            className="w-32 h-32 object-cover rounded-lg mt-2"
+                        />
+                    </div>
+                )}
+            </div>
 
             <div className="form-group">
                 <label>Token Name</label>
@@ -148,18 +236,67 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             <div className="form-group">
                 <label>Total Supply</label>
                 <input
-                    type="number"
-                    onChange={e => setFormData({
-                        ...formData,
-                        totalSupply: new BN(parseInt(e.target.value) * (10 ** TOKEN_DECIMALS))
-                    })}
-                    min="1"
+                    type="text"
+                    onChange={e => {
+                        const rawValue = e.target.value.replace(/[^0-9]/g, '');
+
+                        try {
+                            const numberValue = rawValue ? parseInt(rawValue) : 0;
+                            const actualTokens = numberValue;
+
+                            if (actualTokens < MIN_SUPPLY) {
+                                setSupplyError(`Minimum supply is ${MIN_SUPPLY} tokens`);
+                            } else if (actualTokens > MAX_SUPPLY) {
+                                setSupplyError(`Maximum supply is ${MAX_SUPPLY.toLocaleString()} tokens`);
+                            } else {
+                                setSupplyError(null);
+                            }
+
+                            // Format display value with commas
+                            const formatted = rawValue ? numberValue.toLocaleString('en-US') : '';
+                            e.target.value = formatted;
+
+                            // Handle BN creation
+                            if (rawValue) {
+                                try {
+                                    const decimalMultiplier = '1' + '0'.repeat(TOKEN_DECIMALS);
+                                    const totalAmount = new BN(rawValue).mul(new BN(decimalMultiplier));
+
+                                    setFormData({
+                                        ...formData,
+                                        totalSupply: totalAmount
+                                    });
+                                } catch (bnError) {
+                                    console.error('BN creation error:', bnError);
+                                    setSupplyError('Number too large to process');
+                                }
+                            } else {
+                                setFormData({
+                                    ...formData,
+                                    totalSupply: new BN(0)
+                                });
+                            }
+                        } catch (err) {
+                            console.error('Error processing supply:', err);
+                            setSupplyError('Invalid supply amount');
+                        }
+                    }}
+                    placeholder="Enter total supply"
                     required
                 />
+                {supplyError && (
+                    <div className="error-message">
+                        {supplyError}
+                    </div>
+                )}
             </div>
 
-            <button type="submit" disabled={isLoading}>
-                {isLoading ? 'Creating Token...' : 'Create Token'}
+            <button
+                type="submit"
+                disabled={isLoading || uploadingImage || !!supplyError || !!error}
+                className={`submit-button ${isLoading || uploadingImage ? 'loading' : ''}`}
+            >
+                {isLoading || uploadingImage ? 'Creating Token...' : 'Create Token'}
             </button>
         </form>
     )
