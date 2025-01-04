@@ -87,6 +87,7 @@ export function TokenomicsRoadmap() {
                 <h2 className="text-2xl font-bold mb-6">Development Roadmap</h2>
                 <ul className="list-disc pl-5 space-y-2 text-gray-400">
                     <li>Full Telegram bot integration</li>
+                    <li>Price charts for onstrument tokens currently show execution prices, so charts may be slightly off</li>
                     <li>Points system for tracking your airdrop potential</li>
                     <li>Migration leaderboards, tokens about to graduate</li>
                     <li>Launch and trade tokens from Telegram</li>
