@@ -12,6 +12,7 @@ interface TradeParams {
     slippageTolerance: number;
     wallet: WalletContextState;
     connection: Connection;
+    isSubscribed: boolean;
 }
 
 export const dexService = {
@@ -112,18 +113,22 @@ export const dexService = {
         isSelling,
         slippageTolerance,
         wallet,
-        connection
+        connection,
+        isSubscribed
     }: TradeParams) => {
         try {
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
+
+            const platformFeeBps = isSubscribed ? 0 : 100;
 
             const quoteResponse = await fetch(
                 `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
                 `&amount=${amount}` +
-                `&slippageBps=${Math.floor(slippageTolerance * 10000)}`
+                `&slippageBps=${Math.floor(slippageTolerance * 10000)}` +
+                `&platformFeeBps=${platformFeeBps}`
             ).then(res => res.json());
 
             if (!quoteResponse || quoteResponse.error) {
@@ -137,6 +142,7 @@ export const dexService = {
                     quoteResponse,
                     userPublicKey: wallet.publicKey!.toString(),
                     wrapAndUnwrapSol: true,
+                    feeAccount: platformFeeBps > 0 ? 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L' : undefined,
                     dynamicSlippage: { maxBps: Math.floor(slippageTolerance * 10000) },
                     dynamicComputeUnitLimit: true,
                     prioritizationFeeLamports: 'auto'
