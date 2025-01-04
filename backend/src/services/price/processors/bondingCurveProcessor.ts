@@ -72,26 +72,30 @@ export class BondingCurveProcessor extends BaseProcessor {
         try {
             const parsed = JSON.parse(message.toString());
 
-            logger.info('Raw bonding curve message:', {
-                method: parsed.method,
-                params: parsed.params,
-                logs: parsed.params?.result?.value?.logs
-            });
-
             if (parsed.method === 'logsNotification') {
                 const logs = parsed.params.result.value.logs;
-                const programData = logs.find((log: string) => log.startsWith('Program data:'));
 
-                if (programData) {
-                    const base64Data = programData.split('Program data: ')[1];
-                    const buffer = Buffer.from(base64Data, 'base64');
+                // Get all Program data entries in order
+                const programDataEntries = logs
+                    .filter((log: string) => log.startsWith('Program data:'))
+                    .map((programData: string) => {
+                        const base64Data = programData.split('Program data: ')[1];
+                        return Buffer.from(base64Data, 'base64');
+                    });
+
+                logger.info('Found program data entries:', {
+                    count: programDataEntries.length,
+                    discriminators: programDataEntries.map((buffer: Buffer) =>
+                        buffer.subarray(0, 8).toString('hex')
+                    )
+                });
+
+                // Process each entry in order
+                programDataEntries.forEach((buffer: Buffer, index: number) => {
                     const discriminator = buffer.subarray(0, 8).toString('hex');
 
-                    logger.info('Event discriminator check:', {
-                        received: discriminator,
-                        migration: EVENT_DISCRIMINATORS.MIGRATION,
-                        buy: EVENT_DISCRIMINATORS.BUY,
-                        sell: EVENT_DISCRIMINATORS.SELL,
+                    logger.info(`Processing event ${index + 1}/${programDataEntries.length}:`, {
+                        discriminator,
                         matches: {
                             migration: discriminator === EVENT_DISCRIMINATORS.MIGRATION,
                             buy: discriminator === EVENT_DISCRIMINATORS.BUY,
@@ -112,7 +116,7 @@ export class BondingCurveProcessor extends BaseProcessor {
                         default:
                             logger.warn('Unknown event discriminator:', discriminator);
                     }
-                }
+                });
             }
         } catch (error) {
             logger.error('Error processing bonding curve message:', error);
