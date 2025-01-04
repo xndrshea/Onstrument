@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { TokenRecord } from '../../../shared/types/token';
 import { tokenService } from '../../services/tokenService';
 import { priceClient } from '../../services/priceClient';
+import { TradingViewChart } from '../Trading/TradingViewChart';
 
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
@@ -14,6 +15,41 @@ export function TokenDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isTokenInfoExpanded, setIsTokenInfoExpanded] = useState(false);
+    const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+
+    // Single WebSocket subscription
+    useEffect(() => {
+        if (!token?.mintAddress) return;
+
+        // Fetch initial price
+        priceClient.getLatestPrice(token.mintAddress)
+            .then(price => {
+                if (price !== null) {
+                    console.log('Initial price loaded:', price);
+                    setCurrentPrice(price);
+                }
+            })
+            .catch(error => console.error('Error fetching initial price:', error));
+
+        // Setup WebSocket subscription
+        let cleanup: (() => void) | undefined;
+        const setupSubscription = async () => {
+            cleanup = await priceClient.subscribeToPrice(
+                token.mintAddress,
+                (update) => {
+                    console.log('Price update received:', update);
+                    setCurrentPrice(update.price);
+                },
+                token.tokenType === 'pool' ? 'mainnet' : 'devnet'
+            );
+        };
+
+        setupSubscription();
+
+        return () => {
+            if (cleanup) cleanup();
+        };
+    }, [token?.mintAddress, token?.tokenType]);
 
     useEffect(() => {
         if (!mintAddress) {
@@ -72,7 +108,7 @@ export function TokenDetailsPage() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6">
                     <div className="bg-[#232427] rounded-lg p-4">
-                        <TradingInterface token={token} />
+                        <TradingInterface token={token} currentPrice={currentPrice} />
                     </div>
 
                     <div className="space-y-6">
@@ -82,6 +118,7 @@ export function TokenDetailsPage() {
                                 token={token}
                                 width={window.innerWidth > 1024 ? window.innerWidth - 500 : window.innerWidth - 48}
                                 height={400}
+                                currentPrice={currentPrice || undefined}
                             />
                         </div>
 
@@ -125,6 +162,16 @@ export function TokenDetailsPage() {
                                     </div>
                                 </div>
                             )}
+                        </div>
+
+                        <div className="bg-[#232427] rounded-lg p-4">
+                            <h2 className="text-xl mb-4">Trading View</h2>
+                            <TradingViewChart
+                                token={token}
+                                width={window.innerWidth > 1024 ? window.innerWidth - 500 : window.innerWidth - 48}
+                                height={400}
+                                currentPrice={currentPrice || undefined}
+                            />
                         </div>
                     </div>
                 </div>

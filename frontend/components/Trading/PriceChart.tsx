@@ -16,15 +16,57 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
     const series = useRef<ISeriesApi<"Line"> | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [hasInitialized, setHasInitialized] = useState(false);
     const latestTime = useRef<number>(0);
     const latestValue = useRef<number>(0);
+
+    // Update chart when currentPrice changes
+    useEffect(() => {
+        if (series.current && typeof currentPrice === 'number') {
+            const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
+            console.log('Adding new price point to chart:', { time: now, value: currentPrice });
+            series.current.update({ time: now, value: currentPrice });
+        }
+    }, [currentPrice]);
+
+    // Initialize chart
+    useEffect(() => {
+        if (!chartContainerRef.current || !token?.mintAddress) return;
+
+        chart.current = createChart(chartContainerRef.current, {
+            layout: {
+                background: { color: '#232427' },
+                textColor: 'rgba(255, 255, 255, 0.9)',
+            },
+            width,
+            height,
+            timeScale: {
+                timeVisible: true,
+                secondsVisible: false,
+            },
+            grid: {
+                vertLines: { color: '#2c2c2c' },
+                horzLines: { color: '#2c2c2c' },
+            },
+        });
+
+        series.current = chart.current.addLineSeries({
+            color: '#26a69a',
+            lineWidth: 2,
+        });
+
+        fetchAndUpdatePrices();
+
+        return () => {
+            if (chart.current) {
+                chart.current.remove();
+            }
+        };
+    }, [token?.mintAddress]);
 
     const fetchAndUpdatePrices = async () => {
         try {
             setIsLoading(true);
             const history = await priceClient.getPriceHistory(token.mintAddress);
-            console.log("RAW HISTORY DATA:", history);
 
             if (!history?.length) {
                 setError('No price history available');
@@ -45,15 +87,12 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
                         value: point.value
                     }));
 
-                console.log("FORMATTED DATA:", formattedData);
-
                 if (formattedData.length === 0) {
                     setError('Invalid price data received');
                     return;
                 }
 
                 series.current.setData(formattedData);
-                console.log("DATA SET TO CHART");
             }
         } catch (error) {
             console.error('Price history error:', error);
@@ -62,76 +101,6 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
             setIsLoading(false);
         }
     };
-
-    useEffect(() => {
-        const initChart = async () => {
-            if (!chartContainerRef.current || !token?.mintAddress) {
-                console.log('[Chart Debug] Missing requirements:', {
-                    container: !!chartContainerRef.current,
-                    mintAddress: token?.mintAddress
-                });
-                return;
-            }
-
-            try {
-                if (chart.current) {
-                    chart.current.remove();
-                }
-
-                chart.current = createChart(chartContainerRef.current, {
-                    layout: {
-                        background: { color: '#232427' },
-                        textColor: 'rgba(255, 255, 255, 0.9)',
-                    },
-                    width,
-                    height,
-                    timeScale: {
-                        timeVisible: true,
-                        secondsVisible: false,
-                    },
-                    grid: {
-                        vertLines: { color: '#2c2c2c' },
-                        horzLines: { color: '#2c2c2c' },
-                    },
-                });
-
-                series.current = chart.current.addLineSeries({
-                    color: '#26a69a',
-                    lineWidth: 2,
-                });
-
-                await fetchAndUpdatePrices();
-                setHasInitialized(true);
-            } catch (err) {
-                console.error('[Chart Debug] Error:', err);
-                setError('Failed to initialize chart');
-            }
-        };
-
-        initChart();
-    }, [token?.mintAddress]);
-
-    useEffect(() => {
-        if (!series.current || !token.mintAddress) return;
-
-        const unsubscribe = priceClient.subscribeToPrice(token.mintAddress, (price) => {
-            if (!series.current) return;
-
-            const now = Math.floor(Date.now() / 1000);
-
-            if (now > latestTime.current) {
-                latestTime.current = now;
-                latestValue.current = price;
-
-                series.current.update({
-                    time: now as UTCTimestamp,
-                    value: price
-                });
-            }
-        });
-
-        return () => unsubscribe();
-    }, [token.mintAddress, series.current]);
 
     return (
         <div className="relative">

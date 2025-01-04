@@ -5,9 +5,10 @@ interface PriceChartProps {
     token: TokenRecord;
     width?: number;
     height?: number;
+    currentPrice?: number;
 }
 
-export function TradingViewChart({ token, width = 600, height = 300 }: PriceChartProps) {
+export function TradingViewChart({ token, width = 600, height = 300, currentPrice }: PriceChartProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {

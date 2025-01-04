@@ -9,4 +9,22 @@ pub struct MigrationEvent {
     pub effective_price: u64,
     pub developer: Pubkey,
     pub is_subscribed: bool,
+}
+
+#[event]
+pub struct BuyEvent {
+    pub mint: Pubkey,
+    pub amount: u64,
+    pub sol_amount: u64,
+    pub buyer: Pubkey,
+    pub is_subscribed: bool,
+}
+
+#[event]
+pub struct SellEvent {
+    pub mint: Pubkey,
+    pub amount: u64,
+    pub sol_amount: u64,
+    pub seller: Pubkey,
+    pub is_subscribed: bool,
 } 

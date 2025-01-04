@@ -141,6 +141,15 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
         amount,
     )?;
 
+    // Add after successful token transfer but before migration check
+    emit!(BuyEvent {
+        mint: ctx.accounts.mint.key(),
+        amount,
+        sol_amount: curve_amount,
+        buyer: ctx.accounts.buyer.key(),
+        is_subscribed
+    });
+
     // NOW check if we need to migrate with the NEW balance
     let new_curve_lamports = ctx.accounts.curve.to_account_info().lamports();
     if new_curve_lamports >= MIGRATION_THRESHOLD {

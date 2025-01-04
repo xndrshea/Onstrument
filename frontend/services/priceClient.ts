@@ -1,116 +1,192 @@
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, MAINNET_API_BASE_URL } from '../config';
+import { WebSocketMessage } from '../../shared/types/websocket';
 
 class WebSocketClient {
-    private static instance: WebSocketClient | null = null;
-    private ws: WebSocket | null = null;
+    private static instance: WebSocketClient;
+    private wsDevnet: WebSocket | null = null;
+    private wsMainnet: WebSocket | null = null;
+    private subscribers: Map<string, Set<(update: { price: number; time: number }) => void>> = new Map();
+    private tokenNetworks: Map<string, 'mainnet' | 'devnet'> = new Map();
     private reconnectAttempts = 0;
-    private maxReconnectAttempts = 5;
-    private subscribers = new Map<string, Set<(price: number) => void>>();
+    private readonly maxReconnectAttempts = 5;
+    private readonly wsDevnetUrl = `${API_BASE_URL.replace('http', 'ws')}/ws`;
+    private readonly wsMainnetUrl = `${MAINNET_API_BASE_URL.replace('http', 'ws')}/ws`;
+    private connectionPromises: {
+        devnet: Promise<void> | null;
+        mainnet: Promise<void> | null;
+    } = { devnet: null, mainnet: null };
 
-    private constructor() { }
+    private constructor() {
+        // Private constructor for singleton
+    }
 
     static getInstance(): WebSocketClient {
-        if (!this.instance) {
-            this.instance = new WebSocketClient();
+        if (!WebSocketClient.instance) {
+            WebSocketClient.instance = new WebSocketClient();
         }
-        return this.instance;
+        return WebSocketClient.instance;
     }
 
-    private getWebSocketUrl(): string {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = process.env.NODE_ENV === 'production'
-            ? window.location.host
-            : `${window.location.hostname}:3001`;
-        return `${protocol}//${host}/ws`;
+    private getWebSocketForNetwork(network: 'mainnet' | 'devnet'): WebSocket | null {
+        return network === 'mainnet' ? this.wsMainnet : this.wsDevnet;
     }
 
-    private connect(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            try {
-                this.ws = new WebSocket(this.getWebSocketUrl());
-
-                this.ws.onopen = () => {
-                    console.log('WebSocket connected');
-                    this.reconnectAttempts = 0;
-                    this.resubscribeAll();
-                    resolve();
-                };
-
-                this.ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'price' && data.mintAddress) {
-                            const callbacks = this.subscribers.get(data.mintAddress);
-                            callbacks?.forEach(callback => callback(data.data.price));
-                        }
-                    } catch (error) {
-                        console.error('Error processing WebSocket message:', error);
-                    }
-                };
-
-                this.ws.onclose = () => {
-                    this.handleDisconnect();
-                };
-
-                this.ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    reject(error);
-                };
-
-            } catch (error) {
-                console.error('WebSocket connection error:', error);
-                reject(error);
-            }
-        });
+    private getWebSocketForMint(mintAddress: string): WebSocket | null {
+        const network = this.tokenNetworks.get(mintAddress);
+        if (!network) {
+            console.error('No network found for mintAddress:', mintAddress);
+            return null;
+        }
+        return this.getWebSocketForNetwork(network);
     }
 
-    private async handleDisconnect() {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached');
+    private async ensureConnected(network: 'mainnet' | 'devnet' = 'devnet'): Promise<void> {
+        const ws = this.getWebSocketForNetwork(network);
+        if (ws?.readyState === WebSocket.OPEN) {
             return;
         }
 
-        this.reconnectAttempts++;
-        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+        if (!this.connectionPromises[network]) {
+            this.connectionPromises[network] = new Promise((resolve, reject) => {
+                try {
+                    const wsUrl = network === 'devnet' ? this.wsDevnetUrl : this.wsMainnetUrl;
+                    const newWs = new WebSocket(wsUrl);
 
-        console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
-        setTimeout(() => this.connect(), delay);
+                    // Assign the WebSocket instance immediately
+                    if (network === 'mainnet') {
+                        this.wsMainnet = newWs;
+                    } else {
+                        this.wsDevnet = newWs;
+                    }
+
+                    newWs.onopen = () => {
+                        console.log(`WebSocket connected to ${network} network`);
+                        this.reconnectAttempts = 0;
+                        this.resubscribeAll();
+                        resolve();
+                        this.connectionPromises[network] = null;
+                    };
+
+                    // Rest of the WebSocket setup remains the same
+                    newWs.onclose = () => {
+                        console.log(`WebSocket disconnected from ${network} network`);
+                        if (network === 'mainnet') {
+                            this.wsMainnet = null;
+                        } else {
+                            this.wsDevnet = null;
+                        }
+                        this.handleDisconnect(network);
+                    };
+
+                    newWs.onerror = (error) => {
+                        console.error(`WebSocket error on ${network} network:`, error);
+                        reject(error);
+                    };
+
+                    newWs.onmessage = this.handleMessage.bind(this);
+                } catch (error) {
+                    console.error(`Error connecting to WebSocket on ${network} network:`, error);
+                    reject(error);
+                }
+            });
+        }
+
+        return this.connectionPromises[network];
+    }
+
+    private handleMessage(event: MessageEvent) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('Raw WebSocket message:', data);
+
+            if (data.type === 'price' && data.mintAddress && typeof data.price === 'number') {
+                console.log('Valid price update received:', data);
+                const callbacks = this.subscribers.get(data.mintAddress);
+                if (callbacks) {
+                    const priceUpdate = {
+                        price: data.price,
+                        time: Math.floor(Date.now() / 1000)
+                    };
+                    callbacks.forEach(callback => callback(priceUpdate));
+                } else {
+                    console.warn('No callbacks found for mintAddress:', data.mintAddress);
+                }
+            }
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error, 'Raw data:', event.data);
+        }
     }
 
     private resubscribeAll() {
-        for (const mintAddress of this.subscribers.keys()) {
+        for (const [mintAddress] of this.subscribers) {
             this.sendSubscription(mintAddress);
         }
     }
 
     private sendSubscription(mintAddress: string) {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({
+        const ws = this.getWebSocketForMint(mintAddress);
+        console.log('Sending subscription for:', mintAddress, 'WebSocket state:', ws?.readyState);
+
+        if (ws?.readyState === WebSocket.OPEN) {
+            const subscribeMsg = {
                 type: 'subscribe',
                 mintAddress,
                 channel: 'price'
-            }));
+            };
+            console.log('Sending subscribe message:', subscribeMsg);
+            ws.send(JSON.stringify(subscribeMsg));
+        } else {
+            console.error('WebSocket not ready. State:', ws?.readyState);
         }
     }
 
-    subscribeToPrice(mintAddress: string, callback: (price: number) => void): () => void {
+    private handleDisconnect(network: 'mainnet' | 'devnet' = 'devnet') {
+        if (network === 'mainnet') {
+            this.wsMainnet = null;
+        } else {
+            this.wsDevnet = null;
+        }
+        this.connectionPromises[network] = null;
+
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+            setTimeout(() => this.ensureConnected(network), delay);
+        }
+    }
+
+    async subscribeToPrice(
+        mintAddress: string,
+        callback: (update: { price: number; time: number }) => void,
+        network: 'mainnet' | 'devnet' = 'devnet'
+    ): Promise<() => void> {
+        this.tokenNetworks.set(mintAddress, network);
         if (!this.subscribers.has(mintAddress)) {
             this.subscribers.set(mintAddress, new Set());
         }
 
-        this.subscribers.get(mintAddress)?.add(callback);
+        const callbacks = this.subscribers.get(mintAddress)!;
+        callbacks.add(callback);
 
-        if (this.ws?.readyState !== WebSocket.OPEN) {
-            this.connect();
-        } else {
-            this.sendSubscription(mintAddress);
-        }
+        await this.ensureConnected(network);
+        this.sendSubscription(mintAddress);
 
         return () => {
             const callbacks = this.subscribers.get(mintAddress);
-            callbacks?.delete(callback);
-            if (callbacks?.size === 0) {
-                this.subscribers.delete(mintAddress);
+            if (callbacks) {
+                callbacks.delete(callback);
+                if (callbacks.size === 0) {
+                    this.subscribers.delete(mintAddress);
+                    this.tokenNetworks.delete(mintAddress);
+                    const ws = network === 'devnet' ? this.wsDevnet : this.wsMainnet;
+                    if (ws?.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'unsubscribe',
+                            mintAddress,
+                            channel: 'price'
+                        }));
+                    }
+                }
             }
         };
     }
@@ -163,8 +239,12 @@ export const priceClient = {
         }
     },
 
-    subscribeToPrice: (mintAddress: string, callback: (price: number) => void): () => void => {
-        const wsClient = WebSocketClient.getInstance();
-        return wsClient.subscribeToPrice(mintAddress, callback);
+    async subscribeToPrice(
+        mintAddress: string,
+        callback: (update: { price: number; time: number }) => void,
+        network: 'mainnet' | 'devnet' = 'devnet'
+    ): Promise<() => void> {
+        console.log(`Setting up WebSocket subscription for ${mintAddress} on ${network}`);
+        return await this.wsClient.subscribeToPrice(mintAddress, callback, network);
     }
 };

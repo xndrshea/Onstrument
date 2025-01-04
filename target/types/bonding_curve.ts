@@ -544,6 +544,19 @@ export type BondingCurve = {
   ],
   "events": [
     {
+      "name": "buyEvent",
+      "discriminator": [
+        103,
+        244,
+        82,
+        31,
+        44,
+        245,
+        119,
+        119
+      ]
+    },
+    {
       "name": "migrationEvent",
       "discriminator": [
         255,
@@ -554,6 +567,19 @@ export type BondingCurve = {
         231,
         73,
         22
+      ]
+    },
+    {
+      "name": "sellEvent",
+      "discriminator": [
+        62,
+        47,
+        55,
+        10,
+        165,
+        3,
+        220,
+        42
       ]
     }
   ],
@@ -670,6 +696,34 @@ export type BondingCurve = {
       }
     },
     {
+      "name": "buyEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "solAmount",
+            "type": "u64"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "isSubscribed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
       "name": "createMetadataParams",
       "type": {
         "kind": "struct",
@@ -779,6 +833,34 @@ export type BondingCurve = {
           },
           {
             "name": "migrated"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sellEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "solAmount",
+            "type": "u64"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "isSubscribed",
+            "type": "bool"
           }
         ]
       }
