@@ -263,7 +263,8 @@ export class BondingCurve {
                 isSelling: false,
                 slippageTolerance: params.slippageTolerance,
                 wallet: this.wallet!,
-                connection: this.connection
+                connection: this.connection,
+                isSubscribed: params.isSubscribed
             });
         }
 
@@ -352,7 +353,8 @@ export class BondingCurve {
                 isSelling: true,
                 slippageTolerance: 0.01, // 1% default slippage
                 wallet: this.wallet!,
-                connection: this.connection
+                connection: this.connection,
+                isSubscribed: params.isSubscribed
             });
         }
 

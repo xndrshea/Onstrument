@@ -226,7 +226,8 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                     isSelling,
                     slippageTolerance,
                     wallet,
-                    connection: appropriateConnection
+                    connection: appropriateConnection,
+                    isSubscribed: isUserSubscribed
                 })
             } else if (bondingCurve && priceInfo) {
                 if (isSelling) {
