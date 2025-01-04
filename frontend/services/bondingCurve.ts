@@ -257,7 +257,6 @@ export class BondingCurve {
 
         // Check if migrated to Raydium
         if (await this.shouldUseRaydium()) {
-            // Use dexService to execute trade
             return await dexService.executeTrade({
                 mintAddress: this.mintAddress.toString(),
                 amount: BN.isBN(params.amount) ? params.amount : new BN(params.amount),
@@ -268,66 +267,73 @@ export class BondingCurve {
             });
         }
 
-        if (!this.curveAddress) throw new Error('Curve address is required');
+        const buyerTokenAccount = await getAssociatedTokenAddress(
+            this.mintAddress,
+            this.wallet!.publicKey!
+        );
 
-        // Convert amount to raw token units (considering TOKEN_DECIMALS)
+        // Build instructions array
+        const instructions: TransactionInstruction[] = [];
+
+        // Check if ATA exists
+        const ataInfo = await this.connection.getAccountInfo(buyerTokenAccount);
+        if (!ataInfo) {
+            instructions.push(
+                createAssociatedTokenAccountInstruction(
+                    this.wallet!.publicKey!,  // payer
+                    buyerTokenAccount,        // ata
+                    this.wallet!.publicKey!,  // owner
+                    this.mintAddress          // mint
+                )
+            );
+        }
+
+        // Convert amount to raw token units
         const rawAmount = BN.isBN(params.amount)
             ? params.amount
             : new BN(Math.floor(params.amount * TOKEN_DECIMAL_MULTIPLIER));
 
-        // Get price quote first
+        // Get price quote and validate
         const priceQuote = await this.getPriceQuote(
             Number(rawAmount) / TOKEN_DECIMAL_MULTIPLIER,
             true
         );
-
-        // Use the actual price from the quote for maxSolCost
-        const rawMaxSolCost = new BN(Math.ceil(priceQuote.totalCost * 1.01)); // 1% slippage
-
-        // Validate inputs
+        const rawMaxSolCost = new BN(Math.ceil(priceQuote.totalCost * 1.01));
         if (rawAmount.lten(0)) {
             throw new Error('Amount must be greater than 0');
         }
-
-        // Get buyer's token account
-        const buyerTokenAccount = await this.ensureTokenAccount();
 
         const [tokenVault] = PublicKey.findProgramAddressSync(
             [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
             this.program.programId
         );
 
-        try {
-
-            const tx = await this.program.methods
-                .buy(
-                    rawAmount,
-                    rawMaxSolCost,
-                    params.isSubscribed
+        // Add buy instruction
+        const buyIx = await this.program.methods
+            .buy(rawAmount, rawMaxSolCost, params.isSubscribed)
+            .accounts({
+                buyer: this.wallet!.publicKey!,
+                mint: this.mintAddress,
+                buyerTokenAccount,
+                // @ts-ignore - Anchor types mismatch
+                curve: this.curveAddress,
+                tokenVault: tokenVault,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+                rent: SYSVAR_RENT_PUBKEY,  // Added rent sysvar
+                feeCollector: new PublicKey('E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L'),
+                migrationAdmin: new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu'),
+                migrationAdminTokenAccount: await getAssociatedTokenAddress(
+                    this.mintAddress!,
+                    new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu')
                 )
-                .accounts({
-                    buyer: this.wallet!.publicKey!,
-                    mint: this.mintAddress,
-                    buyerTokenAccount,
-                    // @ts-ignore - Anchor types mismatch
-                    curve: this.curveAddress,
-                    tokenVault: tokenVault,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    systemProgram: SystemProgram.programId,
-                    feeCollector: new PublicKey('E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L'),
-                    migrationAdmin: new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu'),
-                    migrationAdminTokenAccount: await getAssociatedTokenAddress(
-                        this.mintAddress!,
-                        new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu')
-                    )
-                })
-                .rpc();
+            })
+            .instruction();
 
-            console.log('Buy transaction successful:', tx);
-            return tx;
-        } catch (error: any) {
-            throw error;
-        }
+        instructions.push(buyIx);
+
+        // Send as single transaction
+        return await this.buildAndSendTransaction(instructions, []);
     }
 
     async sell(params: {
