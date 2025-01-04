@@ -88,6 +88,7 @@ export function TokenomicsRoadmap() {
                 <ul className="list-disc pl-5 space-y-2 text-gray-400">
                     <li>Full Telegram bot integration</li>
                     <li>Points system for tracking your airdrop potential</li>
+                    <li>Migration leaderboards, tokens about to graduate</li>
                     <li>Launch and trade tokens from Telegram</li>
                     <li>Price backfilling for all tokens</li>
                     <li>Full Ethereum expansion</li>
