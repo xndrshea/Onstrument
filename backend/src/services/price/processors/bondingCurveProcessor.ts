@@ -171,22 +171,16 @@ export class BondingCurveProcessor extends BaseProcessor {
             const buyer = new PublicKey(buffer.subarray(56, 88));
             const isSubscribed = buffer.readUInt8(88) === 1;
 
-            logger.info('Decoded BuyEvent:', {
-                mint: mint.toString(),
-                amount,
-                solAmount,
-                buyer: buyer.toString(),
-                isSubscribed
-            });
-
-            // Simple spot price calculation: SOL/token
-            const price = solAmount / amount;
+            // Convert lamports to SOL and tokens to proper decimals
+            const solInSol = solAmount / LAMPORTS_PER_SOL;
+            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
+            const price = solInSol / tokenAmount;
 
             // Record the price
             PriceHistoryModel.recordPrice({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER,
+                volume: tokenAmount,
                 timestamp: new Date()
             }).catch(error => {
                 logger.error('Error recording buy price:', error);
@@ -195,7 +189,7 @@ export class BondingCurveProcessor extends BaseProcessor {
             this.emitPriceUpdate({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER
+                volume: tokenAmount
             });
 
         } catch (error) {
@@ -222,13 +216,14 @@ export class BondingCurveProcessor extends BaseProcessor {
 
             // Calculate effective price including virtual SOL
             const effectiveSolAmount = solAmount + VIRTUAL_SOL_AMOUNT;
-            const price = effectiveSolAmount / LAMPORTS_PER_SOL / (amount / TOKEN_DECIMAL_MULTIPLIER);
+            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
+            const price = (effectiveSolAmount / LAMPORTS_PER_SOL) / tokenAmount;
 
             // Record the price
             PriceHistoryModel.recordPrice({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER,
+                volume: tokenAmount,
                 timestamp: new Date()
             }).catch(error => {
                 logger.error('Error recording sell price:', error);
@@ -238,7 +233,7 @@ export class BondingCurveProcessor extends BaseProcessor {
             this.emitPriceUpdate({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER
+                volume: tokenAmount
             });
 
         } catch (error) {
