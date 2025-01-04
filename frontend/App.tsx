@@ -5,7 +5,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { TokenCreationForm } from './components/TokenCreation/TokenCreationForm'
 import { TokenList } from './components/TokenList/TokenList'
 import { Modal } from './components/Modal/Modal'
-import Roadmap from './components/Roadmap/Roadmap'
+import TokenomicsRoadmap from './components/TokenomicsRoadmap/TokenomicsRoadmap'
 import { Footer } from './components/Footer/Footer'
 import { TokenDetailsPage } from './components/pages/TokenDetailsPage'
 import { MarketPage } from './components/pages/MarketPage'
@@ -63,7 +63,7 @@ function App() {
                         } />
                         <Route path="/market" element={<MarketPage />} />
                         <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
-                        <Route path="/roadmap" element={<Roadmap />} />
+                        <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
                     </Routes>
                 </main>
 
