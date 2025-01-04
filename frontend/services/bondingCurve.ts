@@ -251,6 +251,7 @@ export class BondingCurve {
         amount: InstanceType<typeof BN> | number;
         maxSolCost: InstanceType<typeof BN> | number;
         isSubscribed: boolean;
+        slippageTolerance: number;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
@@ -261,7 +262,7 @@ export class BondingCurve {
                 mintAddress: this.mintAddress.toString(),
                 amount: BN.isBN(params.amount) ? params.amount : new BN(params.amount),
                 isSelling: false,
-                slippageTolerance: 0.01, // 1% default slippage
+                slippageTolerance: params.slippageTolerance,
                 wallet: this.wallet!,
                 connection: this.connection
             });

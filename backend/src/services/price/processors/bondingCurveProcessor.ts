@@ -7,12 +7,18 @@ import { MigrationService } from '../../migration/migrationService';
 import { BN } from '@project-serum/anchor';
 import { createHash } from 'crypto';
 import WebSocket from 'ws';
+import { WebSocketClient } from '../websocket/types';
 
-// Event discriminators (use full 8 bytes)
+const TOKEN_DECIMALS = 6;
+const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
+const VIRTUAL_SOL_AMOUNT = 30 * LAMPORTS_PER_SOL; // 30 SOL in lamports
+
+// Event discriminators
 const EVENT_DISCRIMINATORS = {
     MIGRATION: createHash('sha256').update('event:MigrationEvent').digest('hex').slice(0, 16),
-    // Add more event types here as needed
-} as const;
+    BUY: createHash('sha256').update('event:BuyEvent').digest('hex').slice(0, 16),
+    SELL: createHash('sha256').update('event:SellEvent').digest('hex').slice(0, 16),
+};
 
 export class BondingCurveProcessor extends BaseProcessor {
     private connection: Connection;
@@ -66,6 +72,12 @@ export class BondingCurveProcessor extends BaseProcessor {
         try {
             const parsed = JSON.parse(message.toString());
 
+            logger.info('Raw bonding curve message:', {
+                method: parsed.method,
+                params: parsed.params,
+                logs: parsed.params?.result?.value?.logs
+            });
+
             if (parsed.method === 'logsNotification') {
                 const logs = parsed.params.result.value.logs;
                 const programData = logs.find((log: string) => log.startsWith('Program data:'));
@@ -73,16 +85,29 @@ export class BondingCurveProcessor extends BaseProcessor {
                 if (programData) {
                     const base64Data = programData.split('Program data: ')[1];
                     const buffer = Buffer.from(base64Data, 'base64');
-
-                    // Get event discriminator (first 8 bytes = 16 hex chars)
                     const discriminator = buffer.subarray(0, 8).toString('hex');
-                    console.log('Raw discriminator:', discriminator);
-                    console.log('Expected discriminator:', EVENT_DISCRIMINATORS.MIGRATION);
-                    console.log('Full buffer (hex):', buffer.toString('hex'));
+
+                    logger.info('Event discriminator check:', {
+                        received: discriminator,
+                        migration: EVENT_DISCRIMINATORS.MIGRATION,
+                        buy: EVENT_DISCRIMINATORS.BUY,
+                        sell: EVENT_DISCRIMINATORS.SELL,
+                        matches: {
+                            migration: discriminator === EVENT_DISCRIMINATORS.MIGRATION,
+                            buy: discriminator === EVENT_DISCRIMINATORS.BUY,
+                            sell: discriminator === EVENT_DISCRIMINATORS.SELL
+                        }
+                    });
 
                     switch (discriminator) {
                         case EVENT_DISCRIMINATORS.MIGRATION:
                             this.handleMigrationEvent(buffer);
+                            break;
+                        case EVENT_DISCRIMINATORS.BUY:
+                            this.handleBuyEvent(buffer);
+                            break;
+                        case EVENT_DISCRIMINATORS.SELL:
+                            this.handleSellEvent(buffer);
                             break;
                         default:
                             logger.warn('Unknown event discriminator:', discriminator);
@@ -133,10 +158,120 @@ export class BondingCurveProcessor extends BaseProcessor {
         }
     }
 
+    private handleBuyEvent(buffer: Buffer) {
+        try {
+            // Skip 8-byte discriminator
+            const mint = new PublicKey(buffer.subarray(8, 40));
+            const amount = Number(buffer.readBigUInt64LE(40));
+            const solAmount = Number(buffer.readBigUInt64LE(48));
+            const buyer = new PublicKey(buffer.subarray(56, 88));
+            const isSubscribed = buffer.readUInt8(88) === 1;
+
+            logger.info('Decoded BuyEvent:', {
+                mint: mint.toString(),
+                amount,
+                solAmount,
+                buyer: buyer.toString(),
+                isSubscribed
+            });
+
+            // Calculate effective price including virtual SOL
+            const effectiveSolAmount = solAmount + VIRTUAL_SOL_AMOUNT;
+            const price = effectiveSolAmount / LAMPORTS_PER_SOL / (amount / TOKEN_DECIMAL_MULTIPLIER);
+
+            // Record the price
+            PriceHistoryModel.recordPrice({
+                mintAddress: mint.toString(),
+                price,
+                volume: amount / TOKEN_DECIMAL_MULTIPLIER,
+                timestamp: new Date()
+            }).catch(error => {
+                logger.error('Error recording buy price:', error);
+            });
+
+            // Emit price update for real-time subscribers
+            this.emitPriceUpdate({
+                mintAddress: mint.toString(),
+                price,
+                volume: amount / TOKEN_DECIMAL_MULTIPLIER
+            });
+
+        } catch (error) {
+            logger.error('Error handling buy event:', error);
+        }
+    }
+
+    private handleSellEvent(buffer: Buffer) {
+        try {
+            // Skip 8-byte discriminator
+            const mint = new PublicKey(buffer.subarray(8, 40));
+            const amount = Number(buffer.readBigUInt64LE(40));
+            const solAmount = Number(buffer.readBigUInt64LE(48));
+            const seller = new PublicKey(buffer.subarray(56, 88));
+            const isSubscribed = buffer.readUInt8(88) === 1;
+
+            logger.info('Decoded SellEvent:', {
+                mint: mint.toString(),
+                amount,
+                solAmount,
+                seller: seller.toString(),
+                isSubscribed
+            });
+
+            // Calculate effective price including virtual SOL
+            const effectiveSolAmount = solAmount + VIRTUAL_SOL_AMOUNT;
+            const price = effectiveSolAmount / LAMPORTS_PER_SOL / (amount / TOKEN_DECIMAL_MULTIPLIER);
+
+            // Record the price
+            PriceHistoryModel.recordPrice({
+                mintAddress: mint.toString(),
+                price,
+                volume: amount / TOKEN_DECIMAL_MULTIPLIER,
+                timestamp: new Date()
+            }).catch(error => {
+                logger.error('Error recording sell price:', error);
+            });
+
+            // Emit price update for real-time subscribers
+            this.emitPriceUpdate({
+                mintAddress: mint.toString(),
+                price,
+                volume: amount / TOKEN_DECIMAL_MULTIPLIER
+            });
+
+        } catch (error) {
+            logger.error('Error handling sell event:', error);
+        }
+    }
+
     public processEvent(data: Buffer, accountKey: string, programId: string): void {
         // This method is called by HeliusManager but we're using WebSocket now
         // We can leave it empty or log for debugging
         logger.debug('Received event through HeliusManager (ignored):', { accountKey, programId });
+    }
+
+    protected async emitPriceUpdate(update: {
+        mintAddress: string;
+        price: number;
+        volume?: number;
+    }) {
+        this.emit('priceUpdate', update);
+
+        // Get the WebSocket server instance and broadcast to subscribed clients
+        const wss = global.wss; // We'll need to expose this from index.ts
+        if (wss) {
+            wss.clients.forEach((client: WebSocketClient) => {
+                if (client.readyState === WebSocket.OPEN &&
+                    client.subscriptions?.has(update.mintAddress)) {
+                    client.send(JSON.stringify({
+                        type: 'price',
+                        mintAddress: update.mintAddress,
+                        price: update.price,
+                        timestamp: Date.now()
+                    }));
+                }
+            });
+        }
     }
 
 }

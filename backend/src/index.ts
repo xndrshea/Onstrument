@@ -19,7 +19,7 @@ async function startServer() {
         // Initialize WebSocket server with proper CORS
         const wss = new WebSocket.Server({
             server,
-            path: '/ws',
+            path: '/api/ws',
             verifyClient: (info, cb) => {
                 const origin = info.origin || info.req.headers.origin
                 const allowedOrigins = [
@@ -37,14 +37,27 @@ async function startServer() {
             }
         })
 
+        global.wss = wss;
+
         // WebSocket connection handling
         wss.on('connection', (ws, req) => {
-            logger.info(`New WebSocket connection from ${req.socket.remoteAddress}`)
+
+
+            // Add subscriptions tracking to the ws instance
+            (ws as any).subscriptions = new Set<string>();
 
             ws.on('message', (message) => {
                 try {
                     const data = JSON.parse(message.toString())
                     logger.info('Received WebSocket message:', data)
+
+                    if (data.type === 'subscribe' && data.mintAddress) {
+                        (ws as any).subscriptions.add(data.mintAddress);
+                        logger.info(`Client subscribed to ${data.mintAddress}`);
+                    } else if (data.type === 'unsubscribe' && data.mintAddress) {
+                        (ws as any).subscriptions.delete(data.mintAddress);
+                        logger.info(`Client unsubscribed from ${data.mintAddress}`);
+                    }
                 } catch (error) {
                     logger.error('Error parsing WebSocket message:', error)
                 }
@@ -53,6 +66,11 @@ async function startServer() {
             ws.on('error', (error) => {
                 logger.error('WebSocket client error:', error)
             })
+
+            ws.on('close', () => {
+                logger.info('Client disconnected, cleaning up subscriptions');
+                (ws as any).subscriptions.clear();
+            });
         })
 
         // Initialize HeliusManager

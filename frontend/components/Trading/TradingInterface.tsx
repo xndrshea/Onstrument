@@ -14,6 +14,7 @@ import { UserService } from '../../services/userService'
 
 interface TradingInterfaceProps {
     token: TokenRecord
+    currentPrice: number | null
     onPriceUpdate?: (price: number) => void
 }
 
@@ -48,7 +49,7 @@ const formatSmallNumber = (num: number): JSX.Element | string => {
     return `${num.toFixed(8)} SOL`;
 };
 
-export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps) {
+export function TradingInterface({ token, currentPrice, onPriceUpdate }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
     const { publicKey, connected } = wallet
@@ -62,7 +63,6 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     const [userBalance, setUserBalance] = useState<bigint>(BigInt(0))
     const [priceInfo, setPriceInfo] = useState<{ price: number; totalCost: number } | null>(null)
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05)
-    const [spotPrice, setSpotPrice] = useState<number | null>(null)
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
     const [isUserSubscribed, setIsUserSubscribed] = useState(false)
 
@@ -244,7 +244,8 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                     await bondingCurve.buy({
                         amount: parsedAmount,
                         maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
-                        isSubscribed: isUserSubscribed
+                        isSubscribed: isUserSubscribed,
+                        slippageTolerance
                     })
                 }
             }
@@ -260,37 +261,14 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
     }
 
     useEffect(() => {
-        console.log("Token type:", token.tokenType);
-        console.log("isDexToken:", token.tokenType === 'pool');
-        console.log("isTokenTradable:", isTokenTradable);
-        console.log("Token actual decimals:", token.decimals);
     }, [token.tokenType, token.tokenType === 'pool', isTokenTradable, token.decimals]);
 
+    // Update price display to use currentPrice prop
     useEffect(() => {
-        if (!token.mintAddress) return;
-
-        // Subscribe to real-time price updates
-        const unsubscribe = priceClient.subscribeToPrice(token.mintAddress, (price) => {
-            setSpotPrice(price);
-            onPriceUpdate?.(price);
-        });
-
-        // Initial price fetch from database
-        priceClient.getLatestPrice(token.mintAddress)
-            .then(price => {
-                if (price) {
-                    setSpotPrice(price);
-                    onPriceUpdate?.(price);
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching initial price:', error);
-            });
-
-        return () => {
-            unsubscribe();
-        };
-    }, [token.mintAddress]);
+        if (currentPrice !== null) {
+            onPriceUpdate?.(currentPrice);
+        }
+    }, [currentPrice, onPriceUpdate]);
 
     useEffect(() => {
         async function checkSubscription() {
@@ -333,8 +311,8 @@ export function TradingInterface({ token, onPriceUpdate }: TradingInterfaceProps
                         <div className="flex justify-between">
                             <span className="text-sm text-gray-700">Current Token Price</span>
                             <span className="font-medium text-gray-900">
-                                {spotPrice !== null
-                                    ? formatSmallNumber(spotPrice)
+                                {currentPrice !== null
+                                    ? formatSmallNumber(currentPrice)
                                     : 'Loading...'}
                             </span>
                         </div>

@@ -2,6 +2,8 @@ import {
     Connection,
     PublicKey,
     Keypair,
+    Transaction,
+    sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Raydium } from '@raydium-io/raydium-sdk-v2';
@@ -12,6 +14,7 @@ import {
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import fs from 'fs';
+import { createBurnCheckedInstruction } from '@solana/spl-token';
 
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -139,14 +142,6 @@ export class MigrationService {
             Uint8Array.from(JSON.parse(rawKey.toString()))
         );
 
-        // Log some debug info
-        console.log('Initializing SDK with admin wallet:', {
-            publicKey: adminKeypair.publicKey.toString(),
-            hasSecretKey: !!adminKeypair.secretKey,
-            balance:
-                (await this.connection.getBalance(adminKeypair.publicKey)) / 1e9 + ' SOL'
-        });
-
         // Load the Raydium SDK (devnet)
         return Raydium.load({
             connection: this.connection,
@@ -163,9 +158,6 @@ export class MigrationService {
         };
     }): Promise<PublicKey> {
         const sdk = await this.initSdk();
-
-        console.log('Available CPMM methods:', Object.getOwnPropertyNames(sdk.cpmm));
-
         const feeConfigs = await sdk.api.getCpmmConfigs();
         if (sdk.cluster === 'devnet') {
             feeConfigs.forEach((config) => {
@@ -185,15 +177,6 @@ export class MigrationService {
         //    we just do a floor to ensure an integer BN.
         const mintAAmount = new BN(Math.floor(params.initialLiquidity.tokenAmount));
         const mintBAmount = new BN(Math.floor(params.initialLiquidity.solAmount));
-
-        logger.info('Creating Raydium pool with amounts:', {
-            tokenAmount: params.initialLiquidity.tokenAmount,
-            solAmount: params.initialLiquidity.solAmount,
-            mintAAmountRaw: mintAAmount.toString(),
-            mintBAmountRaw: mintBAmount.toString(),
-            tokenDecimals: mintAInfo.decimals,
-            solDecimals: mintBInfo.decimals
-        });
 
         // 3. Build the createPool transaction
         const { execute, extInfo } = await sdk.cpmm.createPool({

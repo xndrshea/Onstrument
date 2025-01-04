@@ -126,5 +126,14 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64, is_subscrib
             .ok_or(error!(ErrorCode::MathOverflow))?;
     }
 
+    // Add after successful SOL transfer
+    emit!(SellEvent {
+        mint: ctx.accounts.mint.key(),
+        amount,
+        sol_amount: total_return,
+        seller: ctx.accounts.seller.key(),
+        is_subscribed
+    });
+
     Ok(())
 }
