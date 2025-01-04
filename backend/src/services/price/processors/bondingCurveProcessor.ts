@@ -179,9 +179,8 @@ export class BondingCurveProcessor extends BaseProcessor {
                 isSubscribed
             });
 
-            // Calculate effective price including virtual SOL
-            const effectiveSolAmount = solAmount + VIRTUAL_SOL_AMOUNT;
-            const price = effectiveSolAmount / LAMPORTS_PER_SOL / (amount / TOKEN_DECIMAL_MULTIPLIER);
+            // Simple spot price calculation: SOL/token
+            const price = solAmount / amount;
 
             // Record the price
             PriceHistoryModel.recordPrice({
@@ -193,7 +192,6 @@ export class BondingCurveProcessor extends BaseProcessor {
                 logger.error('Error recording buy price:', error);
             });
 
-            // Emit price update for real-time subscribers
             this.emitPriceUpdate({
                 mintAddress: mint.toString(),
                 price,
