@@ -7,7 +7,7 @@ import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { BN } from '@project-serum/anchor'
 import { dexService } from '../../services/dexService'
-import { mainnetConnection, devnetConnection } from '../../config'
+import { mainnetConnection, devnetConnection, API_BASE_URL } from '../../config'
 import { config } from '../../config'
 import { priceClient } from '../../services/priceClient'
 import { UserService } from '../../services/userService'
@@ -219,6 +219,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
             const parsedAmount = new BN(parseFloat(amount) * (10 ** token.decimals))
             const appropriateConnection = getAppropriateConnection()
 
+            // Execute the trade
             if (token.tokenType === 'pool') {
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
@@ -249,6 +250,26 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                         slippageTolerance
                     })
                 }
+            }
+
+            // Update trading stats after successful trade
+            try {
+                const tradeAmount = parseFloat(amount);
+                await fetch(`${API_BASE_URL}/users/${publicKey.toString()}/trading-stats`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        mintAddress: token.mintAddress,
+                        amount: tradeAmount,
+                        totalVolume: tradeAmount * (priceInfo?.price || 0), // Total volume in SOL
+                        isSelling
+                    })
+                });
+            } catch (error) {
+                console.error('Error updating trading stats:', error);
+                // Don't throw here - we don't want to affect the UI if stats update fails
             }
 
             await updateBalances()
