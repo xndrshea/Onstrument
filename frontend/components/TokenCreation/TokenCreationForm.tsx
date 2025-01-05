@@ -287,7 +287,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             </div>
 
             <div className="form-group">
-                <label>Total Supply</label>
+                <label>Supply</label>
                 <input
                     type="text"
                     onChange={e => {

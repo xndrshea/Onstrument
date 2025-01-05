@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { User, UserService } from '../../services/userService';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { API_BASE_URL } from '../../config';
+import { Link } from 'react-router-dom';
 
 interface TradingStatsRecord {
     mint_address: string;
@@ -171,8 +172,18 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                         {stats.map((stat) => (
                                             <tr key={stat.mint_address} className="bg-[#2A2D31] bg-opacity-50">
                                                 <td className="px-4 py-2">
-                                                    <div className="text-sm text-white">{stat.symbol}</div>
-                                                    <div className="text-xs text-gray-400">{stat.name}</div>
+                                                    <Link
+                                                        to={`/token/${stat.mint_address}`}
+                                                        className="hover:opacity-80"
+                                                        onClick={onClose}
+                                                    >
+                                                        <div className="text-sm text-white hover:text-blue-400 transition-colors">
+                                                            {stat.symbol}
+                                                        </div>
+                                                        <div className="text-xs text-gray-400 hover:text-blue-300 transition-colors">
+                                                            {stat.name}
+                                                        </div>
+                                                    </Link>
                                                 </td>
                                                 <td className="px-4 py-2 text-sm text-gray-300">
                                                     {Number(stat.total_trades)}
