@@ -255,6 +255,10 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
             // Update trading stats after successful trade
             try {
                 const tradeAmount = parseFloat(amount);
+                const volumeInSol = isSelling
+                    ? priceInfo?.totalCost || 0  // When selling, use the actual SOL received
+                    : priceInfo?.totalCost || 0; // When buying, use the actual SOL spent
+
                 await fetch(`${API_BASE_URL}/users/${publicKey.toString()}/trading-stats`, {
                     method: 'POST',
                     headers: {
@@ -262,14 +266,12 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                     },
                     body: JSON.stringify({
                         mintAddress: token.mintAddress,
-                        amount: tradeAmount,
-                        totalVolume: tradeAmount * (priceInfo?.price || 0), // Total volume in SOL
+                        totalVolume: volumeInSol / LAMPORTS_PER_SOL, // Convert from lamports to SOL
                         isSelling
                     })
                 });
             } catch (error) {
                 console.error('Error updating trading stats:', error);
-                // Don't throw here - we don't want to affect the UI if stats update fails
             }
 
             await updateBalances()

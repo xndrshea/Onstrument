@@ -53,7 +53,11 @@ export class TokenService {
                 totalSupply: token.totalSupply?.toString() || '0',
                 decimals: token.decimals || 6,
                 curveConfig: token.curveConfig,
-                initialPrice: token.initialPrice
+                initialPrice: token.initialPrice,
+                websiteUrl: token.websiteUrl || '',
+                twitterUrl: token.twitterUrl || '',
+                docsUrl: token.docsUrl || '',
+                telegramUrl: token.telegramUrl || ''
             };
 
             console.log('Sending token creation request:', requestData);

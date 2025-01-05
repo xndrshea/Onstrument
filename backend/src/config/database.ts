@@ -224,6 +224,14 @@ export async function initializeDatabase() {
             ON token_platform.user_trading_stats(mint_address);
         `);
 
+        await client.query(`
+            ALTER TABLE token_platform.tokens
+            ADD COLUMN IF NOT EXISTS website_url TEXT,
+            ADD COLUMN IF NOT EXISTS docs_url TEXT,
+            ADD COLUMN IF NOT EXISTS twitter_url TEXT,
+            ADD COLUMN IF NOT EXISTS telegram_url TEXT;
+        `);
+
         await client.query('COMMIT')
 
         // Part 2: Create continuous aggregates outside transaction

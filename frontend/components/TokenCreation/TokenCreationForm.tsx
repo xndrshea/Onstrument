@@ -47,6 +47,10 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         image: null,
         supply: 0,
         totalSupply: new BN(0),
+        websiteUrl: '',
+        twitterUrl: '',
+        docsUrl: '',
+        telegramUrl: '',
         curveConfig: {
             migrationStatus: 'active',
             isSubscribed: isSubscribed,
@@ -143,7 +147,16 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 }
             }
 
-            const result = await tokenTransactionService.createToken(params, formData.description)
+            const result = await tokenTransactionService.createToken(
+                params,
+                formData.description,
+                {
+                    websiteUrl: formData.websiteUrl,
+                    twitterUrl: formData.twitterUrl,
+                    docsUrl: formData.docsUrl,
+                    telegramUrl: formData.telegramUrl
+                }
+            );
 
             if (!result || !result.mintAddress) {
                 throw new Error('Transaction failed - invalid result')

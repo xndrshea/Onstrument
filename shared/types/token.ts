@@ -60,6 +60,10 @@ export interface TokenRecord {
     metadataStatus?: string;
     interface?: string;
     initialPrice?: number;
+    website?: string;
+    twitter?: string;
+    discord?: string;
+    telegram?: string;
 }
 
 export interface TokenFormData {
