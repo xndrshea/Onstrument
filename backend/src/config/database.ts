@@ -204,6 +204,26 @@ export async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_users_wallet ON token_platform.users(wallet_address);
         `);
 
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS token_platform.user_trading_stats (
+                user_id UUID REFERENCES token_platform.users(user_id),
+                mint_address VARCHAR(255) REFERENCES token_platform.tokens(mint_address),
+                total_trades INTEGER DEFAULT 0,
+                total_volume NUMERIC(78,36) DEFAULT 0,
+                total_buy_volume NUMERIC(78,36) DEFAULT 0,
+                total_sell_volume NUMERIC(78,36) DEFAULT 0,
+                first_trade_at TIMESTAMP WITH TIME ZONE,
+                last_trade_at TIMESTAMP WITH TIME ZONE,
+                PRIMARY KEY (user_id, mint_address)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_user_trading_stats_user 
+            ON token_platform.user_trading_stats(user_id);
+            
+            CREATE INDEX IF NOT EXISTS idx_user_trading_stats_mint 
+            ON token_platform.user_trading_stats(mint_address);
+        `);
+
         await client.query('COMMIT')
 
         // Part 2: Create continuous aggregates outside transaction
