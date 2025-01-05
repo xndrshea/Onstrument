@@ -59,8 +59,20 @@ router.post('/tokens', async (req, res) => {
             curveConfig,
             decimals,
             totalSupply,
-            initialPrice
+            initialPrice,
+            websiteUrl,
+            twitterUrl,
+            docsUrl,
+            telegramUrl
         } = req.body;
+
+        // Add better error logging
+        logger.info('Attempting to create token with data:', {
+            mintAddress,
+            name,
+            symbol,
+            totalSupply
+        });
 
         const result = await pool.query(`
             INSERT INTO token_platform.tokens (
@@ -69,16 +81,17 @@ router.post('/tokens', async (req, res) => {
                 name,
                 symbol,
                 description,
+                metadata_url,
                 website_url,
                 docs_url,
                 twitter_url,
                 telegram_url,
-                metadata_url,
                 curve_config,
                 decimals,
                 token_type,
-                supply
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'custom', $13)
+                supply,
+                created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'custom', $13, CURRENT_TIMESTAMP)
             RETURNING *
         `, [
             mintAddress,
@@ -86,11 +99,11 @@ router.post('/tokens', async (req, res) => {
             name,
             symbol,
             description,
-            req.body.websiteUrl || null,
-            req.body.docsUrl || null,
-            req.body.twitterUrl || null,
-            req.body.telegramUrl || null,
             metadataUri,
+            websiteUrl || null,
+            docsUrl || null,
+            twitterUrl || null,
+            telegramUrl || null,
             curveConfig,
             decimals,
             totalSupply
@@ -116,11 +129,26 @@ router.post('/tokens', async (req, res) => {
             curveConfig: token.curve_config,
             supply: token.supply,
             tokenType: token.token_type,
-            createdAt: token.created_at
+            createdAt: token.created_at,
+            websiteUrl: token.website_url,
+            twitterUrl: token.twitter_url,
+            docsUrl: token.docs_url,
+            telegramUrl: token.telegram_url
         });
     } catch (error) {
-        logger.error('Error creating token:', error);
-        res.status(500).json({ error: 'Failed to create token' });
+        // Enhanced error logging
+        logger.error('Error creating token:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            details: error,
+            requestBody: req.body
+        });
+
+        // Send more specific error message
+        res.status(500).json({
+            error: 'Failed to create token',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 });
 
