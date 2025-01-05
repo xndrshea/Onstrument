@@ -69,12 +69,16 @@ router.post('/tokens', async (req, res) => {
                 name,
                 symbol,
                 description,
+                website_url,
+                docs_url,
+                twitter_url,
+                telegram_url,
                 metadata_url,
                 curve_config,
                 decimals,
                 token_type,
                 supply
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom', $9)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'custom', $13)
             RETURNING *
         `, [
             mintAddress,
@@ -82,6 +86,10 @@ router.post('/tokens', async (req, res) => {
             name,
             symbol,
             description,
+            req.body.websiteUrl || null,
+            req.body.docsUrl || null,
+            req.body.twitterUrl || null,
+            req.body.telegramUrl || null,
             metadataUri,
             curveConfig,
             decimals,
