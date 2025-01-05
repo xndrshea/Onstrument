@@ -146,6 +146,18 @@ export function TokenDetailsPage() {
                                         <p>Decimals: <span className="text-white">{token.decimals}</span></p>
                                         <p>Token Type: <span className="text-white">{token.tokenType}</span></p>
                                         <p>Verified: <span className="text-white">{token.verified ? 'Yes' : 'No'}</span></p>
+                                        {token.websiteUrl && (
+                                            <p>Website: <a href={token.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">{token.websiteUrl}</a></p>
+                                        )}
+                                        {token.docsUrl && (
+                                            <p>Documentation: <a href={token.docsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">{token.docsUrl}</a></p>
+                                        )}
+                                        {token.twitterUrl && (
+                                            <p>Twitter: <a href={token.twitterUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">{token.twitterUrl}</a></p>
+                                        )}
+                                        {token.telegramUrl && (
+                                            <p>Telegram: <a href={token.telegramUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">{token.telegramUrl}</a></p>
+                                        )}
                                     </div>
                                     <div className="space-y-3">
                                         <p>Mint Address: <span className="text-white">{token.mintAddress}</span></p>

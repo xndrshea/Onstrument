@@ -83,6 +83,15 @@ export function TokenomicsRoadmap() {
                 </div>
             </div>
 
+            <div className="airdrop-section mt-12">
+                <h2 className="text-2xl font-bold mb-6">Airdrop</h2>
+                <ul className="list-disc pl-5 space-y-2 text-gray-400">
+                    <li>Points system is already live</li>
+                    <li>We will be airdropping a minimum of 80+ % to Onstrument users</li>
+                    <li>Maximum 20% for team</li>
+                </ul>
+            </div>
+
             <div className="roadmap-section mt-12">
                 <h2 className="text-2xl font-bold mb-6">Development Roadmap</h2>
                 <ul className="list-disc pl-5 space-y-2 text-gray-400">
@@ -108,15 +117,6 @@ export function TokenomicsRoadmap() {
                     <li>Most importantly: whatever YOU want</li>
                     <li>Contact for feature and bug feedback</li>
 
-                </ul>
-            </div>
-
-            <div className="airdrop-section mt-12">
-                <h2 className="text-2xl font-bold mb-6">Airdrop</h2>
-                <ul className="list-disc pl-5 space-y-2 text-gray-400">
-                    <li>Points system is already live</li>
-                    <li>We will be airdropping a minimum of 80+ % to Onstrument users</li>
-                    <li>Maximum 20% for team</li>
                 </ul>
             </div>
         </div>
