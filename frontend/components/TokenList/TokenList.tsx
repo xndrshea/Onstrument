@@ -40,6 +40,8 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             }
 
             const data = await response.json();
+            console.log('Token data received:', data.tokens[0]);
+
             setTokens(data.tokens.map((token: any) => ({
                 mintAddress: token.mintAddress,
                 name: token.name,
@@ -52,6 +54,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 volume: token.volume,
                 supply: token.supply,
                 totalSupply: token.totalSupply,
+                currentPrice: token.currentPrice,
                 marketCap: token.marketCap
             })));
 
