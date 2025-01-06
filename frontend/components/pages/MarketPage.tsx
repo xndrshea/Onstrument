@@ -12,7 +12,7 @@ export function MarketPage() {
     const [tokenType, setTokenType] = useState<'all' | 'custom' | 'dex'>('all')
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
-    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all'>('24h')
+    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCap'>('24h')
     const TOKENS_PER_PAGE = 10
 
     const fetchTokens = async () => {
@@ -43,7 +43,8 @@ export function MarketPage() {
                 verified: token.verified,
                 imageUrl: token.image_url,
                 currentPrice: token.current_price,
-                volume: token.volume
+                volume: token.volume,
+                marketCap: token.market_cap
             })));
 
             setTotalPages(Math.ceil(data.pagination.total / TOKENS_PER_PAGE));
@@ -74,10 +75,11 @@ export function MarketPage() {
                     <h1 className="text-2xl font-bold">Token Market</h1>
                     <div className="flex gap-2">
                         <select
-                            className="bg-gray-700 text-white rounded px-3 py-1"
                             value={volumePeriod}
                             onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
+                            className="bg-gray-700 text-white rounded px-3 py-1"
                         >
+                            <option value="marketCap">Market Cap</option>
                             <option value="5m">5m Volume</option>
                             <option value="30m">30m Volume</option>
                             <option value="1h">1h Volume</option>

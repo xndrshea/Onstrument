@@ -51,7 +51,8 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 createdAt: token.createdAt,
                 volume: token.volume,
                 supply: token.supply,
-                totalSupply: token.totalSupply
+                totalSupply: token.totalSupply,
+                marketCap: token.marketCap
             })));
 
         } catch (error) {
@@ -92,6 +93,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                             onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
                             className="bg-gray-700 text-white rounded px-3 py-1"
                         >
+                            <option value="marketCap">Market Cap</option>
                             <option value="5m">5m Volume</option>
                             <option value="30m">30m Volume</option>
                             <option value="1h">1h Volume</option>
