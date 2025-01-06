@@ -65,6 +65,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05)
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
     const [isUserSubscribed, setIsUserSubscribed] = useState(false)
+    const [isMigrating, setIsMigrating] = useState(false)
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -93,8 +94,33 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
     }
 
     const checkTokenTradability = async () => {
-        if (token.tokenType !== 'pool') return;
+        if (token.tokenType === 'custom') {
+            try {
+                // Check if token is migrating
+                const response = await fetch(`/api/tokens/${token.mintAddress}`);
+                const tokenData = await response.json();
 
+                if (tokenData.curveConfig?.migrationStatus === "migrated") {
+                    // Check if Raydium pool exists and has liquidity
+                    const quote = await dexService.calculateTradePrice(
+                        token.mintAddress,
+                        1,
+                        true,
+                        mainnetConnection
+                    );
+
+                    if (!quote || quote.price <= 0) {
+                        setIsMigrating(true);
+                        setIsTokenTradable(false);
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error("Migration status check failed:", error);
+            }
+        }
+
+        // Existing liquidity check
         try {
             const appropriateConnection = getAppropriateConnection();
             const quote = await dexService.calculateTradePrice(
@@ -105,6 +131,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
             );
 
             setIsTokenTradable(quote && quote.price > 0);
+            setIsMigrating(false);
         } catch (error) {
             console.log("Token tradability check failed:", error);
             setIsTokenTradable(false);
@@ -304,6 +331,13 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
         checkSubscription();
     }, [publicKey]);
 
+    // Add this useEffect to check tradability when component mounts
+    useEffect(() => {
+        if (connected && publicKey) {
+            checkTokenTradability();
+        }
+    }, [connected, publicKey, token.mintAddress]);
+
     return (
         <div className="p-4 bg-white rounded-lg shadow">
             {/* Connection Status */}
@@ -350,7 +384,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                                 className={`flex-1 py-2 px-4 text-center ${!isSelling ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
                                     }`}
                                 onClick={() => setIsSelling(false)}
-                                disabled={!isTokenTradable || isLoading}
+                                disabled={!isTokenTradable || isLoading || isMigrating}
                             >
                                 Buy
                             </button>
@@ -358,7 +392,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                                 className={`flex-1 py-2 px-4 text-center ${isSelling ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
                                     }`}
                                 onClick={() => setIsSelling(true)}
-                                disabled={!isTokenTradable || isLoading}
+                                disabled={!isTokenTradable || isLoading || isMigrating}
                             >
                                 Sell
                             </button>
@@ -460,20 +494,33 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                                 <span>{isSelling ? 'Sell' : 'Buy'} {token.symbol}</span>
                             )}
                         </button>
-                    </div>
 
-                    {token.tokenType !== 'pool' && (
-                        <div className={`mb-4 p-3 ${isTokenTradable ? 'hidden' : 'bg-yellow-100 border border-yellow-200'} rounded-md`}>
-                            <div className="text-yellow-800">
-                                This token cannot be traded at the moment. This could be because:
-                                <ul className="list-disc ml-5 mt-2">
-                                    <li>The token is newly created</li>
-                                    <li>There is no liquidity available</li>
-                                    <li>The token hasn't been listed on any DEX yet</li>
-                                </ul>
+                        {/* Updated warning message section */}
+                        {(!isTokenTradable || isMigrating) && (
+                            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-200 rounded-md">
+                                <div className="text-yellow-800">
+                                    {isMigrating ? (
+                                        <div>
+                                            <p className="font-medium">Token Currently Migrating to Raydium</p>
+                                            <p className="text-sm mt-2">
+                                                Trading is temporarily disabled while the token completes its migration to Raydium DEX.
+                                                This process typically takes a few minutes while liquidity is being established.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            This token cannot be traded at the moment. This could be because:
+                                            <ul className="list-disc ml-5 mt-2">
+                                                <li>The token is newly created</li>
+                                                <li>There is no liquidity available</li>
+                                                <li>The token hasn't been listed on any DEX yet</li>
+                                            </ul>
+                                        </>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </>
             )}
         </div>
