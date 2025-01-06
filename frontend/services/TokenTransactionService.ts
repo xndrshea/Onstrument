@@ -31,7 +31,16 @@ export class TokenTransactionService {
         this.wallet = wallet;
     }
 
-    async createToken(params: createTokenParams, description: string): Promise<TokenRecord> {
+    async createToken(
+        params: createTokenParams,
+        description: string,
+        socialLinks: {
+            websiteUrl?: string;
+            twitterUrl?: string;
+            docsUrl?: string;
+            telegramUrl?: string;
+        }
+    ): Promise<TokenRecord> {
         try {
             // Create token with bonding curve
             const { mint, curve, signature } = await this.bondingCurve.createTokenWithCurve(params);
@@ -69,7 +78,11 @@ export class TokenTransactionService {
                 curveConfig: params.curveConfig,
                 createdAt: new Date().toISOString(),
                 tokenType: 'custom',
-                initialPrice: initialPrice
+                initialPrice: initialPrice,
+                websiteUrl: socialLinks.websiteUrl || '',
+                twitterUrl: socialLinks.twitterUrl || '',
+                docsUrl: socialLinks.docsUrl || '',
+                telegramUrl: socialLinks.telegramUrl || ''
             };
 
             // Save to database through tokenService

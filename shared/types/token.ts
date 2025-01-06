@@ -34,6 +34,10 @@ export interface TokenRecord {
     symbol: string;
     decimals: number;
     description?: string;
+    websiteUrl?: string;
+    docsUrl?: string;
+    twitterUrl?: string;
+    telegramUrl?: string;
     metadataUri?: string;
     tokenType: 'pool' | 'custom';
     verified: boolean;
@@ -56,6 +60,10 @@ export interface TokenRecord {
     metadataStatus?: string;
     interface?: string;
     initialPrice?: number;
+    website?: string;
+    twitter?: string;
+    discord?: string;
+    telegram?: string;
 }
 
 export interface TokenFormData {
@@ -63,6 +71,10 @@ export interface TokenFormData {
     symbol: string;
     description: string;
     image?: string | null;
+    websiteUrl?: string;
+    docsUrl?: string;
+    twitterUrl?: string;
+    telegramUrl?: string;
     supply: number;
     totalSupply: BN;
     curveConfig: curveConfig;

@@ -59,8 +59,20 @@ router.post('/tokens', async (req, res) => {
             curveConfig,
             decimals,
             totalSupply,
-            initialPrice
+            initialPrice,
+            websiteUrl,
+            twitterUrl,
+            docsUrl,
+            telegramUrl
         } = req.body;
+
+        // Add better error logging
+        logger.info('Attempting to create token with data:', {
+            mintAddress,
+            name,
+            symbol,
+            totalSupply
+        });
 
         const result = await pool.query(`
             INSERT INTO token_platform.tokens (
@@ -70,11 +82,16 @@ router.post('/tokens', async (req, res) => {
                 symbol,
                 description,
                 metadata_url,
+                website_url,
+                docs_url,
+                twitter_url,
+                telegram_url,
                 curve_config,
                 decimals,
                 token_type,
-                supply
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'custom', $9)
+                supply,
+                created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'custom', $13, CURRENT_TIMESTAMP)
             RETURNING *
         `, [
             mintAddress,
@@ -83,6 +100,10 @@ router.post('/tokens', async (req, res) => {
             symbol,
             description,
             metadataUri,
+            websiteUrl || null,
+            docsUrl || null,
+            twitterUrl || null,
+            telegramUrl || null,
             curveConfig,
             decimals,
             totalSupply
@@ -108,11 +129,26 @@ router.post('/tokens', async (req, res) => {
             curveConfig: token.curve_config,
             supply: token.supply,
             tokenType: token.token_type,
-            createdAt: token.created_at
+            createdAt: token.created_at,
+            websiteUrl: token.website_url,
+            twitterUrl: token.twitter_url,
+            docsUrl: token.docs_url,
+            telegramUrl: token.telegram_url
         });
     } catch (error) {
-        logger.error('Error creating token:', error);
-        res.status(500).json({ error: 'Failed to create token' });
+        // Enhanced error logging
+        logger.error('Error creating token:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            details: error,
+            requestBody: req.body
+        });
+
+        // Send more specific error message
+        res.status(500).json({
+            error: 'Failed to create token',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 });
 
@@ -602,6 +638,81 @@ router.post('/users/:walletAddress/toggle-subscription', async (req, res) => {
     } catch (error) {
         logger.error('Error toggling subscription:', error);
         res.status(500).json({ error: 'Failed to toggle subscription' });
+    }
+});
+
+router.post('/users/:walletAddress/trading-stats', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+        const { mintAddress, totalVolume, isSelling } = req.body;
+
+        // First get the user_id
+        const userResult = await pool.query(`
+            SELECT user_id FROM token_platform.users 
+            WHERE wallet_address = $1
+        `, [walletAddress]);
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const userId = userResult.rows[0].user_id;
+
+        // Update trading stats
+        await pool.query(`
+            INSERT INTO token_platform.user_trading_stats (
+                user_id, 
+                mint_address, 
+                total_trades,
+                total_volume,
+                total_buy_volume,
+                total_sell_volume,
+                first_trade_at,
+                last_trade_at
+            )
+            VALUES ($1, $2, 1, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, mint_address) DO UPDATE
+            SET 
+                total_trades = token_platform.user_trading_stats.total_trades + 1,
+                total_volume = token_platform.user_trading_stats.total_volume + $3,
+                total_buy_volume = token_platform.user_trading_stats.total_buy_volume + $4,
+                total_sell_volume = token_platform.user_trading_stats.total_sell_volume + $5,
+                last_trade_at = CURRENT_TIMESTAMP,
+                first_trade_at = COALESCE(token_platform.user_trading_stats.first_trade_at, CURRENT_TIMESTAMP)
+        `, [
+            userId,
+            mintAddress,
+            totalVolume, // Total volume in SOL
+            isSelling ? 0 : totalVolume, // Buy volume
+            isSelling ? totalVolume : 0  // Sell volume
+        ]);
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('Error updating trading stats:', error);
+        res.status(500).json({ error: 'Failed to update trading stats' });
+    }
+});
+
+router.get('/users/:walletAddress/trading-stats', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+        const { mintAddress } = req.query;
+
+        const userResult = await pool.query(`
+            SELECT uts.*, t.symbol, t.name
+            FROM token_platform.users u
+            JOIN token_platform.user_trading_stats uts ON u.user_id = uts.user_id
+            JOIN token_platform.tokens t ON uts.mint_address = t.mint_address
+            WHERE u.wallet_address = $1
+            ${mintAddress ? 'AND uts.mint_address = $2' : ''}
+            ORDER BY uts.last_trade_at DESC
+        `, mintAddress ? [walletAddress, mintAddress] : [walletAddress]);
+
+        res.json(userResult.rows);
+    } catch (error) {
+        logger.error('Error fetching trading stats:', error);
+        res.status(500).json({ error: 'Failed to fetch trading stats' });
     }
 });
 
