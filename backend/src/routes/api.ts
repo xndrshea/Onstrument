@@ -155,11 +155,53 @@ router.post('/tokens', async (req, res) => {
 // Get custom tokens for homepage
 router.get('/tokens', async (req, res) => {
     try {
+        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' || '24h';
         logger.info('Fetching custom tokens');
+
+        // Handle volume-based intervals
+        const volumeInterval = {
+            '5m': 'INTERVAL \'5 minutes\'',
+            '30m': 'INTERVAL \'30 minutes\'',
+            '1h': 'INTERVAL \'1 hour\'',
+            '4h': 'INTERVAL \'4 hours\'',
+            '12h': 'INTERVAL \'12 hours\'',
+            '24h': 'INTERVAL \'24 hours\'',
+            'all': null,
+            'newest': null,
+            'oldest': null
+        }[sortBy];
+
+        // Determine the ORDER BY clause based on sortBy
+        let orderByClause = 'ORDER BY volume DESC';
+        if (sortBy === 'newest') {
+            orderByClause = 'ORDER BY t.created_at DESC';
+        } else if (sortBy === 'oldest') {
+            orderByClause = 'ORDER BY t.created_at ASC';
+        }
+
+        const volumeQuery = volumeInterval
+            ? `AND time > NOW() - ${volumeInterval}`
+            : '';
+
+        // Only include volume calculation if we're sorting by volume
+        const volumeSelect = !['newest', 'oldest'].includes(sortBy)
+            ? `, COALESCE(
+                    (SELECT SUM(volume) 
+                     FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     ${volumeQuery}
+                    ),
+                    0
+                ) as volume`
+            : ', 0 as volume';
+
         const result = await pool.query(`
-            SELECT * FROM token_platform.tokens
+            SELECT 
+                t.*
+                ${volumeSelect}
+            FROM token_platform.tokens t
             WHERE token_type = 'custom'
-            ORDER BY created_at DESC
+            ${orderByClause}
         `);
 
         const tokens = result.rows.map(token => ({
@@ -174,7 +216,8 @@ router.get('/tokens', async (req, res) => {
             createdAt: token.created_at,
             tokenType: token.token_type,
             supply: token.supply,
-            totalSupply: token.supply
+            totalSupply: token.supply,
+            volume: token.volume
         }));
 
         res.json({ tokens });
@@ -203,6 +246,17 @@ router.get('/market/tokens', async (req, res) => {
             'all': null
         }[sortBy];
 
+        // First get total count
+        const countQuery = `
+            SELECT COUNT(*) 
+            FROM token_platform.tokens t
+            ${type ? 'WHERE t.token_type = $1' : ''}
+        `;
+
+        const countResult = await pool.query(countQuery, type ? [type] : []);
+        const totalCount = parseInt(countResult.rows[0].count);
+
+        // Then get paginated results with volume
         const volumeQuery = volumeInterval
             ? `AND time > NOW() - ${volumeInterval}`
             : '';
@@ -227,9 +281,16 @@ router.get('/market/tokens', async (req, res) => {
         const params = type ? [limit, offset, type] : [limit, offset];
         const result = await pool.query(tokensQuery, params);
 
-        res.json(result.rows);
+        res.json({
+            tokens: result.rows,
+            pagination: {
+                total: totalCount,
+                page,
+                limit
+            }
+        });
     } catch (error) {
-        logger.error('Error fetching market tokens:', error);
+        console.error('Error in /market/tokens:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

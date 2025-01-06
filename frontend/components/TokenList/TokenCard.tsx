@@ -4,7 +4,8 @@ import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { useState, useEffect } from 'react'
 
 interface TokenCardProps {
-    token: TokenRecord
+    token: TokenRecord;
+    volumePeriod: '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all';
 }
 
 interface TokenMetadata {
@@ -15,7 +16,7 @@ interface TokenMetadata {
     attributes: any[];
 }
 
-export function TokenCard({ token }: TokenCardProps) {
+export function TokenCard({ token, volumePeriod }: TokenCardProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
 
     useEffect(() => {
