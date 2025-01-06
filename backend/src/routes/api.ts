@@ -155,7 +155,7 @@ router.post('/tokens', async (req, res) => {
 // Get custom tokens for homepage
 router.get('/tokens', async (req, res) => {
     try {
-        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' || '24h';
+        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCap' || '24h';
         logger.info('Fetching custom tokens');
 
         // Handle volume-based intervals
@@ -168,7 +168,8 @@ router.get('/tokens', async (req, res) => {
             '24h': 'INTERVAL \'24 hours\'',
             'all': null,
             'newest': null,
-            'oldest': null
+            'oldest': null,
+            'marketCap': null
         }[sortBy];
 
         // Determine the ORDER BY clause based on sortBy
@@ -177,6 +178,8 @@ router.get('/tokens', async (req, res) => {
             orderByClause = 'ORDER BY t.created_at DESC';
         } else if (sortBy === 'oldest') {
             orderByClause = 'ORDER BY t.created_at ASC';
+        } else if (sortBy === 'marketCap') {
+            orderByClause = 'ORDER BY t.market_cap DESC NULLS LAST';
         }
 
         const volumeQuery = volumeInterval
@@ -184,7 +187,7 @@ router.get('/tokens', async (req, res) => {
             : '';
 
         // Only include volume calculation if we're sorting by volume
-        const volumeSelect = !['newest', 'oldest'].includes(sortBy)
+        const volumeSelect = !['newest', 'oldest', 'marketCap'].includes(sortBy)
             ? `, COALESCE(
                     (SELECT SUM(volume) 
                      FROM token_platform.price_history 
@@ -217,7 +220,8 @@ router.get('/tokens', async (req, res) => {
             tokenType: token.token_type,
             supply: token.supply,
             totalSupply: token.supply,
-            volume: token.volume
+            volume: token.volume,
+            marketCap: token.market_cap
         }));
 
         res.json({ tokens });
@@ -234,7 +238,7 @@ router.get('/market/tokens', async (req, res) => {
         const limit = parseInt(req.query.limit as string) || 10;
         const offset = (page - 1) * limit;
         const type = req.query.type as string;
-        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' || '24h';
+        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCap' || '24h';
 
         const volumeInterval = {
             '5m': 'INTERVAL \'5 minutes\'',
@@ -243,7 +247,8 @@ router.get('/market/tokens', async (req, res) => {
             '4h': 'INTERVAL \'4 hours\'',
             '12h': 'INTERVAL \'12 hours\'',
             '24h': 'INTERVAL \'24 hours\'',
-            'all': null
+            'all': null,
+            'marketCap': null
         }[sortBy];
 
         // First get total count
@@ -261,6 +266,10 @@ router.get('/market/tokens', async (req, res) => {
             ? `AND time > NOW() - ${volumeInterval}`
             : '';
 
+        const orderByClause = sortBy === 'marketCap'
+            ? 'ORDER BY t.market_cap DESC NULLS LAST'
+            : 'ORDER BY volume DESC';
+
         const tokensQuery = `
             SELECT 
                 t.*,
@@ -274,7 +283,7 @@ router.get('/market/tokens', async (req, res) => {
                 ) as volume
             FROM token_platform.tokens t
             ${type ? 'WHERE t.token_type = $3' : ''}
-            ORDER BY volume DESC
+            ${orderByClause}
             LIMIT $1 OFFSET $2
         `;
 

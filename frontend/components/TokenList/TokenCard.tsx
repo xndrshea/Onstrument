@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { TokenRecord } from '../../../shared/types/token'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { useState, useEffect } from 'react'
+import { formatMarketCap } from '../../utils/formatting';
 
 interface TokenCardProps {
     token: TokenRecord;
@@ -28,12 +29,16 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
                 const metadata: TokenMetadata = await response.json();
                 setImageUrl(metadata.image);
             } catch (error) {
-                console.error('Error fetching metadata for token:', token.name, error);
+                // Silently fail for metadata fetch errors
             }
         };
 
         fetchMetadata();
     }, [token.metadataUri, token.name]);
+
+    const marketCap = token.currentPrice && token.totalSupply
+        ? token.currentPrice * token.totalSupply
+        : null;
 
     return (
         <div className="bg-[#232427] rounded-lg border border-transparent hover:border-white transition-colors">
@@ -50,7 +55,6 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
                             alt={token.name}
                             className="w-full h-full object-contain rounded-md"
                             onError={(e) => {
-                                console.error('Image load error for token:', token.name);
                                 (e.target as HTMLImageElement).style.display = 'none';
                             }}
                         />
@@ -67,6 +71,15 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
                     <p className="text-sm text-gray-400 line-clamp-2 mb-2">
                         {token.description || 'No description available'}
                     </p>
+
+                    <div className="flex justify-between items-center mt-2">
+                        <div className="text-sm text-gray-400">
+                            Market Cap: {marketCap ? formatMarketCap(marketCap) : 'N/A'}
+                        </div>
+                        <div className="text-sm text-gray-400">
+                            Price: {token.currentPrice ? `${token.currentPrice.toFixed(4)} SOL` : 'N/A'}
+                        </div>
+                    </div>
                 </div>
             </Link>
         </div>

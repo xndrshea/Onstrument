@@ -91,6 +91,19 @@ export class PriceHistoryModel {
                 return;
             }
 
+            // Start a transaction
+            await pool.query('BEGIN');
+
+            // Get token's total supply
+            const tokenResult = await pool.query(
+                'SELECT total_supply FROM token_platform.tokens WHERE mint_address = $1',
+                [mintAddress]
+            );
+            const totalSupply = tokenResult.rows[0]?.total_supply;
+
+            // Calculate market cap if total supply exists
+            const marketCap = totalSupply ? price * totalSupply : null;
+
             // Get the last price point for this token within the current minute
             const lastPrice = await pool.query(`
                 SELECT price, high, low, open
@@ -103,49 +116,64 @@ export class PriceHistoryModel {
 
             const previousData = lastPrice.rows[0];
 
-            await pool.query(`
-                INSERT INTO token_platform.price_history (
-                    time,
-                    mint_address,
+            // Update both price history and current price/market cap
+            await Promise.all([
+                // Update price history
+                pool.query(`
+                    INSERT INTO token_platform.price_history (
+                        time,
+                        mint_address,
+                        price,
+                        open,
+                        high,
+                        low,
+                        close,
+                        volume,
+                        market_cap
+                    ) VALUES (
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5,
+                        $6,
+                        $3,
+                        $7,
+                        $8
+                    )
+                    ON CONFLICT (mint_address, time) DO UPDATE
+                    SET 
+                        price = EXCLUDED.price,
+                        high = GREATEST(token_platform.price_history.high, EXCLUDED.price),
+                        low = LEAST(token_platform.price_history.low, EXCLUDED.price),
+                        close = EXCLUDED.price,
+                        volume = token_platform.price_history.volume + EXCLUDED.volume,
+                        market_cap = EXCLUDED.market_cap
+                `, [
+                    timestamp,
+                    mintAddress,
                     price,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
-                ) VALUES (
-                    $1,
-                    $2,
-                    $3,
-                    $4,
-                    $5,
-                    $6,
-                    $3,
-                    $7
-                )
-                ON CONFLICT (mint_address, time) DO UPDATE
-                SET 
-                    price = EXCLUDED.price,
-                    high = GREATEST(token_platform.price_history.high, EXCLUDED.price),
-                    low = LEAST(token_platform.price_history.low, EXCLUDED.price),
-                    close = EXCLUDED.price,
-                    volume = token_platform.price_history.volume + EXCLUDED.volume
-            `, [
-                timestamp,
-                mintAddress,
-                price,
-                previousData?.open || price,
-                Math.max(previousData?.high || price, price),
-                Math.min(previousData?.low || price, price),
-                volume
+                    previousData?.open || price,
+                    Math.max(previousData?.high || price, price),
+                    Math.min(previousData?.low || price, price),
+                    volume,
+                    marketCap
+                ]),
+
+                // Update current price and market cap in tokens table
+                pool.query(`
+                    UPDATE token_platform.tokens 
+                    SET 
+                        current_price = $2,
+                        market_cap = $3
+                    WHERE mint_address = $1
+                `, [mintAddress, price, marketCap])
             ]);
 
-            logger.info('Recorded price:', {
-                mintAddress,
-                price,
-                timestamp: timestamp.toISOString()
-            });
+            await pool.query('COMMIT');
+
         } catch (error) {
+            await pool.query('ROLLBACK');
             logger.error('Error recording price:', error);
             throw error;
         }

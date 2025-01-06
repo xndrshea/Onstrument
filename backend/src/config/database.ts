@@ -302,6 +302,17 @@ export async function initializeDatabase() {
                 if_not_exists => TRUE);
         `);
 
+        // Add market cap columns
+        await client.query(`
+            ALTER TABLE token_platform.tokens
+            ADD COLUMN IF NOT EXISTS market_cap NUMERIC(78,36);
+
+            ALTER TABLE token_platform.price_history
+            ADD COLUMN IF NOT EXISTS market_cap NUMERIC(78,36);
+        `);
+
+        await client.query('COMMIT')
+
         logger.info('Database initialized successfully')
         return true
 

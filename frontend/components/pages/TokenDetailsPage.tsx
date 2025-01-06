@@ -6,6 +6,7 @@ import { TokenRecord } from '../../../shared/types/token';
 import { tokenService } from '../../services/tokenService';
 import { priceClient } from '../../services/priceClient';
 import { TradingViewChart } from '../Trading/TradingViewChart';
+import { formatMarketCap } from '../../utils/formatting';
 
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
@@ -120,6 +121,17 @@ export function TokenDetailsPage() {
                                 height={400}
                                 currentPrice={currentPrice || undefined}
                             />
+                        </div>
+
+                        <div className="mb-4 p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
+                            <div className="flex justify-between">
+                                <span className="text-sm text-gray-700">Market Cap</span>
+                                <span className="font-medium text-gray-900">
+                                    {currentPrice !== null && token?.totalSupply
+                                        ? formatMarketCap(currentPrice * token.totalSupply)
+                                        : 'N/A'}
+                                </span>
+                            </div>
                         </div>
 
                         <div className="bg-[#232427] rounded-lg p-4 hover:bg-[#2a2b2f] transition-colors duration-200">
