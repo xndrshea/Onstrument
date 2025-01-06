@@ -123,17 +123,6 @@ export function TokenDetailsPage() {
                             />
                         </div>
 
-                        <div className="mb-4 p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
-                            <div className="flex justify-between">
-                                <span className="text-sm text-gray-700">Market Cap</span>
-                                <span className="font-medium text-gray-900">
-                                    {currentPrice !== null && token?.totalSupply
-                                        ? formatMarketCap(currentPrice * token.totalSupply)
-                                        : 'N/A'}
-                                </span>
-                            </div>
-                        </div>
-
                         <div className="bg-[#232427] rounded-lg p-4 hover:bg-[#2a2b2f] transition-colors duration-200">
                             <button
                                 onClick={() => setIsTokenInfoExpanded(!isTokenInfoExpanded)}
