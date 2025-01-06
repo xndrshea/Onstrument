@@ -22,8 +22,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [tokens, setTokens] = useState<TokenRecord[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
-    const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
+    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest'>('24h');
 
     const refreshTokens = () => {
         fetchTokens()
@@ -32,34 +31,32 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/tokens`);
+            const url = new URL(`${API_BASE_URL}/tokens`);
+            url.searchParams.append('sortBy', volumePeriod);
 
+            const response = await fetch(url.toString());
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
-
-            if (!data.tokens) {
-                throw new Error('No data received from server');
-            }
-
-            const normalizedTokens = data.tokens.map((token: TokenRecord) => ({
-                ...token,
+            setTokens(data.tokens.map((token: any) => ({
                 mintAddress: token.mintAddress,
-                tokenType: 'custom', // Always custom tokens in this component
-                createdAt: token.createdAt,
+                name: token.name,
+                symbol: token.symbol,
+                tokenType: 'custom',
+                description: token.description,
+                metadataUri: token.metadataUri,
                 curveConfig: token.curveConfig,
-                metadataUri: token.metadataUri
-            }));
+                createdAt: token.createdAt,
+                volume: token.volume,
+                supply: token.supply,
+                totalSupply: token.totalSupply
+            })));
 
-            setTokens(deduplicateTokens(normalizedTokens));
-            setError(null);
         } catch (error) {
-            console.error('Error fetching custom tokens:', error);
-            setError(error instanceof Error ? error.message : 'An unexpected error occurred');
-            setTokens([]);
+            console.error('Error fetching tokens:', error);
+            setError(error instanceof Error ? error.message : 'Failed to fetch tokens');
         } finally {
             setIsLoading(false);
         }
@@ -67,22 +64,11 @@ export function TokenList({ onCreateClick }: TokenListProps) {
 
     useEffect(() => {
         fetchTokens();
-    }, [connection]);
+    }, [connection, volumePeriod]);
 
     const calculateMarketCap = (token: TokenRecord) => {
         return 'N/A';
     };
-
-    // Add this function to sort tokens
-    const sortedTokens = useMemo(() => {
-        if (!tokens.length) return [];
-        console.log('Tokens before sorting:', tokens);
-        return [...tokens].sort((a, b) => {
-            const dateA = new Date(a.createdAt || 0).getTime();
-            const dateB = new Date(b.createdAt || 0).getTime();
-            return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
-        });
-    }, [tokens, sortOrder]);
 
     if (isLoading) {
         return <div className="loading">Loading tokens...</div>
@@ -96,33 +82,49 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         )
     }
     return (
-        <div className="token-list">
-            <div className="token-list-header">
-                <h2>All Tokens</h2>
-                <div className="token-list-controls">
-                    <select
-                        value={sortOrder}
-                        onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
-                        className="sort-selector"
-                    >
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                    </select>
-                    <button onClick={refreshTokens} className="refresh-button">
-                        🔄 Refresh
-                    </button>
-                    <button className="create-token-button" onClick={onCreateClick}>
-                        + Create Token
-                    </button>
-                </div>
-            </div>
-            <div className="token-list-content">
-                <div className="w-full p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {tokens.map(token => (
-                            <TokenCard key={token.mintAddress} token={token} />
-                        ))}
+        <div className="p-4">
+            <div className="max-w-6xl mx-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold">All Tokens</h2>
+                    <div className="flex gap-2">
+                        <select
+                            value={volumePeriod}
+                            onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
+                            className="bg-gray-700 text-white rounded px-3 py-1"
+                        >
+                            <option value="5m">5m Volume</option>
+                            <option value="30m">30m Volume</option>
+                            <option value="1h">1h Volume</option>
+                            <option value="4h">4h Volume</option>
+                            <option value="12h">12h Volume</option>
+                            <option value="24h">24h Volume</option>
+                            <option value="all">All Time Volume</option>
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                        </select>
+                        <button
+                            onClick={refreshTokens}
+                            className="bg-gray-700 text-white rounded px-3 py-1 hover:bg-gray-600"
+                        >
+                            🔄 Refresh
+                        </button>
+                        <button
+                            className="bg-purple-600 text-white rounded px-3 py-1 hover:bg-purple-500"
+                            onClick={onCreateClick}
+                        >
+                            + Create Token
+                        </button>
                     </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {tokens.map(token => (
+                        <TokenCard
+                            key={token.mintAddress}
+                            token={token}
+                            volumePeriod={volumePeriod}
+                        />
+                    ))}
                 </div>
             </div>
         </div>

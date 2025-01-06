@@ -12,6 +12,7 @@ export function MarketPage() {
     const [tokenType, setTokenType] = useState<'all' | 'custom' | 'dex'>('all')
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
+    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all'>('24h')
     const TOKENS_PER_PAGE = 10
 
     const fetchTokens = async () => {
@@ -20,6 +21,7 @@ export function MarketPage() {
             const url = new URL(`${API_BASE_URL}/market/tokens`);
             url.searchParams.append('page', currentPage.toString());
             url.searchParams.append('limit', TOKENS_PER_PAGE.toString());
+            url.searchParams.append('sortBy', volumePeriod);
 
             if (tokenType === 'custom') {
                 url.searchParams.append('type', 'custom');
@@ -41,12 +43,10 @@ export function MarketPage() {
                 verified: token.verified,
                 imageUrl: token.image_url,
                 currentPrice: token.current_price,
-                volume24h: token.volume_24h
+                volume: token.volume
             })));
 
-            setTotalPages(data.pagination?.total
-                ? Math.ceil(data.pagination.total / TOKENS_PER_PAGE)
-                : 1);
+            setTotalPages(Math.ceil(data.pagination.total / TOKENS_PER_PAGE));
         } catch (error) {
             console.error('Error fetching market tokens:', error);
             setError(error instanceof Error ? error.message : 'Failed to fetch tokens');
@@ -57,7 +57,7 @@ export function MarketPage() {
 
     useEffect(() => {
         fetchTokens();
-    }, [currentPage, tokenType]);
+    }, [currentPage, tokenType, volumePeriod]);
 
     const handlePageChange = (newPage: number) => {
         setCurrentPage(newPage);
@@ -72,18 +72,33 @@ export function MarketPage() {
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-bold">Token Market</h1>
-                    <select
-                        className="bg-gray-700 text-white rounded px-3 py-1"
-                        value={tokenType}
-                        onChange={(e) => {
-                            setTokenType(e.target.value as any);
-                            setCurrentPage(1); // Reset to first page on filter change
-                        }}
-                    >
-                        <option value="all">All Tokens</option>
-                        <option value="custom">Custom Tokens</option>
-                        <option value="dex">DEX Tokens</option>
-                    </select>
+                    <div className="flex gap-2">
+                        <select
+                            className="bg-gray-700 text-white rounded px-3 py-1"
+                            value={volumePeriod}
+                            onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
+                        >
+                            <option value="5m">5m Volume</option>
+                            <option value="30m">30m Volume</option>
+                            <option value="1h">1h Volume</option>
+                            <option value="4h">4h Volume</option>
+                            <option value="12h">12h Volume</option>
+                            <option value="24h">24h Volume</option>
+                            <option value="all">All Time Volume</option>
+                        </select>
+                        <select
+                            className="bg-gray-700 text-white rounded px-3 py-1"
+                            value={tokenType}
+                            onChange={(e) => {
+                                setTokenType(e.target.value as any);
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <option value="all">All Tokens</option>
+                            <option value="custom">Custom Tokens</option>
+                            <option value="dex">DEX Tokens</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
