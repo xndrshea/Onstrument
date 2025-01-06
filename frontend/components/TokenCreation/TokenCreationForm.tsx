@@ -47,6 +47,10 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
         image: null,
         supply: 0,
         totalSupply: new BN(0),
+        websiteUrl: '',
+        twitterUrl: '',
+        docsUrl: '',
+        telegramUrl: '',
         curveConfig: {
             migrationStatus: 'active',
             isSubscribed: isSubscribed,
@@ -143,7 +147,16 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 }
             }
 
-            const result = await tokenTransactionService.createToken(params, formData.description)
+            const result = await tokenTransactionService.createToken(
+                params,
+                formData.description,
+                {
+                    websiteUrl: formData.websiteUrl,
+                    twitterUrl: formData.twitterUrl,
+                    docsUrl: formData.docsUrl,
+                    telegramUrl: formData.telegramUrl
+                }
+            );
 
             if (!result || !result.mintAddress) {
                 throw new Error('Transaction failed - invalid result')
@@ -234,7 +247,47 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             </div>
 
             <div className="form-group">
-                <label>Total Supply</label>
+                <label>Website URL</label>
+                <input
+                    type="url"
+                    value={formData.websiteUrl || ''}
+                    onChange={e => setFormData({ ...formData, websiteUrl: e.target.value })}
+                    placeholder="https://example.com"
+                />
+            </div>
+
+            <div className="form-group">
+                <label>Documentation URL</label>
+                <input
+                    type="url"
+                    value={formData.docsUrl || ''}
+                    onChange={e => setFormData({ ...formData, docsUrl: e.target.value })}
+                    placeholder="https://docs.example.com"
+                />
+            </div>
+
+            <div className="form-group">
+                <label>Twitter URL</label>
+                <input
+                    type="url"
+                    value={formData.twitterUrl || ''}
+                    onChange={e => setFormData({ ...formData, twitterUrl: e.target.value })}
+                    placeholder="https://twitter.com/username"
+                />
+            </div>
+
+            <div className="form-group">
+                <label>Telegram URL</label>
+                <input
+                    type="url"
+                    value={formData.telegramUrl || ''}
+                    onChange={e => setFormData({ ...formData, telegramUrl: e.target.value })}
+                    placeholder="https://t.me/username"
+                />
+            </div>
+
+            <div className="form-group">
+                <label>Supply</label>
                 <input
                     type="text"
                     onChange={e => {

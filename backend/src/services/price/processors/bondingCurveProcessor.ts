@@ -171,33 +171,25 @@ export class BondingCurveProcessor extends BaseProcessor {
             const buyer = new PublicKey(buffer.subarray(56, 88));
             const isSubscribed = buffer.readUInt8(88) === 1;
 
-            logger.info('Decoded BuyEvent:', {
-                mint: mint.toString(),
-                amount,
-                solAmount,
-                buyer: buyer.toString(),
-                isSubscribed
-            });
-
-            // Calculate effective price including virtual SOL
-            const effectiveSolAmount = solAmount + VIRTUAL_SOL_AMOUNT;
-            const price = effectiveSolAmount / LAMPORTS_PER_SOL / (amount / TOKEN_DECIMAL_MULTIPLIER);
+            // Convert lamports to SOL and tokens to proper decimals
+            const solInSol = solAmount / LAMPORTS_PER_SOL;
+            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
+            const price = solInSol / tokenAmount;
 
             // Record the price
             PriceHistoryModel.recordPrice({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER,
+                volume: tokenAmount,
                 timestamp: new Date()
             }).catch(error => {
                 logger.error('Error recording buy price:', error);
             });
 
-            // Emit price update for real-time subscribers
             this.emitPriceUpdate({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER
+                volume: tokenAmount
             });
 
         } catch (error) {
@@ -222,15 +214,16 @@ export class BondingCurveProcessor extends BaseProcessor {
                 isSubscribed
             });
 
-            // Calculate effective price including virtual SOL
-            const effectiveSolAmount = solAmount + VIRTUAL_SOL_AMOUNT;
-            const price = effectiveSolAmount / LAMPORTS_PER_SOL / (amount / TOKEN_DECIMAL_MULTIPLIER);
+            // Calculate price based on the actual SOL amount received
+            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
+            const solAmountInSol = solAmount / LAMPORTS_PER_SOL;
+            const price = solAmountInSol / tokenAmount;
 
             // Record the price
             PriceHistoryModel.recordPrice({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER,
+                volume: solAmountInSol, // Use actual SOL amount for volume
                 timestamp: new Date()
             }).catch(error => {
                 logger.error('Error recording sell price:', error);
@@ -240,7 +233,7 @@ export class BondingCurveProcessor extends BaseProcessor {
             this.emitPriceUpdate({
                 mintAddress: mint.toString(),
                 price,
-                volume: amount / TOKEN_DECIMAL_MULTIPLIER
+                volume: solAmountInSol
             });
 
         } catch (error) {

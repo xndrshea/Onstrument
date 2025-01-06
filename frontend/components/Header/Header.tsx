@@ -20,8 +20,8 @@ export function Header() {
                         <Link to="/market" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
                             Solana Market
                         </Link>
-                        <Link to="/roadmap" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
-                            Roadmap
+                        <Link to="/tokenomics-roadmap" className="text-gray-300 hover:text-white px-3 py-2 rounded-md">
+                            Tokenomics & Roadmap
                         </Link>
                     </div>
 
