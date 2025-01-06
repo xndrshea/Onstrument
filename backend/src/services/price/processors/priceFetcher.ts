@@ -157,21 +157,23 @@ export class PriceFetcher {
             if (isBaseSol) {
                 // Price = SOL amount / 10^9 (SOL decimals) needed for 1 token
                 price = (Number(baseAmount) / 1e9) / (Number(quoteAmount) / (10 ** pair.quoteDecimals));
-                volume = Number(quoteAmount) / (10 ** pair.quoteDecimals);
+                // Volume should be SOL amount, not token amount
+
                 await PriceHistoryModel.recordPrice({
                     mintAddress: pair.quoteToken,
                     price,
-                    volume,
+                    volume: 0,
                     timestamp: new Date()
                 });
             } else {
                 // Price = SOL amount / 10^9 (SOL decimals) needed for 1 token
                 price = (Number(quoteAmount) / 1e9) / (Number(baseAmount) / (10 ** pair.baseDecimals));
-                volume = Number(baseAmount) / (10 ** pair.baseDecimals);
+                // Volume should be SOL amount, not token amount
+                volume = Number(quoteAmount) / 1e9;  // Convert lamports to SOL
                 await PriceHistoryModel.recordPrice({
                     mintAddress: pair.baseToken,
                     price,
-                    volume,
+                    volume: 0,
                     timestamp: new Date()
                 });
             }

@@ -191,62 +191,43 @@ router.get('/market/tokens', async (req, res) => {
         const limit = parseInt(req.query.limit as string) || 10;
         const offset = (page - 1) * limit;
         const type = req.query.type as string;
+        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' || '24h';
 
-        // Debug log
-        logger.info(`Fetching market tokens. Type: ${type}, Page: ${page}, Limit: ${limit}`);
+        const volumeInterval = {
+            '5m': 'INTERVAL \'5 minutes\'',
+            '30m': 'INTERVAL \'30 minutes\'',
+            '1h': 'INTERVAL \'1 hour\'',
+            '4h': 'INTERVAL \'4 hours\'',
+            '12h': 'INTERVAL \'12 hours\'',
+            '24h': 'INTERVAL \'24 hours\'',
+            'all': null
+        }[sortBy];
+
+        const volumeQuery = volumeInterval
+            ? `AND time > NOW() - ${volumeInterval}`
+            : '';
 
         const tokensQuery = `
             SELECT 
-                t.mint_address,
-                t.name,
-                t.symbol,
-                t.decimals,
-                t.token_type,
-                t.verified,
-                t.image_url,
+                t.*,
                 COALESCE(
-                    (SELECT price FROM token_platform.price_history 
+                    (SELECT SUM(volume) 
+                     FROM token_platform.price_history 
                      WHERE mint_address = t.mint_address 
-                     ORDER BY time DESC LIMIT 1),
+                     ${volumeQuery}
+                    ),
                     0
-                ) as current_price,
-                COALESCE(
-                    (SELECT SUM(volume) FROM token_platform.price_history 
-                     WHERE mint_address = t.mint_address 
-                     AND time > NOW() - INTERVAL '24 hours'),
-                    0
-                ) as volume_24h
+                ) as volume
             FROM token_platform.tokens t
             ${type ? 'WHERE t.token_type = $3' : ''}
-            ORDER BY t.verified DESC, t.name ASC NULLS LAST
+            ORDER BY volume DESC
             LIMIT $1 OFFSET $2
         `;
 
-        // Debug log the query and parameters
         const params = type ? [limit, offset, type] : [limit, offset];
-        logger.info(`Query params:`, params);
-
         const result = await pool.query(tokensQuery, params);
 
-        // Debug log
-        logger.info(`Found ${result.rows.length} tokens`);
-
-        const countQuery = `
-            SELECT COUNT(*) FROM token_platform.tokens
-            ${type ? 'WHERE token_type = $1' : ''}
-        `;
-
-        const countResult = await pool.query(countQuery, type ? [type] : []);
-        const total = parseInt(countResult.rows[0].count);
-
-        res.json({
-            tokens: result.rows,
-            pagination: {
-                total,
-                page,
-                limit
-            }
-        });
+        res.json(result.rows);
     } catch (error) {
         logger.error('Error fetching market tokens:', error);
         res.status(500).json({ error: 'Internal server error' });

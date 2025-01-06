@@ -180,4 +180,58 @@ export class PriceHistoryModel {
             throw error;
         }
     }
+
+    static async getVolumeStats(mintAddress: string, period: '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all') {
+        try {
+            const query = {
+                '5m': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1m
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '5 minutes'
+                `,
+                '30m': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1m
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '30 minutes'
+                `,
+                '1h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1h
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '1 hour'
+                `,
+                '4h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1h
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '4 hours'
+                `,
+                '12h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1h
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '12 hours'
+                `,
+                '24h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1d
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '24 hours'
+                `,
+                'all': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history
+                    WHERE mint_address = $1
+                `
+            }[period];
+
+            const result = await pool.query(query, [mintAddress]);
+            return Number(result.rows[0]?.total_volume || 0);
+        } catch (error) {
+            logger.error('Error getting volume stats:', error);
+            throw error;
+        }
+    }
 }
