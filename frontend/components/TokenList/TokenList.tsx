@@ -77,7 +77,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
         <div className="p-4">
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold">All Tokens</h2>
+                    <h2 className="text-2xl font-bold">Onstrument Tokens</h2>
                     <div className="flex gap-2">
                         <select
                             value={volumePeriod}

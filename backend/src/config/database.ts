@@ -70,6 +70,7 @@ export async function initializeDatabase() {
                 verified BOOLEAN DEFAULT FALSE,
                 image_url TEXT,
                 attributes JSONB,
+                price_sol NUMERIC(78,36),
                 off_chain_metadata JSONB,
                 metadata_status VARCHAR(50),
                 metadata_source VARCHAR(50),

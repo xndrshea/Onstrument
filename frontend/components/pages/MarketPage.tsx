@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react'
 import { TokenRecord } from '../../../shared/types/token'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { API_BASE_URL } from '../../config'
 
 export function MarketPage() {
+    const navigate = useNavigate();
     const wallet = useWallet();
     const [tokens, setTokens] = useState<TokenRecord[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [tokenType, setTokenType] = useState<'all' | 'custom' | 'dex'>('all')
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
-    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCap'>('24h')
+    const [sortBy, setSortBy] = useState<string>('volume24h')
     const TOKENS_PER_PAGE = 10
 
     const fetchTokens = async () => {
@@ -21,13 +21,7 @@ export function MarketPage() {
             const url = new URL(`${API_BASE_URL}/market/tokens`);
             url.searchParams.append('page', currentPage.toString());
             url.searchParams.append('limit', TOKENS_PER_PAGE.toString());
-            url.searchParams.append('sortBy', volumePeriod);
-
-            if (tokenType === 'custom') {
-                url.searchParams.append('type', 'custom');
-            } else if (tokenType === 'dex') {
-                url.searchParams.append('type', 'dex');
-            }
+            url.searchParams.append('sortBy', sortBy);
 
             const response = await fetch(url.toString());
             if (!response.ok) {
@@ -35,18 +29,7 @@ export function MarketPage() {
             }
 
             const data = await response.json();
-            setTokens(data.tokens.map((token: any) => ({
-                mintAddress: token.mint_address,
-                name: token.name,
-                symbol: token.symbol,
-                tokenType: token.token_type,
-                verified: token.verified,
-                imageUrl: token.image_url,
-                currentPrice: token.current_price,
-                volume: token.volume,
-                marketCap: token.market_cap
-            })));
-
+            setTokens(data.tokens);
             setTotalPages(Math.ceil(data.pagination.total / TOKENS_PER_PAGE));
         } catch (error) {
             console.error('Error fetching market tokens:', error);
@@ -58,7 +41,7 @@ export function MarketPage() {
 
     useEffect(() => {
         fetchTokens();
-    }, [currentPage, tokenType, volumePeriod]);
+    }, [currentPage, sortBy]);
 
     const handlePageChange = (newPage: number) => {
         setCurrentPage(newPage);
@@ -69,80 +52,90 @@ export function MarketPage() {
     if (error) return <div className="p-4 text-red-500">{error}</div>
 
     return (
-        <div className="p-4">
-            <div className="max-w-6xl mx-auto">
+        <div className="p-4 bg-[#1C1D21]">
+            <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold">Token Market</h1>
-                    <div className="flex gap-2">
-                        <select
-                            value={volumePeriod}
-                            onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
-                            className="bg-gray-700 text-white rounded px-3 py-1"
-                        >
-                            <option value="marketCap">Market Cap</option>
-                            <option value="5m">5m Volume</option>
-                            <option value="30m">30m Volume</option>
-                            <option value="1h">1h Volume</option>
-                            <option value="4h">4h Volume</option>
-                            <option value="12h">12h Volume</option>
-                            <option value="24h">24h Volume</option>
-                            <option value="all">All Time Volume</option>
-                        </select>
-                        <select
-                            className="bg-gray-700 text-white rounded px-3 py-1"
-                            value={tokenType}
-                            onChange={(e) => {
-                                setTokenType(e.target.value as any);
-                                setCurrentPage(1);
-                            }}
-                        >
-                            <option value="all">All Tokens</option>
-                            <option value="custom">Custom Tokens</option>
-                            <option value="dex">DEX Tokens</option>
-                        </select>
-                    </div>
+                    <h1 className="text-2xl font-bold text-white">Market</h1>
+                    <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="bg-[#2C2D33] text-white rounded px-3 py-1 text-sm"
+                    >
+                        <option value="volume24h">24h Volume</option>
+                        <option value="volume1h">1h Volume</option>
+                        <option value="volume5m">5m Volume</option>
+                        <option value="marketCap">Market Cap</option>
+                        <option value="priceChange24h">24h Change</option>
+                    </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {tokens.map(token => (
-                        <Link
-                            key={token.mintAddress}
-                            to={`/token/${token.mintAddress}`}
-                            state={{ tokenType: token.tokenType }}
-                            className="bg-gray-800 p-4 rounded-lg hover:bg-gray-700 transition-colors"
-                        >
-                            <div className="flex justify-between items-start mb-2">
-                                <div>
-                                    <h3 className="font-semibold">{token.name}</h3>
-                                    <p className="text-sm text-gray-400">{token.symbol}</p>
-                                </div>
-                                <span className="text-xs px-2 py-1 rounded bg-gray-700">
-                                    {token.tokenType === 'dex' ? 'DEX' : 'Custom'}
-                                </span>
-                            </div>
-                            <p className="text-sm text-gray-400 mt-2">
-                                {token.mintAddress.slice(0, 4)}...{token.mintAddress.slice(-4)}
-                            </p>
-                        </Link>
-                    ))}
+                {/* Market Table */}
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="text-sm text-gray-400 border-b border-gray-800">
+                                <th className="py-3 text-left">Token</th>
+                                <th className="py-3 text-right">Price</th>
+                                <th className="py-3 text-right">24h Change</th>
+                                <th className="py-3 text-right">Volume</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {tokens.map(token => (
+                                <tr
+                                    key={token.mintAddress}
+                                    className="border-b border-gray-800 hover:bg-[#2C2D33] cursor-pointer"
+                                    onClick={() => navigate(`/token/${token.mintAddress}`)}
+                                >
+                                    <td className="py-4">
+                                        <div className="flex items-center gap-2">
+                                            {token.imageUrl && (
+                                                <img
+                                                    src={token.imageUrl}
+                                                    alt={token.symbol}
+                                                    className="w-6 h-6 rounded-full"
+                                                />
+                                            )}
+                                            <div>
+                                                <div className="font-medium text-white">{token.symbol}</div>
+                                                <div className="text-sm text-gray-400">{token.name}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="py-4 text-right text-white">
+                                        ${Number(token.currentPrice)?.toFixed(4)}
+                                    </td>
+                                    <td className={`py-4 text-right ${(token.priceChange24h || 0) >= 0
+                                        ? 'text-green-500'
+                                        : 'text-red-500'
+                                        }`}>
+                                        {Number(token.priceChange24h)?.toFixed(1)}%
+                                    </td>
+                                    <td className="py-4 text-right text-white">
+                                        ${formatNumber(token.volume24h || 0)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
 
-                {/* Pagination Controls */}
-                <div className="flex justify-center items-center mt-8 space-x-2">
+                {/* Pagination */}
+                <div className="flex justify-center mt-6 gap-2">
                     <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
+                        className="px-4 py-2 bg-[#2C2D33] rounded disabled:opacity-50"
                     >
                         Previous
                     </button>
-                    <span className="px-4 py-2">
+                    <span className="px-4 py-2 text-gray-400">
                         Page {currentPage} of {totalPages}
                     </span>
                     <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
+                        className="px-4 py-2 bg-[#2C2D33] rounded disabled:opacity-50"
                     >
                         Next
                     </button>
@@ -150,4 +143,12 @@ export function MarketPage() {
             </div>
         </div>
     );
+}
+
+// Helper function for number formatting
+function formatNumber(num: number): string {
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+    if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+    return num.toFixed(2);
 }
