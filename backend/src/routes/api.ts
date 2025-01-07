@@ -272,60 +272,110 @@ router.get('/market/tokens', async (req, res) => {
         const limit = parseInt(req.query.limit as string) || 10;
         const offset = (page - 1) * limit;
         const type = req.query.type as string;
-        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCap' || '24h';
+        const sortBy = req.query.sortBy as string || 'volume24h';
 
-        const volumeInterval = {
-            '5m': 'INTERVAL \'5 minutes\'',
-            '30m': 'INTERVAL \'30 minutes\'',
-            '1h': 'INTERVAL \'1 hour\'',
-            '4h': 'INTERVAL \'4 hours\'',
-            '12h': 'INTERVAL \'12 hours\'',
-            '24h': 'INTERVAL \'24 hours\'',
-            'all': null,
-            'marketCap': null
-        }[sortBy];
+        // Build the WHERE clause for token type
+        const typeWhere = 'WHERE t.token_type = \'dex\'';  // Always filter for DEX tokens only
 
-        // First get total count
-        const countQuery = `
-            SELECT COUNT(*) 
-            FROM token_platform.tokens t
-            ${type ? 'WHERE t.token_type = $1' : ''}
-        `;
+        // Define the ORDER BY clause based on sortBy
+        let orderByClause;
+        let additionalSelect = '';
 
-        const countResult = await pool.query(countQuery, type ? [type] : []);
+        switch (sortBy) {
+            case 'marketCap':
+                orderByClause = 'ORDER BY t.market_cap DESC NULLS LAST';
+                break;
+            case 'volume5m':
+                additionalSelect = ', COALESCE(t.volume_5m, 0) as volume';
+                orderByClause = 'ORDER BY volume DESC';
+                break;
+            case 'volume1h':
+                additionalSelect = ', COALESCE(t.volume_1h, 0) as volume';
+                orderByClause = 'ORDER BY volume DESC';
+                break;
+            case 'volume24h':
+                additionalSelect = ', COALESCE(t.volume_24h, 0) as volume';
+                orderByClause = 'ORDER BY volume DESC';
+                break;
+            case 'volume7d':
+                additionalSelect = ', COALESCE(t.volume_7d, 0) as volume';
+                orderByClause = 'ORDER BY volume DESC';
+                break;
+            case 'priceChange5m':
+                orderByClause = 'ORDER BY t.price_change_5m DESC NULLS LAST';
+                break;
+            case 'priceChange1h':
+                orderByClause = 'ORDER BY t.price_change_1h DESC NULLS LAST';
+                break;
+            case 'priceChange24h':
+                orderByClause = 'ORDER BY t.price_change_24h DESC NULLS LAST';
+                break;
+            case 'newest':
+                orderByClause = 'ORDER BY t.created_at DESC';
+                break;
+            default:
+                orderByClause = 'ORDER BY t.volume_24h DESC NULLS LAST';
+        }
+
+        // Get total count
+        const countResult = await pool.query(`
+            SELECT COUNT(*) FROM token_platform.tokens t ${typeWhere}
+        `);
         const totalCount = parseInt(countResult.rows[0].count);
 
-        // Then get paginated results with volume
-        const volumeQuery = volumeInterval
-            ? `AND time > NOW() - ${volumeInterval}`
-            : '';
-
-        const orderByClause = sortBy === 'marketCap'
-            ? 'ORDER BY t.market_cap DESC NULLS LAST'
-            : 'ORDER BY volume DESC';
-
-        const tokensQuery = `
+        // Get paginated results
+        const query = `
             SELECT 
-                t.*,
-                COALESCE(
-                    (SELECT SUM(volume) 
-                     FROM token_platform.price_history 
-                     WHERE mint_address = t.mint_address 
-                     ${volumeQuery}
-                    ),
-                    0
-                ) as volume
+                t.mint_address,
+                t.name,
+                t.symbol,
+                t.token_type,
+                t.verified,
+                t.image_url,
+                t.current_price,
+                t.market_cap,
+                t.volume_5m,
+                t.volume_1h,
+                t.volume_24h,
+                t.volume_7d,
+                t.price_change_5m,
+                t.price_change_1h,
+                t.price_change_24h,
+                t.price_change_7d,
+                t.created_at
+                ${additionalSelect}
             FROM token_platform.tokens t
-            ${type ? 'WHERE t.token_type = $3' : ''}
+            WHERE t.token_type = 'dex'
+            AND t.name IS NOT NULL 
+            AND t.name != ''
+            AND t.symbol IS NOT NULL 
+            AND t.symbol != ''
             ${orderByClause}
             LIMIT $1 OFFSET $2
         `;
 
-        const params = type ? [limit, offset, type] : [limit, offset];
-        const result = await pool.query(tokensQuery, params);
+        const result = await pool.query(query, [limit, offset]);
 
         res.json({
-            tokens: result.rows,
+            tokens: result.rows.map(token => ({
+                mintAddress: token.mint_address,
+                name: token.name,
+                symbol: token.symbol,
+                tokenType: token.token_type,
+                verified: token.verified,
+                imageUrl: token.image_url,
+                currentPrice: token.current_price,
+                marketCap: token.market_cap,
+                volume5m: token.volume_5m,
+                volume1h: token.volume_1h,
+                volume24h: token.volume_24h,
+                volume7d: token.volume_7d,
+                priceChange5m: token.price_change_5m,
+                priceChange1h: token.price_change_1h,
+                priceChange24h: token.price_change_24h,
+                priceChange7d: token.price_change_7d,
+                createdAt: token.created_at
+            })),
             pagination: {
                 total: totalCount,
                 page,
@@ -333,8 +383,8 @@ router.get('/market/tokens', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error in /market/tokens:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        logger.error('Error fetching market tokens:', error);
+        res.status(500).json({ error: 'Failed to fetch market tokens' });
     }
 });
 

@@ -1,12 +1,13 @@
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { TradingInterface } from '../Trading/TradingInterface';
 import { PriceChart } from '../Trading/PriceChart';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { TokenRecord } from '../../../shared/types/token';
 import { tokenService } from '../../services/tokenService';
 import { priceClient } from '../../services/priceClient';
 import { TradingViewChart } from '../Trading/TradingViewChart';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
+import { API_BASE_URL } from '../../config';
 
 // Add at the top with other imports
 type VolumeKey = `volume${string}`;
@@ -36,6 +37,23 @@ export function TokenDetailsPage() {
     const [error, setError] = useState<string | null>(null);
     const [isTokenInfoExpanded, setIsTokenInfoExpanded] = useState(false);
     const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+    const navigate = useNavigate();
+    const [topTokens, setTopTokens] = useState<TokenRecord[]>([]);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // Add useRef and useEffect for click-outside handling
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsDropdownOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Single WebSocket subscription - only for custom tokens
     useEffect(() => {
@@ -96,6 +114,85 @@ export function TokenDetailsPage() {
         }
     }, [mintAddress, tokenType]);
 
+    // Fetch top tokens by 24h volume
+    useEffect(() => {
+        const fetchTopTokens = async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/market/tokens?sortBy=volume24h&limit=100`);
+                const data = await response.json();
+                setTopTokens(data.tokens);
+            } catch (error) {
+                console.error('Error fetching top tokens:', error);
+            }
+        };
+        fetchTopTokens();
+    }, []);
+
+    // Handler for token selection
+    const handleTokenChange = (newMintAddress: string) => {
+        navigate(`/tokens/${newMintAddress}`);
+    };
+
+    const formatPriceWithoutTrailingZeros = (price: number) => {
+        return price.toString().replace(/\.?0+$/, '');
+    };
+
+    // Add this near your chart component
+    const renderTokenSelector = () => (
+        <div ref={dropdownRef} className="relative inline-flex items-center">
+            <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="flex items-center gap-1 p-1 text-gray-300 hover:text-white transition-colors"
+            >
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                </svg>
+            </button>
+
+            {isDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1 w-[400px] bg-[#1E222D] text-white rounded-md border border-gray-700 shadow-lg z-50 max-h-[400px] overflow-hidden">
+                    <div className="sticky top-0 bg-[#1E222D] grid grid-cols-[1fr_auto_auto] px-4 py-2 text-xs text-gray-400 border-b border-gray-700">
+                        <span>Token</span>
+                        <span className="px-4">Price</span>
+                        <span>24h Volume</span>
+                    </div>
+                    <div className="overflow-y-auto max-h-[360px] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                        {topTokens.map(token => (
+                            <div
+                                key={token.mintAddress}
+                                onClick={() => {
+                                    setIsDropdownOpen(false);
+                                    window.location.href = `/token/${token.mintAddress}`;
+                                }}
+                                className="grid grid-cols-[1fr_auto_auto] px-4 py-2 hover:bg-gray-700 cursor-pointer items-center text-sm"
+                            >
+                                <div className="flex items-center gap-2">
+                                    {token.imageUrl && (
+                                        <img
+                                            src={token.imageUrl}
+                                            alt=""
+                                            className="w-5 h-5 rounded-full"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                            }}
+                                        />
+                                    )}
+                                    <span className="font-medium">{token.symbol}</span>
+                                </div>
+                                <span className="px-4 text-right tabular-nums">
+                                    ${formatPriceWithoutTrailingZeros(token.currentPrice || 0)}
+                                </span>
+                                <span className="text-right tabular-nums">
+                                    ${formatNumber(token.volume24h || 0)}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
     if (loading) return <div className="p-4 text-white">Loading...</div>;
     if (error) return <div className="p-4 text-white">Error: {error}</div>;
     if (!token) return <div className="p-4 text-white">Token not found</div>;
@@ -106,23 +203,27 @@ export function TokenDetailsPage() {
     return (
         <div className="p-4 text-white">
             <div className="max-w-[1920px] mx-auto">
-                <div className="flex items-center gap-4 mb-4">
-                    {imageUrl && (
-                        <img
-                            src={imageUrl}
-                            alt={token.name}
-                            className="w-16 h-16 rounded-full object-cover"
-                            onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                        />
-                    )}
-                    <div>
-                        <h1 className="text-2xl font-bold">{token.name} ({token.symbol})</h1>
-                        <div className="flex gap-2 text-sm text-gray-400">
-                            <span>Type: {token.tokenType}</span>
-                            <span>•</span>
-                            <span>Source: {token.tokenSource}</span>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-4">
+                        {imageUrl && (
+                            <img
+                                src={imageUrl}
+                                alt={token.name}
+                                className="w-16 h-16 rounded-full object-cover"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                            />
+                        )}
+                        <div>
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                {token.name} ({token.symbol}) {renderTokenSelector()}
+                            </h1>
+                            <div className="flex gap-2 text-sm text-gray-400">
+                                <span>Type: {token.tokenType}</span>
+                                <span>•</span>
+                                <span>Source: {token.tokenSource}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
