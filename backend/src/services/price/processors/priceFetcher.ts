@@ -2,7 +2,6 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
-import { WebSocketClient } from '../websocket/types';
 
 interface PairData {
     baseToken: string;
@@ -37,11 +36,12 @@ export class PriceFetcher {
     }
 
     static async fetchPrice(pairData: PairData): Promise<void> {
-        return await PriceFetcher.instance.processPair(pairData);
-    }
+        const instance = PriceFetcher.getInstance();
+        instance.queue.push(pairData);
 
-    static async fetchPriceWithVolume(pairData: PairData, volume?: number): Promise<void> {
-        return await PriceFetcher.instance.processPair(pairData, volume);
+        if (instance.queue.length >= instance.BATCH_SIZE && !instance.isProcessing) {
+            await instance.processBatch();
+        }
     }
 
     private async checkAndProcessBatch(): Promise<void> {
@@ -145,140 +145,38 @@ export class PriceFetcher {
     private async calculateAndRecordPrice(
         pair: PairData,
         baseAmount: bigint,
-        quoteAmount: bigint,
-        volume?: number
+        quoteAmount: bigint
     ): Promise<void> {
         const NATIVE_SOL = "So11111111111111111111111111111111111111112";
         const isBaseSol = pair.baseToken === NATIVE_SOL;
 
         try {
             let price: number;
+            let volume: number;
+
             if (isBaseSol) {
+                // Price = SOL amount / 10^9 (SOL decimals) needed for 1 token
                 price = (Number(baseAmount) / 1e9) / (Number(quoteAmount) / (10 ** pair.quoteDecimals));
+                volume = Number(quoteAmount) / (10 ** pair.quoteDecimals);
                 await PriceHistoryModel.recordPrice({
                     mintAddress: pair.quoteToken,
                     price,
-                    volume: volume || 0,
+                    volume,
                     timestamp: new Date()
-                });
-
-                // Emit price update
-                this.emitPriceUpdate({
-                    mintAddress: pair.quoteToken,
-                    price,
-                    volume: volume || 0
                 });
             } else {
+                // Price = SOL amount / 10^9 (SOL decimals) needed for 1 token
                 price = (Number(quoteAmount) / 1e9) / (Number(baseAmount) / (10 ** pair.baseDecimals));
+                volume = Number(baseAmount) / (10 ** pair.baseDecimals);
                 await PriceHistoryModel.recordPrice({
                     mintAddress: pair.baseToken,
                     price,
-                    volume: volume || 0,
+                    volume,
                     timestamp: new Date()
-                });
-
-                // Emit price update
-                this.emitPriceUpdate({
-                    mintAddress: pair.baseToken,
-                    price,
-                    volume: volume || 0
                 });
             }
         } catch (error) {
             logger.error(`Error calculating price for pair ${pair.accountKey}:`, error);
-        }
-    }
-
-    private emitPriceUpdate(update: {
-        mintAddress: string;
-        price: number;
-        volume?: number;
-    }) {
-        const wss = global.wss;
-        if (wss) {
-            wss.clients.forEach((client: WebSocketClient) => {
-                if (client.readyState === WebSocket.OPEN &&
-                    client.subscriptions?.has(update.mintAddress)) {
-                    client.send(JSON.stringify({
-                        type: 'price',
-                        ...update,
-                        timestamp: Date.now()
-                    }));
-                }
-            });
-        }
-    }
-
-    private async processPair(pairData: PairData, volume?: number): Promise<void> {
-        if (this.isProcessing) return;
-        this.lastProcessTime = Date.now();
-
-        try {
-            this.isProcessing = true;
-            const NATIVE_SOL = "So11111111111111111111111111111111111111112";
-
-            // Separate SOL vaults and token vaults
-            const solVaults: { pubkey: PublicKey, pairIndex: number, isBase: boolean }[] = [];
-            const tokenVaults: { pubkey: PublicKey, pairIndex: number, isBase: boolean }[] = [];
-
-            const isBaseSol = pairData.baseToken === NATIVE_SOL;
-            const isQuoteSol = pairData.quoteToken === NATIVE_SOL;
-
-            if (isBaseSol) {
-                solVaults.push({ pubkey: new PublicKey(pairData.baseVault), pairIndex: 0, isBase: true });
-                tokenVaults.push({ pubkey: new PublicKey(pairData.quoteVault), pairIndex: 0, isBase: false });
-            } else if (isQuoteSol) {
-                tokenVaults.push({ pubkey: new PublicKey(pairData.baseVault), pairIndex: 0, isBase: true });
-                solVaults.push({ pubkey: new PublicKey(pairData.quoteVault), pairIndex: 0, isBase: false });
-            } else {
-                logger.error(`Invalid pair ${pairData.accountKey}: neither token is SOL`);
-            }
-
-            // Batch fetch SOL balances
-            const solBalances = await this.connection.getMultipleAccountsInfo(
-                solVaults.map(v => v.pubkey)
-            );
-
-            // Batch fetch token account infos
-            const tokenAccountInfos = await this.connection.getMultipleAccountsInfo(
-                tokenVaults.map(v => v.pubkey)
-            );
-
-            // Create a map to store all amounts
-            const amounts = new Map<string, bigint>();
-
-            // Process SOL balances
-            solVaults.forEach((vault, i) => {
-                const balance = BigInt(solBalances[i]?.lamports || 0);
-                const key = `${vault.pairIndex}-${vault.isBase ? 'base' : 'quote'}`;
-                amounts.set(key, balance);
-            });
-
-            // Process token accounts
-            tokenVaults.forEach((vault, i) => {
-                const accountInfo = tokenAccountInfos[i];
-                if (!accountInfo?.data) {
-                    logger.error(`Missing token account info for vault ${vault.pubkey.toString()}`);
-                    return;
-                }
-                const amount = this.extractTokenAmount(accountInfo.data);
-                const key = `${vault.pairIndex}-${vault.isBase ? 'base' : 'quote'}`;
-                amounts.set(key, amount);
-            });
-
-            const baseAmount = amounts.get(`0-base`);
-            const quoteAmount = amounts.get(`0-quote`);
-
-            if (!baseAmount || !quoteAmount) {
-                logger.error(`Missing amounts for pair ${pairData.accountKey}`);
-                return;
-            }
-
-            await this.calculateAndRecordPrice(pairData, baseAmount, quoteAmount, volume);
-        } catch (error) {
-            logger.error('Error processing price:', error);
-        } finally {
-            this.isProcessing = false;
         }
     }
 }

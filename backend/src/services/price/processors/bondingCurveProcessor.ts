@@ -9,7 +9,8 @@ import { createHash } from 'crypto';
 import WebSocket from 'ws';
 import { WebSocketClient } from '../websocket/types';
 import { pool } from '../../../config/database';
-import { PriceFetcher } from './priceFetcher';
+import { BondingCurvePriceFetcher } from './bondingCurvePriceFetcher';
+
 
 const TOKEN_DECIMALS = 6;
 const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
@@ -203,18 +204,13 @@ export class BondingCurveProcessor extends BaseProcessor {
 
             const tokenInfo = await this.getTokenInfo(mint.toString());
             if (tokenInfo) {
-                const pairData = {
-                    baseToken: "So11111111111111111111111111111111111111112",
-                    quoteToken: mint.toString(),
-                    baseVault: tokenInfo.tokenVault,
-                    quoteVault: tokenInfo.curveAddress,
-                    baseDecimals: 9,
-                    quoteDecimals: tokenInfo.decimals,
-                    accountKey: mint.toString()
-                };
-
-                // Pass volume to PriceFetcher
-                await PriceFetcher.fetchPriceWithVolume(pairData, volumeInSol);
+                await BondingCurvePriceFetcher.fetchPrice({
+                    mintAddress: mint.toString(),
+                    curveAddress: tokenInfo.curveAddress,
+                    tokenVault: tokenInfo.tokenVault,
+                    decimals: tokenInfo.decimals,
+                    volume: volumeInSol
+                });
             }
         } catch (error) {
             logger.error('Error handling buy event:', error);
@@ -234,18 +230,13 @@ export class BondingCurveProcessor extends BaseProcessor {
 
             const tokenInfo = await this.getTokenInfo(mint.toString());
             if (tokenInfo) {
-                const pairData = {
-                    baseToken: "So11111111111111111111111111111111111111112",
-                    quoteToken: mint.toString(),
-                    baseVault: tokenInfo.tokenVault,
-                    quoteVault: tokenInfo.curveAddress,
-                    baseDecimals: 9,
-                    quoteDecimals: tokenInfo.decimals,
-                    accountKey: mint.toString()
-                };
-
-                // Pass volume to PriceFetcher
-                await PriceFetcher.fetchPriceWithVolume(pairData, volumeInSol);
+                await BondingCurvePriceFetcher.fetchPrice({
+                    mintAddress: mint.toString(),
+                    curveAddress: tokenInfo.curveAddress,
+                    tokenVault: tokenInfo.tokenVault,
+                    decimals: tokenInfo.decimals,
+                    volume: volumeInSol
+                });
             }
         } catch (error) {
             logger.error('Error handling sell event:', error);
