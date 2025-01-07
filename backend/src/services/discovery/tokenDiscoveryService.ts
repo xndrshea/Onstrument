@@ -125,6 +125,10 @@ export class TokenDiscoveryService {
     private constructor(client: Pool) {
         this.client = client;
         this.metadataService = MetadataService.getInstance();
+        // Ensure SOL exists in database once when service starts
+        this.ensureTokenMetadata('So11111111111111111111111111111111111111112').catch(err =>
+            this.logger.error('Failed to ensure SOL metadata:', err)
+        );
     }
 
     static getInstance(): TokenDiscoveryService {
@@ -187,7 +191,6 @@ export class TokenDiscoveryService {
 
             // If token doesn't exist or metadata is pending/null, queue it
             if (!result.rows.length || !result.rows[0].metadata_status || result.rows[0].metadata_status === 'pending') {
-                console.log('Queueing metadata update for:', mintAddress);
                 await this.metadataService.queueMetadataUpdate(mintAddress, 'discovery_service');
 
                 // Update metadata_status to 'pending' if it's null
@@ -222,9 +225,6 @@ export class TokenDiscoveryService {
                 }
             );
 
-            console.log('\n=== RAW RAYDIUM API RESPONSE ===');
-            console.log(JSON.stringify(response.data, null, 2));
-
             if (!response.data.success) {
                 throw new Error('Raydium API request failed');
             }
@@ -256,13 +256,23 @@ export class TokenDiscoveryService {
 
     private async processRaydiumToken(pool: RaydiumPool): Promise<void> {
         try {
+            // Get SOL's current price from database using mint address
+            const solResult = await this.client.query(
+                'SELECT current_price FROM token_platform.tokens WHERE mint_address = $1',
+                ['So11111111111111111111111111111111111111112']
+            );
+            const solPriceUSD = solResult.rows[0]?.current_price;
+
             const isBaseSol = this.SOL_ADDRESSES.includes(pool.mintA.address);
 
-            // Calculate prices
-            const priceInSol = isBaseSol
-                ? pool.mintAmountA / pool.mintAmountB
-                : pool.mintAmountB / pool.mintAmountA;
-            const priceInUSD = priceInSol * pool.price;
+            // Adjust calculation based on decimals
+            const priceSol = isBaseSol
+                ? (pool.mintAmountB / Math.pow(10, pool.mintB.decimals)) / (pool.mintAmountA / Math.pow(10, pool.mintA.decimals))
+                : (pool.mintAmountA / Math.pow(10, pool.mintA.decimals)) / (pool.mintAmountB / Math.pow(10, pool.mintB.decimals));
+
+            const priceUSD = priceSol * solPriceUSD;
+
+            console.log(`Raydium - ${isBaseSol ? pool.mintB.address : pool.mintA.address}: priceUSD: ${priceUSD}, priceSol: ${priceSol}, decimalsA: ${pool.mintA.decimals}, decimalsB: ${pool.mintB.decimals}`);
 
             const tokenData: TokenUpsertData = {
                 address: isBaseSol ? pool.mintB.address : pool.mintA.address,
@@ -270,8 +280,8 @@ export class TokenDiscoveryService {
                 name: isBaseSol ? pool.mintB.name : pool.mintA.name,
                 symbol: isBaseSol ? pool.mintB.symbol : pool.mintA.symbol,
                 decimals: isBaseSol ? pool.mintB.decimals : pool.mintA.decimals,
-                current_price: priceInUSD,
-                price_sol: priceInSol,
+                current_price: priceUSD,
+                price_sol: priceSol,
                 // Standardize volume fields
                 volume_24h: pool.day?.volume || 0,        // Use this as primary 24h volume
                 volume_7d: pool.week?.volume || 0,        // Use this as primary 7d volume
@@ -311,9 +321,6 @@ export class TokenDiscoveryService {
                 headers: { 'Accept': 'application/json;version=20230302' }
             });
 
-            console.log('\n=== RAW GECKO TERMINAL API RESPONSE ===');
-            console.log(JSON.stringify(response.data, null, 2));
-
             const allPools = response.data?.data || [];
 
             for (const pool of allPools) {
@@ -342,65 +349,79 @@ export class TokenDiscoveryService {
             const baseTokenId = pool.relationships.base_token.data.id.split('_')[1];
             const quoteTokenId = pool.relationships.quote_token.data.id.split('_')[1];
 
+            // Save SOL's price data first
+            await this.upsertToken({
+                address: 'So11111111111111111111111111111111111111112',
+                token_type: 'dex',
+                current_price: parseFloat(attributes.quote_token_price_usd),
+                price_sol: 1,
+                token_source: 'geckoterminal'
+            });
+
             const isBaseSol = this.SOL_ADDRESSES.includes(baseTokenId);
-            const isQuoteSol = this.SOL_ADDRESSES.includes(quoteTokenId);
 
-            if ((isBaseSol && !isQuoteSol) || (!isBaseSol && isQuoteSol)) {
-                const tokenData: TokenUpsertData = {
-                    address: isBaseSol ? quoteTokenId : baseTokenId,
-                    token_type: 'dex' as const,
-                    // Standard price fields
-                    current_price: isBaseSol
-                        ? parseFloat(attributes.quote_token_price_usd)
-                        : parseFloat(attributes.base_token_price_usd),
-                    price_sol: isBaseSol
-                        ? parseFloat(attributes.quote_token_price_native_currency)
-                        : parseFloat(attributes.base_token_price_native_currency),
-                    price_quote_token: isBaseSol
-                        ? parseFloat(attributes.quote_token_price_base_token)
-                        : parseFloat(attributes.base_token_price_quote_token),
-                    // Standard volume fields
-                    volume_24h: parseFloat(attributes.volume_usd.h24),
-                    volume_1h: parseFloat(attributes.volume_usd.h1),
-                    volume_6h: parseFloat(attributes.volume_usd.h6),
-                    volume_5m: parseFloat(attributes.volume_usd.m5),
-                    // Standard price change fields
-                    price_change_24h: parseFloat(attributes.price_change_percentage.h24),
-                    price_change_1h: parseFloat(attributes.price_change_percentage.h1),
-                    price_change_6h: parseFloat(attributes.price_change_percentage.h6),
-                    price_change_5m: parseFloat(attributes.price_change_percentage.m5),
-                    // Market data
-                    market_cap_usd: attributes.market_cap_usd ? parseFloat(attributes.market_cap_usd) : null,
-                    fdv_usd: parseFloat(attributes.fdv_usd),
-                    // Transaction data
-                    tx_5m_buys: attributes.transactions.m5.buys,
-                    tx_5m_sells: attributes.transactions.m5.sells,
-                    tx_5m_buyers: attributes.transactions.m5.buyers,
-                    tx_5m_sellers: attributes.transactions.m5.sellers,
-                    tx_15m_buys: attributes.transactions.m15.buys,
-                    tx_15m_sells: attributes.transactions.m15.sells,
-                    tx_15m_buyers: attributes.transactions.m15.buyers,
-                    tx_15m_sellers: attributes.transactions.m15.sellers,
-                    tx_30m_buys: attributes.transactions.m30.buys,
-                    tx_30m_sells: attributes.transactions.m30.sells,
-                    tx_30m_buyers: attributes.transactions.m30.buyers,
-                    tx_30m_sellers: attributes.transactions.m30.sellers,
-                    tx_1h_buys: attributes.transactions.h1.buys,
-                    tx_1h_sells: attributes.transactions.h1.sells,
-                    tx_1h_buyers: attributes.transactions.h1.buyers,
-                    tx_1h_sellers: attributes.transactions.h1.sellers,
-                    tx_24h_buys: attributes.transactions.h24.buys,
-                    tx_24h_sells: attributes.transactions.h24.sells,
-                    tx_24h_buyers: attributes.transactions.h24.buyers,
-                    tx_24h_sellers: attributes.transactions.h24.sellers,
-                    // Additional data
-                    reserve_in_usd: parseFloat(attributes.reserve_in_usd),
-                    pool_created_at: attributes.pool_created_at,
-                    token_source: 'geckoterminal'
-                };
+            const priceUSD = isBaseSol
+                ? parseFloat(attributes.quote_token_price_usd)
+                : parseFloat(attributes.base_token_price_usd);
+            const priceSol = isBaseSol
+                ? parseFloat(attributes.quote_token_price_native_currency)
+                : parseFloat(attributes.base_token_price_native_currency);
 
-                await this.upsertToken(tokenData);
-            }
+            console.log(`Gecko - ${isBaseSol ? quoteTokenId : baseTokenId}: priceUSD: ${priceUSD}, priceSol: ${priceSol}`);
+
+            const tokenData: TokenUpsertData = {
+                address: isBaseSol ? quoteTokenId : baseTokenId,
+                token_type: 'dex' as const,
+                current_price: isBaseSol
+                    ? parseFloat(attributes.quote_token_price_usd)
+                    : parseFloat(attributes.base_token_price_usd),
+                price_sol: isBaseSol
+                    ? parseFloat(attributes.quote_token_price_native_currency)
+                    : parseFloat(attributes.base_token_price_native_currency),
+                price_quote_token: isBaseSol
+                    ? parseFloat(attributes.quote_token_price_base_token)
+                    : parseFloat(attributes.base_token_price_quote_token),
+                // Standard volume fields
+                volume_24h: parseFloat(attributes.volume_usd.h24),
+                volume_1h: parseFloat(attributes.volume_usd.h1),
+                volume_6h: parseFloat(attributes.volume_usd.h6),
+                volume_5m: parseFloat(attributes.volume_usd.m5),
+                // Standard price change fields
+                price_change_24h: parseFloat(attributes.price_change_percentage.h24),
+                price_change_1h: parseFloat(attributes.price_change_percentage.h1),
+                price_change_6h: parseFloat(attributes.price_change_percentage.h6),
+                price_change_5m: parseFloat(attributes.price_change_percentage.m5),
+                // Market data
+                market_cap_usd: attributes.market_cap_usd ? parseFloat(attributes.market_cap_usd) : null,
+                fdv_usd: parseFloat(attributes.fdv_usd),
+                // Transaction data
+                tx_5m_buys: attributes.transactions.m5.buys,
+                tx_5m_sells: attributes.transactions.m5.sells,
+                tx_5m_buyers: attributes.transactions.m5.buyers,
+                tx_5m_sellers: attributes.transactions.m5.sellers,
+                tx_15m_buys: attributes.transactions.m15.buys,
+                tx_15m_sells: attributes.transactions.m15.sells,
+                tx_15m_buyers: attributes.transactions.m15.buyers,
+                tx_15m_sellers: attributes.transactions.m15.sellers,
+                tx_30m_buys: attributes.transactions.m30.buys,
+                tx_30m_sells: attributes.transactions.m30.sells,
+                tx_30m_buyers: attributes.transactions.m30.buyers,
+                tx_30m_sellers: attributes.transactions.m30.sellers,
+                tx_1h_buys: attributes.transactions.h1.buys,
+                tx_1h_sells: attributes.transactions.h1.sells,
+                tx_1h_buyers: attributes.transactions.h1.buyers,
+                tx_1h_sellers: attributes.transactions.h1.sellers,
+                tx_24h_buys: attributes.transactions.h24.buys,
+                tx_24h_sells: attributes.transactions.h24.sells,
+                tx_24h_buyers: attributes.transactions.h24.buyers,
+                tx_24h_sellers: attributes.transactions.h24.sellers,
+                // Additional data
+                reserve_in_usd: parseFloat(attributes.reserve_in_usd),
+                pool_created_at: attributes.pool_created_at,
+                token_source: 'geckoterminal'
+            };
+
+            await this.upsertToken(tokenData);
         } catch (error) {
             this.logger.error('Failed to process GeckoTerminal token:', error);
         }
@@ -413,6 +434,7 @@ export class TokenDiscoveryService {
                     mint_address,
                     token_type,
                     current_price,
+                    price_sol,
                     volume_5m,
                     volume_1h,
                     volume_6h,
@@ -450,7 +472,7 @@ export class TokenDiscoveryService {
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
                     $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-                    $29, $30, $31, $32, $33, $34, $35, $36, CURRENT_TIMESTAMP
+                    $29, $30, $31, $32, $33, $34, $35, $36, $37, CURRENT_TIMESTAMP
                 )
                 ON CONFLICT (mint_address) DO UPDATE SET
                     current_price = EXCLUDED.current_price,
