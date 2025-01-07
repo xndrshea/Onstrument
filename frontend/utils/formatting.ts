@@ -15,4 +15,11 @@ export function convertBigIntToNumber(value: bigint | undefined): number {
         console.warn('Error converting BigInt to number:', error);
         return 0;
     }
-} 
+}
+
+export const formatNumber = (num: number): string => {
+    return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+    }).format(num);
+}; 

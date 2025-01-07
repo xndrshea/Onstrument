@@ -343,81 +343,34 @@ router.get('/tokens/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
 
+        // Add debug logging
+        console.log('Fetching token details for:', mintAddress);
+
         const result = await pool.query(`
-            SELECT 
-                t.*,
-                COALESCE(
-                    (SELECT price FROM token_platform.price_history 
-                     WHERE mint_address = t.mint_address 
-                     ORDER BY time DESC LIMIT 1),
-                    0
-                ) as current_price,
-                COALESCE(
-                    (SELECT SUM(volume) FROM token_platform.price_history 
-                     WHERE mint_address = t.mint_address 
-                     AND time > NOW() - INTERVAL '24 hours'),
-                    0
-                ) as volume_24h
-            FROM token_platform.tokens t
-            WHERE t.mint_address = $1`,
-            [mintAddress]
-        );
+            SELECT * FROM token_platform.tokens 
+            WHERE mint_address = $1
+        `, [mintAddress]);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Token not found' });
-        }
-
+        // Just pass through all fields, converting snake_case to camelCase where needed
         const token = result.rows[0];
+        const response = {
+            ...token,
+            mintAddress: token.mint_address,  // only convert the primary identifier
+        };
+
         console.log('Raw database result:', {
             curve_config: token.curve_config,
             typeof_curve_config: typeof token.curve_config
         });
 
-        const response = {
-            mintAddress: token.mint_address,
-            name: token.name?.trim(),
-            symbol: token.symbol?.trim(),
-            decimals: token.decimals,
-            description: token.description || '',
-            metadataUri: token.metadata_url,
-            tokenType: token.token_type,
-            verified: token.verified,
-            imageUrl: token.image_url,
-            attributes: token.attributes,
-            content: token.content,
-            authorities: token.authorities,
-            compression: token.compression,
-            grouping: token.grouping,
-            royalty: token.royalty,
-            creators: token.creators,
-            ownership: token.ownership,
-            supply: token.supply,
-            mutable: token.mutable,
-            burnt: token.burnt,
-            tokenInfo: token.token_info,
-            currentPrice: token.current_price,
-            volume24h: token.volume_24h,
-            offChainMetadata: token.off_chain_metadata,
-            interface: token.interface,
-            curveAddress: token.curve_address,
-            tokenVault: token.token_vault,
-            curveConfig: token.curve_config ? (
-                typeof token.curve_config === 'string'
-                    ? JSON.parse(token.curve_config)
-                    : token.curve_config
-            ) : undefined,
-            metadataStatus: token.metadata_status,
-            metadataSource: token.metadata_source,
-            metadataFetchAttempts: token.metadata_fetch_attempts,
-            lastMetadataFetch: token.last_metadata_fetch,
-            createdAt: token.created_at
-        };
-
-        console.log('Processed response curveConfig:', response.curveConfig);
         res.json(response);
     } catch (error) {
-        logger.error('Error fetching token:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        // Improve error logging
+        console.error('Detailed error in /tokens/:mintAddress:', error);
+        res.status(500).json({
+            error: 'Internal server error',
+            details: (error as Error).message
+        });
     }
 });
 

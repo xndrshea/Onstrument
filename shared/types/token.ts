@@ -39,7 +39,7 @@ export interface TokenRecord {
     twitterUrl?: string;
     telegramUrl?: string;
     metadataUri?: string;
-    tokenType: 'dex' | 'custom';
+    tokenType: string;
     verified: boolean;
     imageUrl?: string;
     attributes?: Record<string, any>;
@@ -66,6 +66,39 @@ export interface TokenRecord {
     discord?: string;
     telegram?: string;
     marketCap?: number;
+    volume?: number;
+    tvl?: number;
+    volume5m?: number;
+    volume1h?: number;
+    volume6h?: number;
+    volume7d?: number;
+    volume30d?: number;
+    tx5mBuys?: number;
+    tx5mSells?: number;
+    tx5mBuyers?: number;
+    tx5mSellers?: number;
+    tx1hBuys?: number;
+    tx1hSells?: number;
+    tx1hBuyers?: number;
+    tx1hSellers?: number;
+    tx6hBuys?: number;
+    tx6hSells?: number;
+    tx6hBuyers?: number;
+    tx6hSellers?: number;
+    tx24hBuys?: number;
+    tx24hSells?: number;
+    tx24hBuyers?: number;
+    tx24hSellers?: number;
+    priceChange5m?: number;
+    priceChange1h?: number;
+    priceChange6h?: number;
+    priceChange24h?: number;
+    priceChange7d?: number;
+    priceChange30d?: number;
+    apr24h?: number;
+    apr7d?: number;
+    apr30d?: number;
+    tokenSource?: string;
 }
 
 export interface TokenFormData {
