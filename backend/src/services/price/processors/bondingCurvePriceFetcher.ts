@@ -4,6 +4,7 @@ import { logger } from '../../../utils/logger';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 import WebSocket from 'ws';
 import { WebSocketClient } from '../websocket/types';
+import { TOKEN_PROGRAM_ID, AccountLayout } from '@solana/spl-token';
 
 interface BondingCurvePairData {
     mintAddress: string;
@@ -16,16 +17,16 @@ interface BondingCurvePairData {
 export class BondingCurvePriceFetcher {
     private static instance: BondingCurvePriceFetcher;
     private connection: Connection;
+    private readonly VIRTUAL_SOL = 30_000_000_000; // 30 SOL in lamports
     private queue: BondingCurvePairData[] = [];
-    private isProcessing = false;
-    private lastProcessTime = 0;
     private readonly BATCH_SIZE = 100;
-    private readonly PROCESS_INTERVAL = 1000; // 1 second for bonding curves
-    private readonly VIRTUAL_SOL = 30_000_000_000; // 1 SOL in lamports
+    private isProcessing = false;
+    private lastProcessTime = Date.now();
+    private readonly PROCESS_INTERVAL = 5000; // 5 seconds
 
     private constructor() {
-        this.connection = new Connection(config.HELIUS_RPC_URL);
-        setInterval(() => this.checkAndProcessBatch(), 500);
+        this.connection = new Connection(config.HELIUS_DEVNET_RPC_URL);
+        setInterval(() => this.checkAndProcessBatch(), 1000);
     }
 
     public static getInstance(): BondingCurvePriceFetcher {
@@ -60,51 +61,53 @@ export class BondingCurvePriceFetcher {
             this.isProcessing = true;
             const batchToProcess = this.queue.splice(0, this.BATCH_SIZE);
 
-            // Batch fetch SOL balances from curve accounts
-            const solBalances = await this.connection.getMultipleAccountsInfo(
-                batchToProcess.map(pair => new PublicKey(pair.curveAddress))
-            );
-
-            // Batch fetch token balances from vaults
-            const tokenAccounts = await this.connection.getMultipleAccountsInfo(
-                batchToProcess.map(pair => new PublicKey(pair.tokenVault))
-            );
+            // Batch fetch token balances and curve balances
+            const [tokenAccounts, curveBalances] = await Promise.all([
+                this.connection.getMultipleAccountsInfo(
+                    batchToProcess.map(p => new PublicKey(p.tokenVault))
+                ),
+                this.connection.getMultipleAccountsInfo(
+                    batchToProcess.map(p => new PublicKey(p.curveAddress))
+                )
+            ]);
 
             // Process each pair
             for (let i = 0; i < batchToProcess.length; i++) {
                 const pair = batchToProcess[i];
-                const solBalance = solBalances[i]?.lamports || 0;
                 const tokenAccount = tokenAccounts[i];
+                const curveAccount = curveBalances[i];
 
-                if (!tokenAccount?.data) {
-                    logger.error(`Missing token account data for ${pair.mintAddress}`);
+                if (!tokenAccount?.data || !curveAccount) {
+                    logger.error("Missing account data for:", {
+                        mint: pair.mintAddress,
+                        vault: pair.tokenVault,
+                        curve: pair.curveAddress
+                    });
                     continue;
                 }
 
-                const tokenAmount = this.extractTokenAmount(tokenAccount.data);
-                const solAmount = BigInt(solBalance);
+                const tokenAmount = BigInt(tokenAccount.data.readBigUInt64LE(64));
+                const curveBalance = BigInt(curveAccount.lamports);
 
                 await this.calculateAndRecordPrice(
                     pair.mintAddress,
-                    solAmount,
+                    curveBalance,
                     tokenAmount,
                     pair.decimals,
                     pair.volume
                 );
             }
+
         } catch (error) {
             logger.error('Error processing bonding curve batch:', error);
         } finally {
             this.isProcessing = false;
 
+            // Check if there are more pairs to process
             if (this.queue.length >= this.BATCH_SIZE) {
                 await this.processBatch();
             }
         }
-    }
-
-    private extractTokenAmount(data: Buffer): bigint {
-        return BigInt(data.readBigUInt64LE(64));
     }
 
     private async calculateAndRecordPrice(
@@ -115,19 +118,15 @@ export class BondingCurvePriceFetcher {
         volume?: number
     ): Promise<void> {
         try {
-            // Add virtual SOL to the actual SOL balance
             const totalSolAmount = solAmount + BigInt(this.VIRTUAL_SOL);
-
-            // Price calculation including virtual SOL
             const price = (Number(totalSolAmount) / 1e9) / (Number(tokenAmount) / (10 ** decimals));
 
             if (!isFinite(price) || price <= 0) {
-                logger.error(`Invalid price calculation for ${mintAddress}:`, {
-                    solAmount: solAmount.toString(),
-                    virtualSol: this.VIRTUAL_SOL,
+                logger.error(`Invalid price calculation`, {
+                    mintAddress,
+                    price,
                     totalSolAmount: totalSolAmount.toString(),
-                    tokenAmount: tokenAmount.toString(),
-                    price
+                    tokenAmount: tokenAmount.toString()
                 });
                 return;
             }
@@ -139,27 +138,40 @@ export class BondingCurvePriceFetcher {
                 timestamp: new Date()
             });
 
-            this.emitPriceUpdate({
-                mintAddress,
-                price,
-                volume: volume || 0
-            });
-
+            this.emitPriceUpdate({ mintAddress, price, volume: volume || 0 });
         } catch (error) {
-            logger.error(`Error calculating price for ${mintAddress}:`, error);
+            logger.error(`Error calculating price`, {
+                error,
+                stack: (error as Error).stack,
+                mintAddress,
+                solAmount: solAmount.toString(),
+                tokenAmount: tokenAmount.toString()
+            });
         }
     }
 
-    private emitPriceUpdate(update: {
-        mintAddress: string;
-        price: number;
-        volume: number;
-    }) {
+    private emitPriceUpdate(update: { mintAddress: string; price: number; volume: number; }) {
+        logger.debug('Emitting price update', {
+            ...update,
+            timestamp: Date.now()
+        });
+
         const wss = global.wss;
         if (wss) {
+            const connectedClients = Array.from(wss.clients).length;
+            const subscribedClients = Array.from(wss.clients).filter((client: any): client is WebSocketClient =>
+                client.readyState === WebSocket.OPEN &&
+                Boolean(client.subscriptions?.has(update.mintAddress))
+            ).length;
+
+            logger.debug('WebSocket clients status', {
+                totalClients: connectedClients,
+                subscribedClients,
+                mintAddress: update.mintAddress
+            });
+
             wss.clients.forEach((client: WebSocketClient) => {
-                if (client.readyState === WebSocket.OPEN &&
-                    client.subscriptions?.has(update.mintAddress)) {
+                if (client.readyState === WebSocket.OPEN && client.subscriptions?.has(update.mintAddress)) {
                     client.send(JSON.stringify({
                         type: 'price',
                         ...update,
@@ -167,6 +179,8 @@ export class BondingCurvePriceFetcher {
                     }));
                 }
             });
+        } else {
+            logger.warn('WebSocket server not initialized, skipping price update emission');
         }
     }
-} 
+}
