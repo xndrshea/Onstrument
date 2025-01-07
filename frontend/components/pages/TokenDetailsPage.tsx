@@ -11,7 +11,7 @@ import { formatMarketCap } from '../../utils/formatting';
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
     const location = useLocation();
-    const tokenType = location.state?.tokenType || 'pool';
+    const tokenType = location.state?.tokenType || 'dex';
     const [token, setToken] = useState<TokenRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function TokenDetailsPage() {
                     console.log('Price update received:', update);
                     setCurrentPrice(update.price);
                 },
-                token.tokenType === 'pool' ? 'mainnet' : 'devnet'
+                token.tokenType === 'dex' ? 'mainnet' : 'devnet'
             );
         };
 

@@ -88,7 +88,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet])
 
     const getAppropriateConnection = () => {
-        if (token.tokenType === 'pool' && config.HELIUS_RPC_URL) {
+        if (token.tokenType === 'dex' && config.HELIUS_RPC_URL) {
             return mainnetConnection;
         }
         return devnetConnection;
@@ -168,7 +168,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             }
 
             // Skip spot price check if we already know token isn't tradable
-            if (token.tokenType === 'pool' && isTokenTradable) {
+            if (token.tokenType === 'dex' && isTokenTradable) {
                 await checkTokenTradability();
             }
         } catch (error) {
@@ -206,7 +206,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             }
 
             try {
-                if (token.tokenType === 'pool') {
+                if (token.tokenType === 'dex') {
                     const appropriateConnection = getAppropriateConnection()
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
@@ -271,7 +271,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             const appropriateConnection = getAppropriateConnection()
 
             // Execute the trade
-            if (token.tokenType === 'pool') {
+            if (token.tokenType === 'dex') {
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
                     amount: parsedAmount,
@@ -337,7 +337,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     }
 
     useEffect(() => {
-    }, [token.tokenType, token.tokenType === 'pool', isTokenTradable, token.decimals]);
+    }, [token.tokenType, token.tokenType === 'dex', isTokenTradable, token.decimals]);
 
     // Update price display to use currentPrice prop
     useEffect(() => {
