@@ -83,41 +83,77 @@ export function TokenomicsRoadmap() {
                 </div>
             </div>
 
-            <div className="airdrop-section mt-12">
-                <h2 className="text-2xl font-bold mb-6">Airdrop</h2>
-                <ul className="list-disc pl-5 space-y-2 text-gray-400">
-                    <li>Points system is already live</li>
-                    <li>We will be airdropping a minimum of 80+ % to Onstrument users</li>
-                    <li>Maximum 20% for team</li>
-                </ul>
+            <div className="airdrop-section mt-12 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-radial from-primary/20 via-transparent to-transparent opacity-50"></div>
+                <div className="relative z-10 p-8 backdrop-blur-sm rounded-2xl border border-primary/20 shadow-lg shadow-primary/5">
+                    <h2 className="text-3xl font-bold mb-8 text-primary inline-flex items-center">
+                        <span className="mr-3">Airdrop</span>
+                        <div className="h-px flex-grow bg-gradient-to-r from-primary/50 to-transparent w-32"></div>
+                    </h2>
+                    <ul className="space-y-6">
+                        {[
+                            "Points system is already live",
+                            "We will be airdropping a minimum of 80+ % to Onstrument users",
+                            "Maximum 20% for team"
+                        ].map((item, index) => (
+                            <li key={index} className="flex items-center group">
+                                <div className="relative">
+                                    <div className="h-3 w-3 rounded-full bg-primary group-hover:animate-ping absolute"></div>
+                                    <div className="h-3 w-3 rounded-full bg-primary relative"></div>
+                                </div>
+                                <span className="ml-4 text-lg text-gray-300 group-hover:text-primary transition-colors">
+                                    {item}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
 
-            <div className="roadmap-section mt-12">
-                <h2 className="text-2xl font-bold mb-6">Development Roadmap</h2>
-                <ul className="list-disc pl-5 space-y-2 text-gray-400">
-                    <li>Full Telegram bot integration</li>
-                    <li>Price charts for onstrument tokens currently show execution prices, so charts may be slightly off</li>
-                    <li>Onstrument Eliza bot coming soon</li>
-                    <li>Points system for tracking your airdrop potential</li>
-                    <li>Migration leaderboards, tokens about to graduate</li>
-                    <li>Launch and trade tokens from Telegram</li>
-                    <li>Price backfilling for all tokens</li>
-                    <li>Full Ethereum expansion</li>
-                    <li>UI/UX improvements</li>
-                    <li>Lots of user feedback</li>
-                    <li>Airdrop</li>
-                    <li>Transaction history for all tokens</li>
-                    <li>Live transactions for all of Onstrument</li>
-                    <li>Advanced order types</li>
-                    <li>Custom DEX aggregation</li>
-                    <li>Running our own nodes across ecosystems for faster info</li>
-                    <li>APIs for price history and everything else</li>
-                    <li>Potentially open source (?)</li>
-                    <li>No-fee perpetuals</li>
-                    <li>Most importantly: whatever YOU want</li>
-                    <li>Contact for feature and bug feedback</li>
-
-                </ul>
+            <div className="roadmap-section mt-16 relative">
+                <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent"></div>
+                <div className="relative z-10 p-8">
+                    <h2 className="text-3xl font-bold mb-12 text-primary text-center">
+                        Development Roadmap
+                        <div className="mt-2 h-1 w-24 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto"></div>
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {[
+                            "Full Telegram bot integration",
+                            "Onstrument Eliza bot",
+                            "Full Telegram Integration",
+                            "Price backfilling for all tokens",
+                            "Full Ethereum expansion",
+                            "UI/UX improvements",
+                            "Lots of user feedback",
+                            "Transaction history for all tokens",
+                            "Live transactions for all of Onstrument",
+                            "Advanced order types",
+                            "Custom DEX aggregation",
+                            "Running our own nodes across ecosystems for faster info",
+                            "APIs for price history and everything else",
+                            "Potentially open source (?)",
+                            "No-fee perpetuals",
+                            "Most importantly: whatever YOU want",
+                            "Contact for feature and bug feedback"
+                        ].map((item, index) => (
+                            <div key={index}
+                                className="group relative p-4 rounded-xl border border-primary/10 backdrop-blur-sm
+                                    hover:border-primary/30 transition-all duration-300
+                                    bg-gradient-to-br from-gray-800/50 to-gray-900/50">
+                                <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
+                                <div className="relative z-10 flex items-center space-x-3">
+                                    <div className="flex-shrink-0">
+                                        <div className="h-2 w-2 rounded-full bg-primary group-hover:animate-pulse"></div>
+                                    </div>
+                                    <span className="text-gray-300 group-hover:text-primary transition-colors">
+                                        {item}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );

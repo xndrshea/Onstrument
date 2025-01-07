@@ -206,8 +206,6 @@ export const priceClient = {
         }
 
         const data = await response.json();
-        console.log('Price history data points:', data.length);
-        console.log('Sample data point:', data[0]);
 
         if (!data || !data.length) {
             console.warn('No price data available for:', mintAddress);

@@ -287,7 +287,8 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     await bondingCurve.sell({
                         amount: parsedAmount,
                         minSolReturn: minReturn,
-                        isSubscribed: isUserSubscribed
+                        isSubscribed: isUserSubscribed,
+                        slippageTolerance
                     })
                 } else {
                     const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL)
