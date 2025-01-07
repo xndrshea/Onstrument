@@ -52,6 +52,7 @@ export interface TokenRecord {
         };
     };
     curveAddress?: string;
+    tokenVault?: string;
     curveConfig?: curveConfig;
     totalSupply?: number;
     currentPrice?: number;

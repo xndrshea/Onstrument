@@ -34,10 +34,11 @@ export async function initializeDatabase() {
     const client = await pool.connect()
     try {
         await client.query('BEGIN')
-        await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform`)
+        await client.query('CREATE SCHEMA IF NOT EXISTS token_platform')
         await client.query('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE')
+        await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
-        // Create tokens table first, THEN create indexes
+        // Consolidated tokens table creation
         await client.query(`
             CREATE TABLE IF NOT EXISTS token_platform.tokens (
                 mint_address VARCHAR(255) PRIMARY KEY,
@@ -74,9 +75,17 @@ export async function initializeDatabase() {
                 metadata_source VARCHAR(50),
                 metadata_fetch_attempts INTEGER DEFAULT 0,
                 last_metadata_fetch TIMESTAMP WITH TIME ZONE,
+                market_cap NUMERIC(78,36),
+                token_vault VARCHAR(255),
                 CONSTRAINT valid_token_type CHECK (token_type IN ('custom', 'pool'))
             );
-        `);
+
+            CREATE INDEX IF NOT EXISTS idx_tokens_type ON token_platform.tokens(token_type);
+            CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON token_platform.tokens(symbol);
+            CREATE INDEX IF NOT EXISTS idx_tokens_verified ON token_platform.tokens(verified);
+            CREATE INDEX IF NOT EXISTS idx_tokens_metadata_status ON token_platform.tokens(metadata_status);
+            CREATE INDEX IF NOT EXISTS idx_tokens_token_vault ON token_platform.tokens(token_vault);
+        `)
 
         // Create indexes after table creation
         await client.query(`
@@ -124,6 +133,7 @@ export async function initializeDatabase() {
                 low NUMERIC(78,36) NOT NULL,
                 close NUMERIC(78,36) NOT NULL,
                 volume NUMERIC(78,36) DEFAULT 0,
+                market_cap NUMERIC(78,36) DEFAULT 0,
                 CONSTRAINT price_history_pkey PRIMARY KEY (mint_address, time)
             )
         `)
@@ -301,18 +311,6 @@ export async function initializeDatabase() {
                 schedule_interval => INTERVAL '1 day',
                 if_not_exists => TRUE);
         `);
-
-        // Add market cap columns
-        await client.query(`
-            ALTER TABLE token_platform.tokens
-            ADD COLUMN IF NOT EXISTS market_cap NUMERIC(78,36);
-
-            ALTER TABLE token_platform.price_history
-            ADD COLUMN IF NOT EXISTS market_cap NUMERIC(78,36);
-        `);
-
-        await client.query('COMMIT')
-
         logger.info('Database initialized successfully')
         return true
 

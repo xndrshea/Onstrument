@@ -229,10 +229,12 @@ export const priceClient = {
 
     getLatestPrice: async (mintAddress: string): Promise<number | null> => {
         try {
-            const response = await fetch(`/api/prices/${mintAddress}/latest`);
-            if (!response.ok) return null;
-            const data = await response.json();
-            return data.price;
+            const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch price history');
+            }
+            const history = await response.json();
+            return history.length > 0 ? history[history.length - 1].value : null;
         } catch (error) {
             console.error('Error fetching latest price:', error);
             return null;

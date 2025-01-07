@@ -52,6 +52,7 @@ router.post('/tokens', async (req, res) => {
         const {
             mintAddress,
             curveAddress,
+            tokenVault,
             name,
             symbol,
             description,
@@ -66,18 +67,12 @@ router.post('/tokens', async (req, res) => {
             telegramUrl
         } = req.body;
 
-        // Add better error logging
-        logger.info('Attempting to create token with data:', {
-            mintAddress,
-            name,
-            symbol,
-            totalSupply
-        });
-
+        // First insert the token
         const result = await pool.query(`
             INSERT INTO token_platform.tokens (
                 mint_address,
                 curve_address,
+                token_vault,
                 name,
                 symbol,
                 description,
@@ -91,11 +86,12 @@ router.post('/tokens', async (req, res) => {
                 token_type,
                 supply,
                 created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'custom', $13, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'custom', $14, CURRENT_TIMESTAMP)
             RETURNING *
         `, [
             mintAddress,
             curveAddress,
+            tokenVault,
             name,
             symbol,
             description,
@@ -109,18 +105,58 @@ router.post('/tokens', async (req, res) => {
             totalSupply
         ]);
 
-        // Record the initial price
-        await PriceHistoryModel.recordPrice({
-            mintAddress,
-            price: initialPrice,
-            volume: 0,
-            timestamp: new Date()
-        });
+        // Verify token was inserted
+        logger.info('Token inserted:', result.rows[0]);
+
+        // Now explicitly record the initial price
+        if (initialPrice && initialPrice > 0) {
+            logger.info('Recording initial price:', {
+                mintAddress,
+                price: initialPrice,
+                timestamp: new Date()
+            });
+
+            // Direct database query for price history
+            await pool.query(`
+                INSERT INTO token_platform.price_history (
+                    time,
+                    mint_address,
+                    price,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume
+                ) VALUES (
+                    CURRENT_TIMESTAMP,
+                    $1,
+                    $2,
+                    $2,
+                    $2,
+                    $2,
+                    $2,
+                    0
+                )
+            `, [mintAddress, initialPrice]);
+
+            // Verify price was recorded
+            const priceVerification = await pool.query(`
+                SELECT * FROM token_platform.price_history
+                WHERE mint_address = $1
+                ORDER BY time DESC
+                LIMIT 1
+            `, [mintAddress]);
+
+            logger.info('Initial price record verified:', priceVerification.rows[0]);
+        } else {
+            logger.warn('No initial price provided for token:', mintAddress);
+        }
 
         const token = result.rows[0];
-        res.status(201).json({
+        const response = {
             mintAddress: token.mint_address,
             curveAddress: token.curve_address,
+            tokenVault: token.token_vault,
             name: token.name,
             symbol: token.symbol,
             decimals: token.decimals,
@@ -133,18 +169,19 @@ router.post('/tokens', async (req, res) => {
             websiteUrl: token.website_url,
             twitterUrl: token.twitter_url,
             docsUrl: token.docs_url,
-            telegramUrl: token.telegram_url
-        });
+            telegramUrl: token.telegram_url,
+            initialPrice: initialPrice
+        };
+
+        res.status(201).json(response);
     } catch (error) {
-        // Enhanced error logging
-        logger.error('Error creating token:', {
+        logger.error('Error in token creation:', {
             error: error instanceof Error ? error.message : 'Unknown error',
             stack: error instanceof Error ? error.stack : undefined,
             details: error,
             requestBody: req.body
         });
 
-        // Send more specific error message
         res.status(500).json({
             error: 'Failed to create token',
             details: error instanceof Error ? error.message : 'Unknown error'
@@ -172,6 +209,18 @@ router.get('/tokens', async (req, res) => {
             'marketCap': null
         }[sortBy];
 
+        // Only include volume calculation if we're sorting by volume
+        const volumeSelect = !['newest', 'oldest', 'marketCap'].includes(sortBy)
+            ? `, COALESCE(
+                    (SELECT SUM(volume) 
+                     FROM token_platform.price_history 
+                     WHERE mint_address = t.mint_address 
+                     ${volumeInterval ? `AND time > NOW() - ${volumeInterval}` : ''}
+                    ),
+                    0
+                ) as volume`
+            : ', 0 as volume';
+
         // Determine the ORDER BY clause based on sortBy
         let orderByClause = 'ORDER BY volume DESC';
         if (sortBy === 'newest') {
@@ -182,25 +231,10 @@ router.get('/tokens', async (req, res) => {
             orderByClause = 'ORDER BY t.market_cap DESC NULLS LAST';
         }
 
-        const volumeQuery = volumeInterval
-            ? `AND time > NOW() - ${volumeInterval}`
-            : '';
-
-        // Only include volume calculation if we're sorting by volume
-        const volumeSelect = !['newest', 'oldest', 'marketCap'].includes(sortBy)
-            ? `, COALESCE(
-                    (SELECT SUM(volume) 
-                     FROM token_platform.price_history 
-                     WHERE mint_address = t.mint_address 
-                     ${volumeQuery}
-                    ),
-                    0
-                ) as volume`
-            : ', 0 as volume';
-
         const result = await pool.query(`
             SELECT 
-                t.*
+                t.*,
+                t.market_cap
                 ${volumeSelect}
             FROM token_platform.tokens t
             WHERE token_type = 'custom'
@@ -308,6 +342,7 @@ router.get('/market/tokens', async (req, res) => {
 router.get('/tokens/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
+
         const result = await pool.query(`
             SELECT 
                 t.*,
@@ -333,7 +368,12 @@ router.get('/tokens/:mintAddress', async (req, res) => {
         }
 
         const token = result.rows[0];
-        res.json({
+        console.log('Raw database result:', {
+            curve_config: token.curve_config,
+            typeof_curve_config: typeof token.curve_config
+        });
+
+        const response = {
             mintAddress: token.mint_address,
             name: token.name?.trim(),
             symbol: token.symbol?.trim(),
@@ -360,13 +400,21 @@ router.get('/tokens/:mintAddress', async (req, res) => {
             offChainMetadata: token.off_chain_metadata,
             interface: token.interface,
             curveAddress: token.curve_address,
-            curveConfig: token.curve_config,
+            tokenVault: token.token_vault,
+            curveConfig: token.curve_config ? (
+                typeof token.curve_config === 'string'
+                    ? JSON.parse(token.curve_config)
+                    : token.curve_config
+            ) : undefined,
             metadataStatus: token.metadata_status,
             metadataSource: token.metadata_source,
             metadataFetchAttempts: token.metadata_fetch_attempts,
             lastMetadataFetch: token.last_metadata_fetch,
             createdAt: token.created_at
-        });
+        };
+
+        console.log('Processed response curveConfig:', response.curveConfig);
+        res.json(response);
     } catch (error) {
         logger.error('Error fetching token:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -567,6 +615,8 @@ router.get('/market/tokens/:mintAddress', async (req, res) => {
                 t.description,
                 t.verified,
                 t.image_url,
+                t.token_type,
+                t.curve_config,
                 COALESCE(t.attributes, '{}') as attributes,
                 COALESCE(
                     (SELECT price FROM token_platform.price_history 
@@ -596,7 +646,10 @@ router.get('/market/tokens/:mintAddress', async (req, res) => {
             decimals: token.decimals,
             description: token.description || '',
             metadata_url: token.metadata_url,
-            token_type: 'pool',
+            token_type: token.token_type,
+            curve_address: token.curve_address,
+            token_vault: token.token_vault,
+            curve_config: token.curve_config,
             current_price: token.current_price,
             volume_24h: token.volume_24h,
             verified: token.verified,

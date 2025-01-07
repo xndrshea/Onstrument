@@ -1,20 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import { tokenService } from '../../services/tokenService'
 import { TokenRecord } from '../../../shared/types/token'
-import { TOKEN_DECIMALS } from '../../services/bondingCurve'
-import { Link } from 'react-router-dom'
 import { API_BASE_URL } from '../../config'
-import { priceClient } from '../../services/priceClient'
 import { TokenCard } from './TokenCard'
 
 interface TokenListProps {
     onCreateClick: () => void
 }
-
-const deduplicateTokens = (tokens: TokenRecord[]): TokenRecord[] => {
-    return Array.from(new Map(tokens.map(token => [token.mintAddress, token])).values());
-};
 
 export function TokenList({ onCreateClick }: TokenListProps) {
     const { connection } = useConnection()
@@ -22,7 +14,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [tokens, setTokens] = useState<TokenRecord[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest'>('24h');
+    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCap'>('newest');
 
     const refreshTokens = () => {
         fetchTokens()
@@ -69,10 +61,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     useEffect(() => {
         fetchTokens();
     }, [connection, volumePeriod]);
-
-    const calculateMarketCap = (token: TokenRecord) => {
-        return 'N/A';
-    };
 
     if (isLoading) {
         return <div className="loading">Loading tokens...</div>

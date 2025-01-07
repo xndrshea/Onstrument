@@ -152,6 +152,7 @@ export class BondingCurve {
             return {
                 mint: mintKeypair.publicKey,
                 curve: curveAddress,
+                tokenVault: tokenVault,
                 signature: tx
             };
 

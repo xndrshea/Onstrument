@@ -49,7 +49,7 @@ const formatSmallNumber = (num: number): JSX.Element | string => {
     return `${num.toFixed(8)} SOL`;
 };
 
-export function TradingInterface({ token, currentPrice, onPriceUpdate }: TradingInterfaceProps) {
+export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUpdate }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
     const { publicKey, connected } = wallet
@@ -66,6 +66,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
     const [isUserSubscribed, setIsUserSubscribed] = useState(false)
     const [isMigrating, setIsMigrating] = useState(false)
+    const [spotPrice, setSpotPrice] = useState<number | null>(null);
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -95,46 +96,51 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
 
     const checkTokenTradability = async () => {
         if (token.tokenType === 'custom') {
-            try {
-                // Check if token is migrating
-                const response = await fetch(`/api/tokens/${token.mintAddress}`);
-                const tokenData = await response.json();
-
-                if (tokenData.curveConfig?.migrationStatus === "migrated") {
-                    // Check if Raydium pool exists and has liquidity
-                    const quote = await dexService.calculateTradePrice(
-                        token.mintAddress,
-                        1,
-                        true,
-                        mainnetConnection
-                    );
-
-                    if (!quote || quote.price <= 0) {
-                        setIsMigrating(true);
-                        setIsTokenTradable(false);
-                        return;
-                    }
-                }
-            } catch (error) {
-                console.error("Migration status check failed:", error);
+            // If token has curveConfig and is active, it should be tradeable via bonding curve
+            if (token.curveConfig?.migrationStatus === "active") {
+                setIsTokenTradable(true);
+                setIsMigrating(false);
+                return;
             }
-        }
 
-        // Existing liquidity check
-        try {
-            const appropriateConnection = getAppropriateConnection();
-            const quote = await dexService.calculateTradePrice(
-                token.mintAddress,
-                1,
-                true,
-                appropriateConnection
-            );
+            // If token is in migration status, set appropriate flags
+            if (token.curveConfig?.migrationStatus === "migrated") {
+                setIsMigrating(true);  // Set migrating to true
+                setIsTokenTradable(false);  // Disable trading while migrating
+                return;  // Exit early
+            }
 
-            setIsTokenTradable(quote && quote.price > 0);
-            setIsMigrating(false);
-        } catch (error) {
-            console.log("Token tradability check failed:", error);
-            setIsTokenTradable(false);
+            // Only check Raydium if we get here
+            try {
+                const quote = await dexService.calculateTradePrice(
+                    token.mintAddress,
+                    1,
+                    true,
+                    mainnetConnection
+                );
+                setIsTokenTradable(quote && quote.price > 0);
+                setIsMigrating(false);
+            } catch (error) {
+                console.log("Raydium price check failed:", error);
+                setIsTokenTradable(false);
+                setIsMigrating(false);
+            }
+        } else {
+            // Handle pool tokens as before
+            try {
+                const appropriateConnection = getAppropriateConnection();
+                const quote = await dexService.calculateTradePrice(
+                    token.mintAddress,
+                    1,
+                    true,
+                    appropriateConnection
+                );
+                setIsTokenTradable(quote && quote.price > 0);
+                setIsMigrating(false);
+            } catch (error) {
+                console.log("Token tradability check failed:", error);
+                setIsTokenTradable(false);
+            }
         }
     };
 
@@ -171,6 +177,26 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
         }
     };
 
+    // Fetch spot price from database
+    const fetchSpotPrice = async () => {
+        try {
+            const latestPrice = await priceClient.getLatestPrice(token.mintAddress);
+            if (latestPrice) {
+                setSpotPrice(latestPrice);
+                onPriceUpdate?.(latestPrice);
+            }
+        } catch (error) {
+            console.error('Error fetching spot price:', error);
+        }
+    };
+
+    // Fetch spot price on mount and periodically
+    useEffect(() => {
+        fetchSpotPrice();
+        const interval = setInterval(fetchSpotPrice, 10000);
+        return () => clearInterval(interval);
+    }, [token.mintAddress]);
+
     // Price quote updates
     useEffect(() => {
         const updatePriceQuote = async () => {
@@ -189,8 +215,6 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                         appropriateConnection
                     )
                     setPriceInfo(quote)
-                    onPriceUpdate?.(quote.totalCost / LAMPORTS_PER_SOL)
-                    setError(null)
                 } else if (bondingCurve) {
                     const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling)
                     setPriceInfo(quote)
@@ -316,10 +340,10 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
 
     // Update price display to use currentPrice prop
     useEffect(() => {
-        if (currentPrice !== null) {
-            onPriceUpdate?.(currentPrice);
+        if (_currentPrice !== null) {
+            onPriceUpdate?.(_currentPrice);
         }
-    }, [currentPrice, onPriceUpdate]);
+    }, [_currentPrice, onPriceUpdate]);
 
     useEffect(() => {
         async function checkSubscription() {
@@ -369,8 +393,8 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                         <div className="flex justify-between">
                             <span className="text-sm text-gray-700">Current Token Price</span>
                             <span className="font-medium text-gray-900">
-                                {currentPrice !== null
-                                    ? formatSmallNumber(currentPrice)
+                                {spotPrice !== null
+                                    ? formatSmallNumber(spotPrice)
                                     : 'Loading...'}
                             </span>
                         </div>
