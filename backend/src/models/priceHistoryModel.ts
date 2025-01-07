@@ -94,15 +94,28 @@ export class PriceHistoryModel {
             // Start a transaction
             await pool.query('BEGIN');
 
-            // Get token's total supply
+            // Get token's supply
             const tokenResult = await pool.query(
-                'SELECT total_supply FROM token_platform.tokens WHERE mint_address = $1',
+                'SELECT supply FROM token_platform.tokens WHERE mint_address = $1',
                 [mintAddress]
             );
-            const totalSupply = tokenResult.rows[0]?.total_supply;
+            logger.info('Token supply query result:', {
+                mintAddress,
+                supply: tokenResult.rows[0]?.supply,
+                hasRows: tokenResult.rows.length > 0
+            });
 
-            // Calculate market cap if total supply exists
-            const marketCap = totalSupply ? price * totalSupply : null;
+            // Supply is already a number, no need to parse JSON
+            const totalSupply = tokenResult.rows[0]?.supply;
+
+            // Calculate market cap if supply exists
+            const marketCap = totalSupply && price ? price * totalSupply : null;
+            logger.info('Market cap calculation:', {
+                mintAddress,
+                price,
+                totalSupply,
+                marketCap
+            });
 
             // Get the last price point for this token within the current minute
             const lastPrice = await pool.query(`
@@ -164,10 +177,9 @@ export class PriceHistoryModel {
                 pool.query(`
                     UPDATE token_platform.tokens 
                     SET 
-                        current_price = $2,
-                        market_cap = $3
+                        market_cap = $2
                     WHERE mint_address = $1
-                `, [mintAddress, price, marketCap])
+                `, [mintAddress, marketCap])
             ]);
 
             await pool.query('COMMIT');
@@ -180,24 +192,22 @@ export class PriceHistoryModel {
     }
 
     // This function gets called when loading the price chart
-    static async getPriceHistory(tokenMintAddress: string, tokenType?: string) {
+    static async getPriceHistory(tokenMintAddress: string) {
         try {
             const query = `
                 SELECT 
-                    time_bucket('3 seconds', time) as time,
-                    last(price, time) as value
-                FROM token_platform.price_history ph
-                JOIN token_platform.tokens t ON t.mint_address = ph.mint_address
-                WHERE 
-                    ph.mint_address = $1
-                    ${tokenType ? 'AND t.token_type = $2' : ''}
-                    AND time >= NOW() - INTERVAL '7 days'
-                GROUP BY 1
-                ORDER BY 1 ASC
+                    time,
+                    price as value
+                FROM token_platform.price_history
+                WHERE mint_address = $1
+                ORDER BY time ASC
             `;
 
-            const params = tokenType ? [tokenMintAddress, tokenType] : [tokenMintAddress];
+            const params = [tokenMintAddress];
             const result = await pool.query(query, params);
+
+            // Log the raw data
+            logger.info('Raw query results:', result.rows);
 
             return result.rows.map(row => ({
                 time: Math.floor(Date.parse(row.time) / 1000),

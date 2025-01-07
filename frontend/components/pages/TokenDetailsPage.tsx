@@ -53,34 +53,29 @@ export function TokenDetailsPage() {
     }, [token?.mintAddress, token?.tokenType]);
 
     useEffect(() => {
-        if (!mintAddress) {
-            setError('No mint address provided');
-            return;
+        const fetchTokenDetails = async () => {
+            try {
+                setLoading(true);
+                console.log(`Fetching token details for mintAddress: ${mintAddress} type: ${tokenType}`);
+
+                const response = await fetch(`/api/tokens/${mintAddress}`);
+                const data = await response.json();
+
+                // Add debug logging
+                console.log('Raw API response:', data);
+
+                setToken(data);
+                setLoading(false);
+            } catch (error) {
+                console.error('Error fetching token details:', error);
+                setError('Failed to fetch token details');
+                setLoading(false);
+            }
+        };
+
+        if (mintAddress) {
+            fetchTokenDetails();
         }
-
-        setLoading(true);
-        console.log('Fetching token details for mintAddress:', mintAddress, 'type:', tokenType);
-
-        tokenService.getByMintAddress(mintAddress, tokenType)
-            .then(tokenData => {
-                if (!tokenData) {
-                    throw new Error('Token not found');
-                }
-                console.log('Token data received:', tokenData);
-
-                // Validate required fields
-                if (!tokenData.mintAddress) {
-                    throw new Error(`Invalid token data: missing mintAddress for ${tokenData.name}`);
-                }
-
-                setToken(tokenData);
-                setLoading(false);
-            })
-            .catch(error => {
-                console.error('Error fetching token:', error);
-                setError(error.message);
-                setLoading(false);
-            });
     }, [mintAddress, tokenType]);
 
     if (loading) return <div className="p-4 text-white">Loading...</div>;
@@ -158,6 +153,9 @@ export function TokenDetailsPage() {
                                         )}
                                         {token.telegramUrl && (
                                             <p>Telegram: <a href={token.telegramUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">{token.telegramUrl}</a></p>
+                                        )}
+                                        {token.tokenVault && (
+                                            <p>Token Vault: <span className="text-white">{token.tokenVault}</span></p>
                                         )}
                                     </div>
                                     <div className="space-y-3">

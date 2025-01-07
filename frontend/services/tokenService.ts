@@ -21,6 +21,7 @@ export class TokenService {
             totalSupply: token.supply || undefined,
             decimals: token.decimals || TOKEN_DECIMALS,
             curveAddress: token.curve_address || token.curveAddress,
+            tokenVault: token.token_vault || token.tokenVault,
             curveConfig: token.curve_config ? {
                 migrationStatus: token.curve_config.migration_status || "Active",
                 isSubscribed: token.curve_config.is_subscribed,
@@ -57,7 +58,8 @@ export class TokenService {
                 websiteUrl: token.websiteUrl || '',
                 twitterUrl: token.twitterUrl || '',
                 docsUrl: token.docsUrl || '',
-                telegramUrl: token.telegramUrl || ''
+                telegramUrl: token.telegramUrl || '',
+                tokenVault: token.tokenVault
             };
 
             console.log('Sending token creation request:', requestData);
