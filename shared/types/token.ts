@@ -65,6 +65,7 @@ export interface TokenRecord {
     twitter?: string;
     discord?: string;
     telegram?: string;
+    marketCap?: number;
 }
 
 export interface TokenFormData {
