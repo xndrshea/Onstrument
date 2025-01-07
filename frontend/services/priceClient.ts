@@ -160,35 +160,33 @@ class WebSocketClient {
         callback: (update: { price: number; time: number }) => void,
         network: 'mainnet' | 'devnet' = 'devnet'
     ): Promise<() => void> {
-        this.tokenNetworks.set(mintAddress, network);
-        if (!this.subscribers.has(mintAddress)) {
-            this.subscribers.set(mintAddress, new Set());
+        // Only allow subscriptions for custom tokens
+        if (network === 'mainnet') {
+            console.warn('WebSocket subscriptions are not supported for DEX tokens');
+            return () => { };
         }
 
-        const callbacks = this.subscribers.get(mintAddress)!;
-        callbacks.add(callback);
+        console.log(`Setting up WebSocket subscription for custom token ${mintAddress}`);
+        const instance = WebSocketClient.getInstance();
+        return await instance.subscribeToPrice(mintAddress, callback, network);
+    }
 
-        await this.ensureConnected(network);
-        this.sendSubscription(mintAddress);
+    async getDexTokenPrice(mintAddress: string): Promise<number | null> {
+        try {
+            const response = await fetch(
+                `https://quote-api.jup.ag/v6/quote?inputMint=${mintAddress}&outputMint=So11111111111111111111111111111111111111112&amount=1000000&slippageBps=50`
+            );
 
-        return () => {
-            const callbacks = this.subscribers.get(mintAddress);
-            if (callbacks) {
-                callbacks.delete(callback);
-                if (callbacks.size === 0) {
-                    this.subscribers.delete(mintAddress);
-                    this.tokenNetworks.delete(mintAddress);
-                    const ws = network === 'devnet' ? this.wsDevnet : this.wsMainnet;
-                    if (ws?.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'unsubscribe',
-                            mintAddress,
-                            channel: 'price'
-                        }));
-                    }
-                }
-            }
-        };
+            if (!response.ok) return null;
+
+            const quoteData = await response.json();
+            // Calculate price from the quote (outAmount in lamports)
+            const outAmount = Number(quoteData.outAmount);
+            return outAmount / 1e9; // Convert lamports to SOL
+        } catch (error) {
+            console.error('Error fetching DEX token price:', error);
+            return null;
+        }
     }
 }
 
@@ -246,5 +244,23 @@ export const priceClient = {
     ): Promise<() => void> {
         console.log(`Setting up WebSocket subscription for ${mintAddress} on ${network}`);
         return await this.wsClient.subscribeToPrice(mintAddress, callback, network);
+    },
+
+    async getDexTokenPrice(mintAddress: string): Promise<number | null> {
+        try {
+            const response = await fetch(
+                `https://quote-api.jup.ag/v6/quote?inputMint=${mintAddress}&outputMint=So11111111111111111111111111111111111111112&amount=1000000&slippageBps=50`
+            );
+
+            if (!response.ok) return null;
+
+            const quoteData = await response.json();
+            // Calculate price from the quote (outAmount in lamports)
+            const outAmount = Number(quoteData.outAmount);
+            return outAmount / 1e9; // Convert lamports to SOL
+        } catch (error) {
+            console.error('Error fetching DEX token price:', error);
+            return null;
+        }
     }
 };

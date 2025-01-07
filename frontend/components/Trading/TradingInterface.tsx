@@ -183,19 +183,14 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             const latestPrice = await priceClient.getLatestPrice(token.mintAddress);
             if (latestPrice) {
                 setSpotPrice(latestPrice);
-                onPriceUpdate?.(latestPrice);
+                if (onPriceUpdate) {
+                    onPriceUpdate(latestPrice);
+                }
             }
         } catch (error) {
             console.error('Error fetching spot price:', error);
         }
     };
-
-    // Fetch spot price on mount and periodically
-    useEffect(() => {
-        fetchSpotPrice();
-        const interval = setInterval(fetchSpotPrice, 10000);
-        return () => clearInterval(interval);
-    }, [token.mintAddress]);
 
     // Price quote updates
     useEffect(() => {
@@ -341,10 +336,42 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
     // Update price display to use currentPrice prop
     useEffect(() => {
-        if (_currentPrice !== null) {
-            onPriceUpdate?.(_currentPrice);
+        if (token.tokenType === 'dex') {
+            // For DEX tokens, get initial price quote
+            const getInitialPrice = async () => {
+                try {
+                    const appropriateConnection = getAppropriateConnection();
+                    const quote = await dexService.calculateTradePrice(
+                        token.mintAddress,
+                        1,
+                        true,  // isSelling
+                        appropriateConnection
+                    );
+
+                    console.log('Got price quote:', quote);  // Debug log
+
+                    if (quote) {
+                        const price = quote.price;
+                        console.log('Setting spot price to:', price);  // Debug log
+                        setSpotPrice(price);
+                        if (onPriceUpdate) {
+                            onPriceUpdate(price);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error getting initial price:', error);
+                }
+            };
+
+            getInitialPrice();
+            const interval = setInterval(getInitialPrice, 10000);
+            return () => clearInterval(interval);
+        } else {
+            fetchSpotPrice();
+            const interval = setInterval(fetchSpotPrice, 10000);
+            return () => clearInterval(interval);
         }
-    }, [_currentPrice, onPriceUpdate]);
+    }, [token.mintAddress, token.tokenType]);
 
     useEffect(() => {
         async function checkSubscription() {
@@ -394,9 +421,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                         <div className="flex justify-between">
                             <span className="text-sm text-gray-700">Current Token Price</span>
                             <span className="font-medium text-gray-900">
-                                {spotPrice !== null
-                                    ? formatSmallNumber(spotPrice)
-                                    : 'Loading...'}
+                                {spotPrice !== null ? formatSmallNumber(spotPrice) : 'Loading...'}
                             </span>
                         </div>
                     </div>
