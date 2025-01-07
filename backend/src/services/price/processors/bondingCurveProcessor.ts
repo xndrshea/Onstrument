@@ -8,6 +8,8 @@ import { BN } from '@project-serum/anchor';
 import { createHash } from 'crypto';
 import WebSocket from 'ws';
 import { WebSocketClient } from '../websocket/types';
+import { pool } from '../../../config/database';
+import { PriceFetcher } from './priceFetcher';
 
 const TOKEN_DECIMALS = 6;
 const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
@@ -162,80 +164,89 @@ export class BondingCurveProcessor extends BaseProcessor {
         }
     }
 
-    private handleBuyEvent(buffer: Buffer) {
+    private async getTokenInfo(mintAddress: string): Promise<{
+        tokenVault: string,
+        curveAddress: string,
+        decimals: number
+    } | null> {
         try {
-            // Skip 8-byte discriminator
+            const result = await pool.query(`
+                SELECT token_vault, curve_address, decimals
+                FROM token_platform.tokens 
+                WHERE mint_address = $1 AND token_type = 'custom'
+            `, [mintAddress]);
+
+            if (result.rows.length > 0) {
+                return {
+                    tokenVault: result.rows[0].token_vault,
+                    curveAddress: result.rows[0].curve_address,
+                    decimals: result.rows[0].decimals
+                };
+            }
+            return null;
+        } catch (error) {
+            logger.error('Error fetching token info:', error);
+            return null;
+        }
+    }
+
+    private async handleBuyEvent(buffer: Buffer) {
+        try {
             const mint = new PublicKey(buffer.subarray(8, 40));
             const amount = Number(buffer.readBigUInt64LE(40));
             const solAmount = Number(buffer.readBigUInt64LE(48));
             const buyer = new PublicKey(buffer.subarray(56, 88));
             const isSubscribed = buffer.readUInt8(88) === 1;
 
-            // Convert lamports to SOL and tokens to proper decimals
-            const solInSol = solAmount / LAMPORTS_PER_SOL;
-            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
-            const price = solInSol / tokenAmount;
+            // Calculate volume in SOL
+            const volumeInSol = solAmount / LAMPORTS_PER_SOL;
 
-            // Record the price
-            PriceHistoryModel.recordPrice({
-                mintAddress: mint.toString(),
-                price,
-                volume: tokenAmount,
-                timestamp: new Date()
-            }).catch(error => {
-                logger.error('Error recording buy price:', error);
-            });
+            const tokenInfo = await this.getTokenInfo(mint.toString());
+            if (tokenInfo) {
+                const pairData = {
+                    baseToken: "So11111111111111111111111111111111111111112",
+                    quoteToken: mint.toString(),
+                    baseVault: tokenInfo.tokenVault,
+                    quoteVault: tokenInfo.curveAddress,
+                    baseDecimals: 9,
+                    quoteDecimals: tokenInfo.decimals,
+                    accountKey: mint.toString()
+                };
 
-            this.emitPriceUpdate({
-                mintAddress: mint.toString(),
-                price,
-                volume: tokenAmount
-            });
-
+                // Pass volume to PriceFetcher
+                await PriceFetcher.fetchPriceWithVolume(pairData, volumeInSol);
+            }
         } catch (error) {
             logger.error('Error handling buy event:', error);
         }
     }
 
-    private handleSellEvent(buffer: Buffer) {
+    private async handleSellEvent(buffer: Buffer) {
         try {
-            // Skip 8-byte discriminator
             const mint = new PublicKey(buffer.subarray(8, 40));
             const amount = Number(buffer.readBigUInt64LE(40));
             const solAmount = Number(buffer.readBigUInt64LE(48));
             const seller = new PublicKey(buffer.subarray(56, 88));
             const isSubscribed = buffer.readUInt8(88) === 1;
 
-            logger.info('Decoded SellEvent:', {
-                mint: mint.toString(),
-                amount,
-                solAmount,
-                seller: seller.toString(),
-                isSubscribed
-            });
+            // Calculate volume in SOL
+            const volumeInSol = solAmount / LAMPORTS_PER_SOL;
 
-            // Calculate price based on the actual SOL amount received
-            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
-            const solAmountInSol = solAmount / LAMPORTS_PER_SOL;
-            const price = solAmountInSol / tokenAmount;
+            const tokenInfo = await this.getTokenInfo(mint.toString());
+            if (tokenInfo) {
+                const pairData = {
+                    baseToken: "So11111111111111111111111111111111111111112",
+                    quoteToken: mint.toString(),
+                    baseVault: tokenInfo.tokenVault,
+                    quoteVault: tokenInfo.curveAddress,
+                    baseDecimals: 9,
+                    quoteDecimals: tokenInfo.decimals,
+                    accountKey: mint.toString()
+                };
 
-            // Record the price
-            PriceHistoryModel.recordPrice({
-                mintAddress: mint.toString(),
-                price,
-                volume: solAmountInSol, // Use actual SOL amount for volume
-                timestamp: new Date()
-            }).catch(error => {
-                logger.error('Error recording sell price:', error);
-            });
-
-            // Emit price update for real-time subscribers
-            this.emitPriceUpdate({
-                mintAddress: mint.toString(),
-                price,
-                volume: solAmountInSol
-            });
-
+                // Pass volume to PriceFetcher
+                await PriceFetcher.fetchPriceWithVolume(pairData, volumeInSol);
+            }
         } catch (error) {
             logger.error('Error handling sell event:', error);
         }
