@@ -80,10 +80,11 @@ export class PriceHistoryModel {
     static async recordPrice(update: {
         mintAddress: string;
         price: number;
+        marketCap?: number;
         volume?: number;
         timestamp?: Date;
     }) {
-        const { mintAddress, price, volume = 0, timestamp = new Date() } = update;
+        const { mintAddress, price, volume = 0, timestamp = new Date(), marketCap } = update;
 
         try {
             if (!isFinite(price) || price <= 0) {
@@ -100,15 +101,6 @@ export class PriceHistoryModel {
                 mintAddress,
                 supply: tokenResult.rows[0]?.supply,
                 hasRows: tokenResult.rows.length > 0
-            });
-
-            const totalSupply = tokenResult.rows[0]?.supply;
-            const marketCap = totalSupply && price ? price * totalSupply : null;
-            logger.info('Market cap calculation:', {
-                mintAddress,
-                price,
-                totalSupply,
-                marketCap
             });
 
             // Get the last price point for this token within the current minute

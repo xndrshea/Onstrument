@@ -121,6 +121,20 @@ export class BondingCurvePriceFetcher {
             const totalSolAmount = solAmount + BigInt(this.VIRTUAL_SOL);
             const price = (Number(totalSolAmount) / 1e9) / (Number(tokenAmount) / (10 ** decimals));
 
+            // Calculate market cap (total SOL in lamports converted to SOL)
+            const marketCap = Number(totalSolAmount) / 1e9;
+
+            logger.debug('Price calculation details', {
+                mintAddress,
+                totalSolAmount: totalSolAmount.toString(),
+                calculatedPrice: price,
+                marketCap,
+                curveSolBalance: Number(solAmount) / 1e9,
+                virtualSol: Number(this.VIRTUAL_SOL) / 1e9,
+                tokenSupply: Number(tokenAmount) / (10 ** decimals),
+                timestamp: new Date().toISOString()
+            });
+
             if (!isFinite(price) || price <= 0) {
                 logger.error(`Invalid price calculation`, {
                     mintAddress,
@@ -134,11 +148,24 @@ export class BondingCurvePriceFetcher {
             await PriceHistoryModel.recordPrice({
                 mintAddress,
                 price,
+                marketCap,  // Add market cap to price history
                 volume: volume || 0,
                 timestamp: new Date()
             });
 
-            this.emitPriceUpdate({ mintAddress, price, volume: volume || 0 });
+            logger.info('Successfully recorded price', {
+                mintAddress,
+                price,
+                marketCap,
+                volume: volume || 0,
+                timestamp: new Date().toISOString()
+            });
+
+            this.emitPriceUpdate({
+                mintAddress,
+                price,
+                volume: volume || 0
+            });
         } catch (error) {
             logger.error(`Error calculating price`, {
                 error,

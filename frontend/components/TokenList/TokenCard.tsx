@@ -23,7 +23,6 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
     useEffect(() => {
         const fetchMetadata = async () => {
             if (!token.metadataUri) return;
-
             try {
                 const response = await fetch(token.metadataUri);
                 const metadata: TokenMetadata = await response.json();
@@ -32,13 +31,8 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
                 // Silently fail for metadata fetch errors
             }
         };
-
         fetchMetadata();
     }, [token.metadataUri, token.name]);
-
-    const marketCap = token.currentPrice && token.totalSupply
-        ? token.currentPrice * token.totalSupply
-        : null;
 
     return (
         <div className="bg-[#232427] rounded-lg border border-transparent hover:border-white transition-colors">
@@ -74,10 +68,7 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
 
                     <div className="flex justify-between items-center mt-2">
                         <div className="text-sm text-gray-400">
-                            Market Cap: {marketCap ? formatMarketCap(marketCap) : 'N/A'}
-                        </div>
-                        <div className="text-sm text-gray-400">
-                            Price: {token.currentPrice ? `${token.currentPrice.toFixed(4)} SOL` : 'N/A'}
+                            Market Cap: {token.marketCap ? formatMarketCap(token.marketCap) : 'N/A'}
                         </div>
                     </div>
                 </div>

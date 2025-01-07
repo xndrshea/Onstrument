@@ -255,7 +255,7 @@ router.get('/tokens', async (req, res) => {
             supply: token.supply,
             totalSupply: token.supply,
             volume: token.volume,
-            marketCap: token.market_cap
+            marketCap: token.market_cap ? Number(token.market_cap) : null
         }));
 
         res.json({ tokens });
