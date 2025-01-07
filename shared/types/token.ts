@@ -39,7 +39,7 @@ export interface TokenRecord {
     twitterUrl?: string;
     telegramUrl?: string;
     metadataUri?: string;
-    tokenType: 'pool' | 'custom';
+    tokenType: 'dex' | 'custom';
     verified: boolean;
     imageUrl?: string;
     attributes?: Record<string, any>;

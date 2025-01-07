@@ -6,11 +6,52 @@ import { logger } from './utils/logger'
 import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import apiRouter from './routes/api'
+import { TokenDiscoveryService } from './services/discovery/tokenDiscoveryService'
+import { CronJob } from 'cron'
 
 dotenv.config()
 
 export function createApp() {
     const app = express()
+
+    // Initialize discovery service
+    const discoveryService = TokenDiscoveryService.getInstance()
+
+    // Run initial queries immediately
+    logger.info('Running initial token discovery...')
+    Promise.all([
+        discoveryService.fetchGeckoTerminalPools(),
+        discoveryService.fetchRaydiumPools()
+    ]).catch(error => {
+        logger.error('Error in initial token discovery:', error)
+    })
+
+    // Set up scheduled jobs
+    const geckoJob = new CronJob('* * * * *', async () => {
+        try {
+            logger.info('Starting GeckoTerminal pools fetch...')
+            await discoveryService.fetchGeckoTerminalPools()
+            logger.info('GeckoTerminal pools fetch completed')
+        } catch (error) {
+            logger.error('Error fetching GeckoTerminal pools:', error)
+        }
+    })
+
+    const raydiumJob = new CronJob('*/5 * * * *', async () => {
+        try {
+            logger.info('Starting Raydium pools fetch...')
+            await discoveryService.fetchRaydiumPools()
+            logger.info('Raydium pools fetch completed')
+        } catch (error) {
+            logger.error('Error fetching Raydium pools:', error)
+        }
+    })
+
+    // Start the cron jobs
+    geckoJob.start()
+    raydiumJob.start()
+
+    logger.info('Price discovery jobs started')
 
     // Security middleware
     app.use(helmet({

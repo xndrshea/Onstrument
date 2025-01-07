@@ -26,7 +26,7 @@ export function MarketPage() {
             if (tokenType === 'custom') {
                 url.searchParams.append('type', 'custom');
             } else if (tokenType === 'dex') {
-                url.searchParams.append('type', 'pool');
+                url.searchParams.append('type', 'dex');
             }
 
             const response = await fetch(url.toString());
@@ -117,7 +117,7 @@ export function MarketPage() {
                                     <p className="text-sm text-gray-400">{token.symbol}</p>
                                 </div>
                                 <span className="text-xs px-2 py-1 rounded bg-gray-700">
-                                    {token.tokenType === 'pool' ? 'DEX' : 'Custom'}
+                                    {token.tokenType === 'dex' ? 'DEX' : 'Custom'}
                                 </span>
                             </div>
                             <p className="text-sm text-gray-400 mt-2">
