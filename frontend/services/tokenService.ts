@@ -60,7 +60,7 @@ export class TokenService {
                 description: token.description || '',
                 metadataUri: token.metadataUri || '',
                 totalSupply: token.totalSupply?.toString() || '0',
-                decimals: token.decimals || 6,
+                decimals: token.decimals,
                 curveConfig: token.curveConfig,
                 initialPrice: token.initialPrice,
                 websiteUrl: token.websiteUrl || '',

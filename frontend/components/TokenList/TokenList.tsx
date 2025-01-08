@@ -14,7 +14,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [tokens, setTokens] = useState<TokenRecord[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCap'>('newest');
+    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCapUsd'>('marketCapUsd');
 
     const refreshTokens = () => {
         fetchTokens()
@@ -84,7 +84,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                             onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
                             className="bg-gray-700 text-white rounded px-3 py-1"
                         >
-                            <option value="marketCap">Market Cap</option>
+                            <option value="marketCapUsd">Market Cap</option>
                             <option value="5m">5m Volume</option>
                             <option value="30m">30m Volume</option>
                             <option value="1h">1h Volume</option>

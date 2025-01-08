@@ -44,7 +44,7 @@ export async function initializeDatabase() {
                 mint_address VARCHAR(255) PRIMARY KEY,
                 name VARCHAR(255),
                 symbol VARCHAR(20),
-                decimals INTEGER DEFAULT 6,
+                decimals INTEGER,
                 token_type VARCHAR(10) NOT NULL,
                 description TEXT,
                 website_url TEXT,
@@ -149,7 +149,7 @@ export async function initializeDatabase() {
                 low NUMERIC(78,36) NOT NULL,
                 close NUMERIC(78,36) NOT NULL,
                 volume NUMERIC(78,36) DEFAULT 0,
-                market_cap NUMERIC(78,36) DEFAULT 0,
+                market_cap_usd NUMERIC(78,36) DEFAULT 0,
                 CONSTRAINT price_history_pkey PRIMARY KEY (mint_address, time)
             )
         `)

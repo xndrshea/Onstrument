@@ -6,7 +6,7 @@ import { formatMarketCap } from '../../utils/formatting';
 
 interface TokenCardProps {
     token: TokenRecord;
-    volumePeriod: '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCap';
+    volumePeriod: '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCapUsd';
 }
 
 interface TokenMetadata {

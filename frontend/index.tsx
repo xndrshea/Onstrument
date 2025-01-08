@@ -6,12 +6,11 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react'
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets'
+import { SolflareWalletAdapter } from '@solana/wallet-adapter-wallets'
 import '@solana/wallet-adapter-react-ui/styles.css'
 import { defaultConnection } from './config'
 
 const wallets = [
-    new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),
 ];
 
