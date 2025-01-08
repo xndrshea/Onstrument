@@ -98,6 +98,11 @@ export function TokenDetailsPage() {
                 if (!mintAddress) return;
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
 
+                console.log('Full Token Data:', tokenData ? {
+                    ...tokenData,
+                    content: tokenData.content ? JSON.parse(JSON.stringify(tokenData.content)) : null,
+                } : null);
+
                 setToken(tokenData);
                 setLoading(false);
             } catch (error) {

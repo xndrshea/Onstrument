@@ -428,7 +428,9 @@ export class TokenDiscoveryService {
                 price_quote_token: isBaseSol
                     ? parseFloat(attributes.quote_token_price_base_token)
                     : parseFloat(attributes.base_token_price_quote_token),
-                market_cap_usd: attributes.market_cap_usd ? parseFloat(attributes.market_cap_usd) : null,
+                market_cap_usd: attributes.market_cap_usd ?
+                    parseFloat(attributes.market_cap_usd) :
+                    parseFloat(attributes.fdv_usd),
                 volume_24h: parseFloat(attributes.volume_usd.h24),
                 volume_1h: parseFloat(attributes.volume_usd.h1),
                 volume_6h: parseFloat(attributes.volume_usd.h6),
