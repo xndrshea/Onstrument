@@ -40,7 +40,7 @@ export function TokenDetailsPage() {
     const navigate = useNavigate();
     const [topTokens, setTopTokens] = useState<TokenRecord[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [sortField, setSortField] = useState<'marketCapUsd' | 'volume24h'>('volume24h');
+    const [sortField, setSortField] = useState<'marketCapUsd' | 'volume24h'>('marketCapUsd');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     // Add useRef and useEffect for click-outside handling
@@ -65,7 +65,6 @@ export function TokenDetailsPage() {
         priceClient.getLatestPrice(token.mintAddress)
             .then(price => {
                 if (price !== null) {
-                    console.log('Initial price loaded:', price);
                     setCurrentPrice(price);
                 }
             })
@@ -77,7 +76,6 @@ export function TokenDetailsPage() {
             cleanup = await priceClient.subscribeToPrice(
                 token.mintAddress,
                 (update) => {
-                    console.log('Price update received:', update);
                     setCurrentPrice(update.price);
                 },
                 'devnet'  // Custom tokens are always on devnet
@@ -95,12 +93,10 @@ export function TokenDetailsPage() {
         const fetchTokenDetails = async () => {
             try {
                 setLoading(true);
-                console.log(`Fetching token details for mintAddress: ${mintAddress} type: ${tokenType}`);
 
                 // Use TokenService instead of direct fetch
                 if (!mintAddress) return;
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
-                console.log('Transformed token data:', tokenData);
 
                 setToken(tokenData);
                 setLoading(false);
@@ -116,35 +112,39 @@ export function TokenDetailsPage() {
         }
     }, [mintAddress, tokenType]);
 
-    // Fetch top tokens by 24h volume
+    // Updated TokenSelector fetch
     useEffect(() => {
         const fetchTopTokens = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/market/tokens?sortBy=volume24h&limit=100`);
+                const url = new URL(`${API_BASE_URL}/market/tokens`);
+                url.searchParams.append('page', '1');
+                url.searchParams.append('limit', '100');
+                url.searchParams.append('sortBy', sortField);
+                url.searchParams.append('sortDirection', sortDirection);
+
+                const response = await fetch(url.toString());
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const data = await response.json();
-                console.log('Raw API response:', data);
-                setTopTokens(data.tokens || data);
+                setTopTokens(data.tokens);
             } catch (error) {
                 console.error('Error fetching top tokens:', error);
             }
         };
         fetchTopTokens();
-    }, []);
-
-    // Handler for token selection
-    const handleTokenChange = (newMintAddress: string) => {
-        navigate(`/tokens/${newMintAddress}`);
-    };
-
-    const formatPriceWithoutTrailingZeros = (price: number) => {
-        return price.toString().replace(/\.?0+$/, '');
-    };
+    }, [sortField, sortDirection]);
 
     // Add this sorting function
     const sortTokens = (tokens: TokenRecord[]) => {
+        const getFieldValue = (token: TokenRecord) => {
+            return sortField === 'marketCapUsd' ? token.marketCapUsd : token[sortField];
+        };
+
         return [...tokens].sort((a, b) => {
-            const aValue = a[sortField] || 0;
-            const bValue = b[sortField] || 0;
+            const aValue = getFieldValue(a) || 0;
+            const bValue = getFieldValue(b) || 0;
             return sortDirection === 'asc' ? Number(aValue) - Number(bValue) : Number(bValue) - Number(aValue);
         });
     };
@@ -235,10 +235,6 @@ export function TokenDetailsPage() {
         </div>
     );
 
-    useEffect(() => {
-        console.log("Token data:", token);
-        console.log("Market cap:", token?.marketCapUsd);
-    }, [token]);
 
     if (loading) return <div className="p-4 text-white">Loading...</div>;
     if (error) return <div className="p-4 text-white">Error: {error}</div>;
@@ -290,12 +286,38 @@ export function TokenDetailsPage() {
 
                 {/* Main content grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6">
-                    {/* Trading interface */}
-                    <div className="bg-[#232427] rounded-lg p-4">
-                        <TradingInterface token={token} currentPrice={currentPrice} />
+                    {/* Trading interface column */}
+                    <div className="space-y-4">
+                        {/* Trading interface */}
+                        <div className="bg-[#232427] rounded-lg p-4">
+                            <TradingInterface token={token} currentPrice={currentPrice} />
+                        </div>
+
+                        {/* Volume Metrics */}
+                        <div className="bg-[#232427] rounded-lg p-4">
+                            <h2 className="text-xl mb-4">Volume Metrics</h2>
+                            <div className="grid grid-cols-2 gap-4">
+                                {['5m', '1h', '6h', '24h'].map(period => {
+                                    const volumeKey = `volume${period}` as TokenKey;
+                                    const volumeValue = Number(token[volumeKey]) || 0;
+
+                                    // Skip rendering if volume is 0 or null
+                                    if (!volumeValue) return null;
+
+                                    return (
+                                        <div key={period} className="p-3 bg-gray-800 rounded-lg">
+                                            <h3 className="text-gray-400 text-sm">{period} Volume</h3>
+                                            <p className="text-white font-semibold">
+                                                ${formatNumber(volumeValue)}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
 
                         {/* Token Info Section */}
-                        <div className="mt-4">
+                        <div className="bg-[#232427] rounded-lg p-4">
                             <button
                                 className="w-full text-left text-gray-400 hover:text-white transition-colors"
                                 onClick={() => setIsTokenInfoExpanded(!isTokenInfoExpanded)}
@@ -329,32 +351,15 @@ export function TokenDetailsPage() {
                         </div>
                     </div>
 
-                    {/* Charts and data section */}
+                    {/* Charts section */}
                     <div className="space-y-6">
-                        {/* Price chart section - existing code */}
                         <div className="bg-[#232427] rounded-lg p-4">
-                            <h2 className="text-xl mb-4">Price Chart</h2>
                             <PriceChart
                                 token={token}
                                 width={window.innerWidth > 1024 ? window.innerWidth - 500 : window.innerWidth - 48}
-                                height={400}
+                                height={600}
                                 currentPrice={currentPrice || undefined}
                             />
-                        </div>
-
-                        {/* Volume Metrics */}
-                        <div className="bg-[#232427] rounded-lg p-4">
-                            <h2 className="text-xl mb-4">Volume Metrics</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {['5m', '1h', '6h', '24h'].map(period => (
-                                    <div key={period} className="p-3 bg-gray-800 rounded-lg">
-                                        <h3 className="text-gray-400 text-sm">{period} Volume</h3>
-                                        <p className="text-white font-semibold">
-                                            ${formatNumber(Number(token[`volume${period}` as TokenKey]) || 0)}
-                                        </p>
-                                    </div>
-                                ))}
-                            </div>
                         </div>
                     </div>
                 </div>

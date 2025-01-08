@@ -65,7 +65,7 @@ export function MarketPage() {
                         <option value="volume24h">24h Volume</option>
                         <option value="volume1h">1h Volume</option>
                         <option value="volume5m">5m Volume</option>
-                        <option value="marketCap">Market Cap</option>
+                        <option value="marketCapUsd">Market Cap</option>
                         <option value="priceChange24h">24h Change</option>
                     </select>
                 </div>
@@ -75,10 +75,28 @@ export function MarketPage() {
                     <table className="w-full">
                         <thead>
                             <tr className="text-sm text-gray-400 border-b border-gray-800">
-                                <th className="py-3 text-left">Token</th>
-                                <th className="py-3 text-right">Price</th>
-                                <th className="py-3 text-right">24h Change</th>
-                                <th className="py-3 text-right">Volume</th>
+                                <th className="py-3 text-left w-[40%]">Token</th>
+                                <th className="py-3 text-right w-[20%]">24h Change</th>
+                                <th
+                                    className="py-3 text-right w-[20%] cursor-pointer hover:text-white"
+                                    onClick={() => {
+                                        // Cycle through volume sorting options
+                                        if (sortBy === 'volume24h') setSortBy('volume1h');
+                                        else if (sortBy === 'volume1h') setSortBy('volume5m');
+                                        else if (sortBy === 'volume5m') setSortBy('volume24h');
+                                        else setSortBy('volume24h');
+                                    }}
+                                >
+                                    {sortBy === 'volume24h' ? '24h Volume' :
+                                        sortBy === 'volume1h' ? '1h Volume' :
+                                            sortBy === 'volume5m' ? '5m Volume' : 'Volume'}
+                                </th>
+                                <th
+                                    className="py-3 text-right w-[20%] cursor-pointer hover:text-white"
+                                    onClick={() => setSortBy('marketCapUsd')}
+                                >
+                                    Market Cap
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -88,7 +106,7 @@ export function MarketPage() {
                                     className="border-b border-gray-800 hover:bg-[#2C2D33] cursor-pointer"
                                     onClick={() => navigate(`/token/${token.mintAddress}`)}
                                 >
-                                    <td className="py-4">
+                                    <td className="py-4 w-[40%]">
                                         <div className="flex items-center gap-2">
                                             {token.imageUrl && (
                                                 <img
@@ -103,17 +121,19 @@ export function MarketPage() {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="py-4 text-right text-white">
-                                        ${Number(token.currentPrice)?.toFixed(4)}
-                                    </td>
-                                    <td className={`py-4 text-right ${(token.priceChange24h || 0) >= 0
-                                        ? 'text-green-500'
-                                        : 'text-red-500'
-                                        }`}>
+                                    <td className={`py-4 text-right w-[20%] ${(token.priceChange24h || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                                         {Number(token.priceChange24h)?.toFixed(1)}%
                                     </td>
-                                    <td className="py-4 text-right text-white">
-                                        ${formatNumber(token.volume24h || 0)}
+                                    <td className="py-4 text-right w-[20%] text-white">
+                                        ${formatNumber(
+                                            sortBy === 'volume24h' ? (token.volume24h || 0) :
+                                                sortBy === 'volume1h' ? (token.volume1h || 0) :
+                                                    sortBy === 'volume5m' ? (token.volume5m || 0) :
+                                                        token.volume24h || 0
+                                        )}
+                                    </td>
+                                    <td className="py-4 text-right w-[20%] text-white">
+                                        ${formatMarketCap(token.marketCapUsd || 0)}
                                     </td>
                                 </tr>
                             ))}
@@ -147,9 +167,13 @@ export function MarketPage() {
 }
 
 // Helper function for number formatting
-function formatNumber(num: number): string {
-    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-    if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
-    return num.toFixed(2);
+function formatNumber(num: number | null | undefined): string {
+    // Convert to number and handle invalid inputs
+    const value = Number(num);
+    if (isNaN(value)) return '0.00';
+
+    if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B';
+    if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
+    if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K';
+    return value.toFixed(2);
 }

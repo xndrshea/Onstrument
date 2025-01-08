@@ -1,8 +1,5 @@
 import axios from 'axios';
 
-// Debug: Log all environment variables
-console.log('All env variables:', import.meta.env);
-
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
 
 if (!PINATA_JWT) {

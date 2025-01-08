@@ -117,6 +117,17 @@ interface PriceUpdate {
     source: string;
 }
 
+interface JupiterResponse {
+    data: {
+        [key: string]: {
+            id: string;
+            type: 'derivedPrice' | 'buyPrice';
+            price: string;
+        }
+    };
+    timeTaken: number;
+}
+
 export class TokenDiscoveryService {
     private static instance: TokenDiscoveryService;
     private metadataService: MetadataService;
@@ -131,12 +142,15 @@ export class TokenDiscoveryService {
     private tokenPriceQueue: Set<string> = new Set();
     private queueTimer: NodeJS.Timeout | null = null;
     private readonly JUPITER_PRICE_API = 'https://api.jup.ag/price/v2';
-    private readonly BATCH_SIZE = 99;
+    private readonly BATCH_SIZE = 100;
     private readonly QUEUE_TIMEOUT = 5000; // 5 seconds
     private readonly SOL_ADDRESS = 'So11111111111111111111111111111111111111112';
     private readonly retryDelay = 1000; // 1 second
     private readonly maxRetries = 5;
     private isFetching: boolean = false;
+    private readonly JUPITER_BATCH_SIZE = 100; // Maximum tokens per Jupiter API request
+    private readonly RATE_LIMIT_PER_MIN = 600; // Jupiter's rate limit
+    private readonly MIN_DELAY_MS = (60 * 1000) / this.RATE_LIMIT_PER_MIN; // Minimum delay between requests
 
     private constructor(client: Pool) {
         this.client = client;
@@ -226,26 +240,31 @@ export class TokenDiscoveryService {
     public async fetchRaydiumPools(): Promise<RaydiumPool[]> {
         try {
             console.log('Attempting to fetch Raydium pools...');
-            const response = await axios.get<RaydiumPoolResponse>(
-                'https://api-v3.raydium.io/pools/info/list',
-                {
-                    params: {
-                        poolType: 'all',
-                        poolSortField: 'volume24h',
-                        sortType: 'desc',
-                        pageSize: 1000,
-                        page: 1
-                    }
-                }
-            );
+            const allPools: RaydiumPool[] = [];
 
-            if (!response.data.success) {
-                throw new Error('Raydium API request failed');
+            // Fetch both pages
+            for (let page = 1; page <= 2; page++) {
+                const response = await axios.get<RaydiumPoolResponse>(
+                    'https://api-v3.raydium.io/pools/info/list',
+                    {
+                        params: {
+                            poolType: 'all',
+                            poolSortField: 'volume24h',
+                            sortType: 'desc',
+                            pageSize: 1000,
+                            page: page
+                        }
+                    }
+                );
+
+                if (!response.data.success) {
+                    throw new Error(`Raydium API request failed for page ${page}`);
+                }
+
+                allPools.push(...response.data.data.data);
             }
 
-            const allPools = response.data.data.data;
-
-            // Process pools in batches to avoid overwhelming the system
+            // Process all pools in batches
             for (const pool of allPools) {
                 await Promise.all([
                     !this.SOL_ADDRESSES.includes(pool.mintA.address) && this.ensureTokenMetadata(pool.mintA.address),
@@ -399,19 +418,6 @@ export class TokenDiscoveryService {
                 ? parseFloat(attributes.quote_token_price_usd)
                 : parseFloat(attributes.base_token_price_usd);
 
-            // Get the token's supply and decimals
-            const tokenResult = await this.client.query(
-                'SELECT supply, decimals FROM token_platform.tokens WHERE mint_address = $1',
-                [isBaseSol ? quoteTokenId : baseTokenId]
-            );
-
-            const totalSupply = tokenResult.rows[0]?.supply;
-            const decimals = tokenResult.rows[0]?.decimals;
-
-            const marketCapUsd = totalSupply && currentPrice && decimals
-                ? (totalSupply * currentPrice) / Math.pow(10, decimals)
-                : null;
-
             const tokenData: TokenUpsertData = {
                 address: isBaseSol ? quoteTokenId : baseTokenId,
                 token_type: 'dex' as const,
@@ -422,19 +428,15 @@ export class TokenDiscoveryService {
                 price_quote_token: isBaseSol
                     ? parseFloat(attributes.quote_token_price_base_token)
                     : parseFloat(attributes.base_token_price_quote_token),
-                // Add calculated market cap
-                market_cap_usd: marketCapUsd,
-                // Standard volume fields
+                market_cap_usd: attributes.market_cap_usd ? parseFloat(attributes.market_cap_usd) : null,
                 volume_24h: parseFloat(attributes.volume_usd.h24),
                 volume_1h: parseFloat(attributes.volume_usd.h1),
                 volume_6h: parseFloat(attributes.volume_usd.h6),
                 volume_5m: parseFloat(attributes.volume_usd.m5),
-                // Standard price change fields
                 price_change_24h: parseFloat(attributes.price_change_percentage.h24),
                 price_change_1h: parseFloat(attributes.price_change_percentage.h1),
                 price_change_6h: parseFloat(attributes.price_change_percentage.h6),
                 price_change_5m: parseFloat(attributes.price_change_percentage.m5),
-                // Transaction data
                 tx_5m_buys: attributes.transactions.m5.buys,
                 tx_5m_sells: attributes.transactions.m5.sells,
                 tx_5m_buyers: attributes.transactions.m5.buyers,
@@ -455,7 +457,6 @@ export class TokenDiscoveryService {
                 tx_24h_sells: attributes.transactions.h24.sells,
                 tx_24h_buyers: attributes.transactions.h24.buyers,
                 tx_24h_sellers: attributes.transactions.h24.sellers,
-                // Additional data
                 reserve_in_usd: parseFloat(attributes.reserve_in_usd),
                 pool_created_at: attributes.pool_created_at,
                 token_source: 'geckoterminal'
@@ -631,61 +632,114 @@ export class TokenDiscoveryService {
         ]);
     }
 
-    private async processQueuedPriceUpdates(): Promise<void> {
-        if (this.tokenPriceQueue.size === 0) return;
+    private chunk<T>(array: T[], size: number): T[][] {
+        return Array.from({ length: Math.ceil(array.length / size) },
+            (_, i) => array.slice(i * size, i * size + size)
+        );
+    }
 
-        try {
-            const addresses = Array.from(this.tokenPriceQueue);
+    async processQueuedPriceUpdates() {
+        console.log('Processing queued updates...');
+        // Take a snapshot of the queue and clear it immediately
+        const queueSnapshot = Array.from(this.tokenPriceQueue);
+        this.tokenPriceQueue.clear();  // Clear the queue before processing
 
-            for (let i = 0; i < addresses.length; i += this.BATCH_SIZE) {
-                const batchAddresses = addresses.slice(i, i + this.BATCH_SIZE);
-                const addressesWithSol = [this.SOL_ADDRESS, ...batchAddresses];
+        const tokenChunks = this.chunk(queueSnapshot, this.JUPITER_BATCH_SIZE);
 
-                const response = await axios.get(`${this.JUPITER_PRICE_API}?ids=${addressesWithSol.join(',')}`);
+        for (const batchAddresses of tokenChunks) {
+            try {
+                console.log('Calling Jupiter API...');
+                const priceData = await this.fetchJupiterPrices(batchAddresses);
+                await this.updateBatchPrices(priceData);
 
-                if (!response.data?.data?.[this.SOL_ADDRESS]) {
-                    throw new Error('Failed to fetch SOL price from Jupiter');
+                // Respect rate limits
+                await new Promise(resolve => setTimeout(resolve, this.MIN_DELAY_MS));
+            } catch (error) {
+                console.error('Error in batch processing:', error);
+                // Re-queue failed batch only if error is retryable
+                if (error instanceof Error && !error.message.includes('HTTP error')) {
+                    batchAddresses.forEach(addr => this.queueTokenForPriceUpdate(addr));
                 }
-
-                await this.updateBatchPrices(response.data.data);
+                await new Promise(resolve => setTimeout(resolve, this.MIN_DELAY_MS * 2));
             }
-
-            this.tokenPriceQueue.clear();
-        } catch (error) {
-            this.logger.error('Error processing queued price updates:', error);
         }
     }
 
-    private async updateBatchPrices(updates: PriceUpdate[]): Promise<void> {
-        if (updates.length === 0) return;
-
-        // Convert to array and sort
-        const sortedUpdates = Array.from(updates).sort((a, b) =>
-            a.tokenAddress.localeCompare(b.tokenAddress)
-        );
-
+    private async updateBatchPrices(prices: Record<string, any>): Promise<void> {
         try {
-            await this.client.query('BEGIN');
+            const addresses = Object.keys(prices.data);
+            const tokenQuery = `
+                SELECT mint_address, supply, decimals 
+                FROM token_platform.tokens 
+                WHERE mint_address = ANY($1)
+            `;
+            const tokenData = await this.client.query(tokenQuery, [addresses]);
+            const tokenMap = new Map(tokenData.rows.map(row => [row.mint_address, row]));
 
-            for (const update of sortedUpdates) {
-                await this.client.query(
-                    `UPDATE token_platform.tokens 
-                     SET current_price = $1, 
-                         price_updated_at = $2,
-                         price_source = $3,
-                         market_cap_usd = CASE 
-                             WHEN supply IS NOT NULL AND supply > 0 AND decimals IS NOT NULL
-                             THEN (supply::numeric * $1::numeric) / POWER(10, decimals)
-                             ELSE NULL
-                         END
-                     WHERE mint_address = $4`,
-                    [update.price, update.timestamp, update.source, update.tokenAddress]
-                );
+            const updates = Object.entries((prices as JupiterResponse).data)
+                .filter(([address, info]) => info && info.price && tokenMap.has(address))
+                .map(([address, info]) => {
+                    const token = tokenMap.get(address)!;
+                    const price = parseFloat(info.price);
+                    const adjustedSupply = token.supply / Math.pow(10, token.decimals);
+                    const marketCap = token.supply ? adjustedSupply * price : null;
+
+                    return {
+                        address,
+                        price,
+                        marketCap
+                    };
+                });
+
+            // Process updates sequentially
+            for (const update of updates) {
+                const query = `
+                    UPDATE token_platform.tokens 
+                    SET 
+                        current_price = $2,
+                        market_cap_usd = $3,
+                        last_price_update = NOW()
+                    WHERE mint_address = $1`;
+
+                await this.client.query(query, [
+                    update.address,
+                    update.price,
+                    update.marketCap
+                ]);
             }
 
-            await this.client.query('COMMIT');
         } catch (error) {
-            await this.client.query('ROLLBACK');
+            this.logger.error('Error updating batch prices:', error);
+            throw error;
+        }
+    }
+
+    private async fetchJupiterPrices(addresses: string[]): Promise<any> {
+        try {
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+            const response = await fetch(
+                `https://api.jup.ag/price/v2?ids=${addresses.join(',')}`,
+                { signal: controller.signal }
+            );
+
+            clearTimeout(timeout);
+
+            if (!response.ok) {
+                console.error('Jupiter API error:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    url: response.url
+                });
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error in fetchJupiterPrices:', error);
             throw error;
         }
     }
@@ -694,12 +748,11 @@ export class TokenDiscoveryService {
         if (!this.SOL_ADDRESSES.includes(address)) {
             this.tokenPriceQueue.add(address);
 
-            // Start timer if this is the first token
             if (this.tokenPriceQueue.size === 1) {
+                this.logger.info('Starting queue timer');
                 this.startQueueTimer();
             }
 
-            // Process immediately if we hit batch size
             if (this.tokenPriceQueue.size >= this.BATCH_SIZE) {
                 this.clearQueueTimer();
                 this.processQueuedPriceUpdates();

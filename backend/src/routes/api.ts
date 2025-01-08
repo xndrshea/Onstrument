@@ -282,7 +282,7 @@ router.get('/market/tokens', async (req, res) => {
         let additionalSelect = '';
 
         switch (sortBy) {
-            case 'marketCap':
+            case 'marketCapUsd':
                 orderByClause = 'ORDER BY t.market_cap_usd DESC NULLS LAST';
                 break;
             case 'volume5m':
@@ -297,21 +297,8 @@ router.get('/market/tokens', async (req, res) => {
                 additionalSelect = ', COALESCE(t.volume_24h, 0) as volume';
                 orderByClause = 'ORDER BY volume DESC';
                 break;
-            case 'volume7d':
-                additionalSelect = ', COALESCE(t.volume_7d, 0) as volume';
-                orderByClause = 'ORDER BY volume DESC';
-                break;
-            case 'priceChange5m':
-                orderByClause = 'ORDER BY t.price_change_5m DESC NULLS LAST';
-                break;
-            case 'priceChange1h':
-                orderByClause = 'ORDER BY t.price_change_1h DESC NULLS LAST';
-                break;
             case 'priceChange24h':
                 orderByClause = 'ORDER BY t.price_change_24h DESC NULLS LAST';
-                break;
-            case 'newest':
-                orderByClause = 'ORDER BY t.created_at DESC';
                 break;
             default:
                 orderByClause = 'ORDER BY t.volume_24h DESC NULLS LAST';
@@ -365,7 +352,7 @@ router.get('/market/tokens', async (req, res) => {
                 verified: token.verified,
                 imageUrl: token.image_url,
                 currentPrice: token.current_price,
-                marketCapUsd: token.market_cap_usd,
+                marketCapUsd: token.market_cap_usd ? Number(token.market_cap_usd) : null,
                 volume5m: token.volume_5m,
                 volume1h: token.volume_1h,
                 volume24h: token.volume_24h,
