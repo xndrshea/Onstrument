@@ -12,36 +12,80 @@ interface PriceChartProps {
 
 export function PriceChart({ token, width = 600, height = 300, currentPrice }: PriceChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
-    const chart = useRef<IChartApi | null>(null);
-    const series = useRef<ISeriesApi<"Line"> | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const latestTime = useRef<number>(0);
-    const latestValue = useRef<number>(0);
+    const [mostLiquidPool, setMostLiquidPool] = useState<string | null>(null);
 
-    // Update chart when currentPrice changes
     useEffect(() => {
-        if (series.current && typeof currentPrice === 'number') {
-            const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
-            console.log('Adding new price point to chart:', { time: now, value: currentPrice });
-            series.current.update({ time: now, value: currentPrice });
-        }
-    }, [currentPrice]);
+        if (!token?.mintAddress) return;
 
-    // Initialize chart
+        const fetchMostLiquidPool = async () => {
+            if (token.tokenType === 'dex') {
+                try {
+                    const response = await fetch(
+                        `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${token.mintAddress}/pools?sort=h24_volume_usd_liquidity_desc`
+                    );
+                    const data = await response.json();
+                    if (data.data?.[0]?.attributes?.address) {
+                        setMostLiquidPool(data.data[0].attributes.address);
+                    }
+                } catch (error) {
+                    console.error('Error fetching most liquid pool:', error);
+                }
+            }
+        };
+
+        fetchMostLiquidPool();
+    }, [token?.mintAddress, token?.tokenType]);
+
+    if (token.tokenType === 'dex' && mostLiquidPool) {
+        return (
+            <div style={{ width, height, position: 'relative' }}>
+                <iframe
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                    }}
+                    title="GeckoTerminal Embed"
+                    src={`https://www.geckoterminal.com/solana/pools/${mostLiquidPool}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0`}
+                    allow="clipboard-write"
+                    allowFullScreen
+                />
+            </div>
+        );
+    }
+
+    // For custom tokens, use existing chart implementation
+    return (
+        <div ref={chartContainerRef} style={{ width, height }}>
+            {/* Existing lightweight-charts implementation remains here */}
+            <CustomTokenChart
+                token={token}
+                width={width}
+                height={height}
+                currentPrice={currentPrice}
+            />
+        </div>
+    );
+}
+
+// Separate component for custom token chart
+function CustomTokenChart({ token, width, height, currentPrice }: PriceChartProps) {
+    const chartRef = useRef<IChartApi | null>(null);
+    const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
-        if (!chartContainerRef.current || !token?.mintAddress) return;
+        if (!containerRef.current) return;
 
-        chart.current = createChart(chartContainerRef.current, {
+        chartRef.current = createChart(containerRef.current, {
+            width,
+            height,
             layout: {
                 background: { color: '#232427' },
                 textColor: 'rgba(255, 255, 255, 0.9)',
-            },
-            width,
-            height,
-            timeScale: {
-                timeVisible: true,
-                secondsVisible: false,
             },
             grid: {
                 vertLines: { color: '#2c2c2c' },
@@ -49,87 +93,49 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
             },
         });
 
-        series.current = chart.current.addLineSeries({
+        seriesRef.current = chartRef.current.addLineSeries({
             color: '#26a69a',
             lineWidth: 2,
         });
 
-        fetchAndUpdatePrices();
-
         return () => {
-            if (chart.current) {
-                chart.current.remove();
+            if (chartRef.current) {
+                chartRef.current.remove();
             }
         };
-    }, [token?.mintAddress]);
+    }, [width, height]);
 
-    const fetchAndUpdatePrices = async () => {
-        try {
-            setIsLoading(true);
-            const history = await priceClient.getPriceHistory(token.mintAddress);
+    // Update price data
+    useEffect(() => {
+        const fetchPriceHistory = async () => {
+            if (!token.mintAddress || token.tokenType === 'dex') return;
 
-            if (!history?.length) {
-                setError('No price history available');
-                return;
-            }
-
-            if (series.current) {
-                const formattedData = history
-                    .filter(point =>
-                        point &&
-                        typeof point.time === 'number' &&
-                        typeof point.value === 'number' &&
-                        !isNaN(point.time) &&
-                        !isNaN(point.value)
-                    )
-                    .map(point => ({
-                        time: point.time as UTCTimestamp,
-                        value: point.value
-                    }));
-
-                if (formattedData.length === 0) {
-                    setError('Invalid price data received');
-                    return;
+            try {
+                const history = await priceClient.getPriceHistory(token.mintAddress);
+                if (history?.length && seriesRef.current) {
+                    seriesRef.current.setData(
+                        history.map(point => ({
+                            time: point.time as UTCTimestamp,
+                            value: point.value
+                        }))
+                    );
                 }
-
-                series.current.setData(formattedData);
+            } catch (error) {
+                console.warn('Error fetching price history:', error);
+                // Handle error gracefully - maybe show a message to user
             }
-        } catch (error) {
-            console.error('Price history error:', error);
-            setError('Failed to load price history');
-        } finally {
-            setIsLoading(false);
+        };
+
+        fetchPriceHistory();
+    }, [token.mintAddress, token.tokenType]);
+
+    // Update live price
+    useEffect(() => {
+        if (currentPrice && seriesRef.current) {
+            const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
+            seriesRef.current.update({ time: now, value: currentPrice });
         }
-    };
+    }, [currentPrice]);
 
-    return (
-        <div className="relative">
-            <div
-                ref={chartContainerRef}
-                className="price-chart-container"
-                style={{
-                    width: `${width}px`,
-                    height: `${height}px`,
-                    minWidth: '300px',
-                    minHeight: '200px',
-                    background: '#232427',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    margin: '16px 0'
-                }}
-            />
-
-            {isLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <div className="text-white/80">Loading price chart...</div>
-                </div>
-            )}
-
-            {error && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <div className="text-red-500 p-4 bg-red-100/10 rounded-lg">{error}</div>
-                </div>
-            )}
-        </div>
-    );
+    return <div ref={containerRef} />;
 }

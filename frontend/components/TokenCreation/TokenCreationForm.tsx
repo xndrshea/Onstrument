@@ -29,6 +29,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
     const [imagePreview, setImagePreview] = useState<string | null>(null)
     const [uploadingImage, setUploadingImage] = useState(false)
     const [isSubscribed, setIsSubscribed] = useState(false)
+    const [showMore, setShowMore] = useState(false)
 
     useEffect(() => {
         async function checkSubscription() {
@@ -196,25 +197,6 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             )}
 
             <div className="form-group">
-                <label>Token Image</label>
-                <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="file-input"
-                />
-                {imagePreview && (
-                    <div className="image-preview">
-                        <img
-                            src={imagePreview}
-                            alt="Token preview"
-                            className="w-32 h-32 object-cover rounded-lg mt-2"
-                        />
-                    </div>
-                )}
-            </div>
-
-            <div className="form-group">
                 <label>Token Name</label>
                 <input
                     type="text"
@@ -243,46 +225,6 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                     value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Enter token description"
-                />
-            </div>
-
-            <div className="form-group">
-                <label>Website URL</label>
-                <input
-                    type="url"
-                    value={formData.websiteUrl || ''}
-                    onChange={e => setFormData({ ...formData, websiteUrl: e.target.value })}
-                    placeholder="https://example.com"
-                />
-            </div>
-
-            <div className="form-group">
-                <label>Documentation URL</label>
-                <input
-                    type="url"
-                    value={formData.docsUrl || ''}
-                    onChange={e => setFormData({ ...formData, docsUrl: e.target.value })}
-                    placeholder="https://docs.example.com"
-                />
-            </div>
-
-            <div className="form-group">
-                <label>Twitter URL</label>
-                <input
-                    type="url"
-                    value={formData.twitterUrl || ''}
-                    onChange={e => setFormData({ ...formData, twitterUrl: e.target.value })}
-                    placeholder="https://twitter.com/username"
-                />
-            </div>
-
-            <div className="form-group">
-                <label>Telegram URL</label>
-                <input
-                    type="url"
-                    value={formData.telegramUrl || ''}
-                    onChange={e => setFormData({ ...formData, telegramUrl: e.target.value })}
-                    placeholder="https://t.me/username"
                 />
             </div>
 
@@ -343,6 +285,77 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                     </div>
                 )}
             </div>
+
+            <div className="form-group">
+                <label>Token Image</label>
+                <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="file-input"
+                />
+                {imagePreview && (
+                    <div className="image-preview">
+                        <img
+                            src={imagePreview}
+                            alt="Token preview"
+                            className="w-32 h-32 object-cover rounded-lg mt-2"
+                        />
+                    </div>
+                )}
+            </div>
+
+            <button
+                type="button"
+                onClick={() => setShowMore(!showMore)}
+                className="more-options-button"
+            >
+                {showMore ? '- Less Options' : '+ More Options'}
+            </button>
+
+            {showMore && (
+                <div className="additional-options">
+                    <div className="form-group">
+                        <label>Website URL</label>
+                        <input
+                            type="url"
+                            value={formData.websiteUrl || ''}
+                            onChange={e => setFormData({ ...formData, websiteUrl: e.target.value })}
+                            placeholder="https://example.com"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Documentation URL</label>
+                        <input
+                            type="url"
+                            value={formData.docsUrl || ''}
+                            onChange={e => setFormData({ ...formData, docsUrl: e.target.value })}
+                            placeholder="https://docs.example.com"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Twitter URL</label>
+                        <input
+                            type="url"
+                            value={formData.twitterUrl || ''}
+                            onChange={e => setFormData({ ...formData, twitterUrl: e.target.value })}
+                            placeholder="https://twitter.com/username"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Telegram URL</label>
+                        <input
+                            type="url"
+                            value={formData.telegramUrl || ''}
+                            onChange={e => setFormData({ ...formData, telegramUrl: e.target.value })}
+                            placeholder="https://t.me/username"
+                        />
+                    </div>
+                </div>
+            )}
 
             <button
                 type="submit"

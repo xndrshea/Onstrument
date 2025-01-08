@@ -77,22 +77,27 @@ export class MigrationService {
             const effectivePrice =
                 event.tokenAmount > 0 ? totalPreMigrationSol / event.tokenAmount : 0;
 
-            // 3. Subtract fees + safety buffer
+            // 3. Calculate developer reward
+            const SUBSCRIBER_REWARD = 3 * LAMPORTS_PER_SOL;    // 3 SOL
+            const NON_SUBSCRIBER_REWARD = 0.5 * LAMPORTS_PER_SOL; // 0.5 SOL
+            const developerReward = event.isSubscribed ? SUBSCRIBER_REWARD : NON_SUBSCRIBER_REWARD;
+
+            // 4. Subtract fees + safety buffer + developer reward
             const RAYDIUM_POOL_CREATION_FEE = 0.15 * LAMPORTS_PER_SOL; // 0.15 SOL
             const ADMIN_SAFETY_BUFFER = 0.1 * LAMPORTS_PER_SOL; // 0.1 SOL
 
             const remainingSol =
-                event.realSolAmount - RAYDIUM_POOL_CREATION_FEE - ADMIN_SAFETY_BUFFER;
+                event.realSolAmount - RAYDIUM_POOL_CREATION_FEE - ADMIN_SAFETY_BUFFER - developerReward;
             if (remainingSol <= 0) {
                 throw new Error(
                     `Insufficient SOL for migration. ` +
                     `Available: ${event.realSolAmount / LAMPORTS_PER_SOL} SOL, ` +
-                    `Required: ${(RAYDIUM_POOL_CREATION_FEE + ADMIN_SAFETY_BUFFER) / LAMPORTS_PER_SOL
+                    `Required: ${(RAYDIUM_POOL_CREATION_FEE + ADMIN_SAFETY_BUFFER + developerReward) / LAMPORTS_PER_SOL
                     } SOL`
                 );
             }
 
-            // 4. Calculate how many tokens to deposit in the new pool
+            // 5. Calculate how many tokens to deposit in the new pool
             const requiredTokenAmount = remainingSol / effectivePrice;
 
             logger.info('Calculated migration amounts:', {
@@ -101,12 +106,13 @@ export class MigrationService {
                 effectivePrice,
                 poolCreationFee: RAYDIUM_POOL_CREATION_FEE / LAMPORTS_PER_SOL + ' SOL',
                 safetyBuffer: ADMIN_SAFETY_BUFFER / LAMPORTS_PER_SOL + ' SOL',
+                developerReward: developerReward / LAMPORTS_PER_SOL + ' SOL',
                 remainingSol: remainingSol / LAMPORTS_PER_SOL + ' SOL',
                 requiredTokenAmount,
                 isSubscribed: event.isSubscribed
             });
 
-            // 5. Create the Raydium pool
+            // 6. Create the Raydium pool
             const poolAddress = await this.createRaydiumPool({
                 tokenMint: new PublicKey(event.mint),
                 initialLiquidity: {
@@ -118,7 +124,7 @@ export class MigrationService {
             // Since "sendAndConfirm: true" is used inside createRaydiumPool(),
             // the transaction is already confirmed at this point.
 
-            // 6. Log success
+            // 7. Log success
             logger.info('Migration completed successfully', {
                 mint: event.mint,
                 poolAddress: poolAddress.toString(),

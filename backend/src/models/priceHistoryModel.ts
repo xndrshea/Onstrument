@@ -80,16 +80,28 @@ export class PriceHistoryModel {
     static async recordPrice(update: {
         mintAddress: string;
         price: number;
+        marketCap?: number;
         volume?: number;
         timestamp?: Date;
     }) {
-        const { mintAddress, price, volume = 0, timestamp = new Date() } = update;
+        const { mintAddress, price, volume = 0, timestamp = new Date(), marketCap } = update;
 
         try {
             if (!isFinite(price) || price <= 0) {
                 logger.error(`Invalid price for ${mintAddress}:`, { price, volume });
                 return;
             }
+
+            // Get token's supply
+            const tokenResult = await pool.query(
+                'SELECT supply FROM token_platform.tokens WHERE mint_address = $1',
+                [mintAddress]
+            );
+            logger.info('Token supply query result:', {
+                mintAddress,
+                supply: tokenResult.rows[0]?.supply,
+                hasRows: tokenResult.rows.length > 0
+            });
 
             // Get the last price point for this token within the current minute
             const lastPrice = await pool.query(`
@@ -103,6 +115,7 @@ export class PriceHistoryModel {
 
             const previousData = lastPrice.rows[0];
 
+            // Update price history
             await pool.query(`
                 INSERT INTO token_platform.price_history (
                     time,
@@ -112,7 +125,8 @@ export class PriceHistoryModel {
                     high,
                     low,
                     close,
-                    volume
+                    volume,
+                    market_cap
                 ) VALUES (
                     $1,
                     $2,
@@ -121,7 +135,8 @@ export class PriceHistoryModel {
                     $5,
                     $6,
                     $3,
-                    $7
+                    $7,
+                    $8
                 )
                 ON CONFLICT (mint_address, time) DO UPDATE
                 SET 
@@ -129,7 +144,8 @@ export class PriceHistoryModel {
                     high = GREATEST(token_platform.price_history.high, EXCLUDED.price),
                     low = LEAST(token_platform.price_history.low, EXCLUDED.price),
                     close = EXCLUDED.price,
-                    volume = token_platform.price_history.volume + EXCLUDED.volume
+                    volume = token_platform.price_history.volume + EXCLUDED.volume,
+                    market_cap = EXCLUDED.market_cap
             `, [
                 timestamp,
                 mintAddress,
@@ -137,12 +153,22 @@ export class PriceHistoryModel {
                 previousData?.open || price,
                 Math.max(previousData?.high || price, price),
                 Math.min(previousData?.low || price, price),
-                volume
+                volume,
+                marketCap
             ]);
 
-            logger.info('Recorded price:', {
+            // Update current price and market cap in tokens table
+            await pool.query(`
+                UPDATE token_platform.tokens 
+                SET 
+                    market_cap = $2
+                WHERE mint_address = $1
+            `, [mintAddress, marketCap]);
+
+            logger.info('Successfully recorded price', {
                 mintAddress,
                 price,
+                volume: volume || 0,
                 timestamp: timestamp.toISOString()
             });
         } catch (error) {
@@ -152,24 +178,22 @@ export class PriceHistoryModel {
     }
 
     // This function gets called when loading the price chart
-    static async getPriceHistory(tokenMintAddress: string, tokenType?: string) {
+    static async getPriceHistory(tokenMintAddress: string) {
         try {
             const query = `
                 SELECT 
-                    time_bucket('3 seconds', time) as time,
-                    last(price, time) as value
-                FROM token_platform.price_history ph
-                JOIN token_platform.tokens t ON t.mint_address = ph.mint_address
-                WHERE 
-                    ph.mint_address = $1
-                    ${tokenType ? 'AND t.token_type = $2' : ''}
-                    AND time >= NOW() - INTERVAL '7 days'
-                GROUP BY 1
-                ORDER BY 1 ASC
+                    time,
+                    price as value
+                FROM token_platform.price_history
+                WHERE mint_address = $1
+                ORDER BY time ASC
             `;
 
-            const params = tokenType ? [tokenMintAddress, tokenType] : [tokenMintAddress];
+            const params = [tokenMintAddress];
             const result = await pool.query(query, params);
+
+            // Log the raw data
+            logger.info('Raw query results:', result.rows);
 
             return result.rows.map(row => ({
                 time: Math.floor(Date.parse(row.time) / 1000),
@@ -177,6 +201,60 @@ export class PriceHistoryModel {
             }));
         } catch (error) {
             logger.error('Error getting price history:', error);
+            throw error;
+        }
+    }
+
+    static async getVolumeStats(mintAddress: string, period: '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all') {
+        try {
+            const query = {
+                '5m': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1m
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '5 minutes'
+                `,
+                '30m': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1m
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '30 minutes'
+                `,
+                '1h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1h
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '1 hour'
+                `,
+                '4h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1h
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '4 hours'
+                `,
+                '12h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1h
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '12 hours'
+                `,
+                '24h': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history_1d
+                    WHERE mint_address = $1 
+                    AND bucket > NOW() - INTERVAL '24 hours'
+                `,
+                'all': `
+                    SELECT SUM(volume) as total_volume
+                    FROM token_platform.price_history
+                    WHERE mint_address = $1
+                `
+            }[period];
+
+            const result = await pool.query(query, [mintAddress]);
+            return Number(result.rows[0]?.total_volume || 0);
+        } catch (error) {
+            logger.error('Error getting volume stats:', error);
             throw error;
         }
     }

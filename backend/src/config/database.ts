@@ -34,16 +34,17 @@ export async function initializeDatabase() {
     const client = await pool.connect()
     try {
         await client.query('BEGIN')
-        await client.query(`CREATE SCHEMA IF NOT EXISTS token_platform`)
+        await client.query('CREATE SCHEMA IF NOT EXISTS token_platform')
         await client.query('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE')
+        await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
-        // Create tokens table first, THEN create indexes
+        // Consolidated tokens table creation
         await client.query(`
             CREATE TABLE IF NOT EXISTS token_platform.tokens (
                 mint_address VARCHAR(255) PRIMARY KEY,
                 name VARCHAR(255),
                 symbol VARCHAR(20),
-                decimals INTEGER DEFAULT 6,
+                decimals INTEGER,
                 token_type VARCHAR(10) NOT NULL,
                 description TEXT,
                 website_url TEXT,
@@ -69,13 +70,64 @@ export async function initializeDatabase() {
                 verified BOOLEAN DEFAULT FALSE,
                 image_url TEXT,
                 attributes JSONB,
+                price_sol NUMERIC(78,36),
                 off_chain_metadata JSONB,
                 metadata_status VARCHAR(50),
                 metadata_source VARCHAR(50),
                 metadata_fetch_attempts INTEGER DEFAULT 0,
                 last_metadata_fetch TIMESTAMP WITH TIME ZONE,
-                CONSTRAINT valid_token_type CHECK (token_type IN ('custom', 'pool'))
+                token_vault VARCHAR(255),
+                market_cap_usd NUMERIC(78,36),
+                fully_diluted_value_usd NUMERIC(78,36),
+                price_change_5m NUMERIC(78,36),
+                price_change_1h NUMERIC(78,36),
+                price_change_6h NUMERIC(78,36),
+                price_change_24h NUMERIC(78,36),
+                price_change_7d NUMERIC(78,36),
+                price_change_30d NUMERIC(78,36),
+                token_source VARCHAR(20) NOT NULL DEFAULT 'custom',
+                last_price_update TIMESTAMP WITH TIME ZONE,
+                current_price NUMERIC(78,36),
+                volume_5m NUMERIC(78,36) DEFAULT 0,
+                volume_1h NUMERIC(78,36) DEFAULT 0,
+                volume_6h NUMERIC(78,36) DEFAULT 0,
+                volume_24h NUMERIC(78,36) DEFAULT 0,
+                volume_7d NUMERIC(78,36) DEFAULT 0,
+                volume_30d NUMERIC(78,36) DEFAULT 0,
+                apr_24h NUMERIC(78,36) DEFAULT 0,
+                apr_7d NUMERIC(78,36) DEFAULT 0,
+                apr_30d NUMERIC(78,36) DEFAULT 0,
+                tvl NUMERIC(78,36),
+                -- Transaction metrics
+                tx_5m_buys INTEGER DEFAULT 0,
+                tx_5m_sells INTEGER DEFAULT 0,
+                tx_5m_buyers INTEGER DEFAULT 0,
+                tx_5m_sellers INTEGER DEFAULT 0,
+                tx_1h_buys INTEGER DEFAULT 0,
+                tx_1h_sells INTEGER DEFAULT 0,
+                tx_1h_buyers INTEGER DEFAULT 0,
+                tx_1h_sellers INTEGER DEFAULT 0,
+                tx_6h_buys INTEGER DEFAULT 0,
+                tx_6h_sells INTEGER DEFAULT 0,
+                tx_6h_buyers INTEGER DEFAULT 0,
+                tx_6h_sellers INTEGER DEFAULT 0,
+                tx_24h_buys INTEGER DEFAULT 0,
+                tx_24h_sells INTEGER DEFAULT 0,
+                tx_24h_buyers INTEGER DEFAULT 0,
+                tx_24h_sellers INTEGER DEFAULT 0,
+                reserve_in_usd NUMERIC(78,36),
+                base_token_price_native_currency NUMERIC(78,36),
+                quote_token_price_native_currency NUMERIC(78,36),
+                CONSTRAINT valid_token_type CHECK (token_type IN ('custom', 'dex')),
+                CONSTRAINT valid_token_source CHECK (token_source IN ('custom', 'raydium', 'geckoterminal'))
             );
+
+            CREATE INDEX IF NOT EXISTS idx_tokens_type ON token_platform.tokens(token_type);
+            CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON token_platform.tokens(symbol);
+            CREATE INDEX IF NOT EXISTS idx_tokens_verified ON token_platform.tokens(verified);
+            CREATE INDEX IF NOT EXISTS idx_tokens_metadata_status ON token_platform.tokens(metadata_status);
+            CREATE INDEX IF NOT EXISTS idx_tokens_token_vault ON token_platform.tokens(token_vault);
+            CREATE INDEX IF NOT EXISTS idx_tokens_source ON token_platform.tokens(token_source);
         `);
 
         // Create indexes after table creation
@@ -84,33 +136,6 @@ export async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON token_platform.tokens(symbol);
             CREATE INDEX IF NOT EXISTS idx_tokens_verified ON token_platform.tokens(verified);
             CREATE INDEX IF NOT EXISTS idx_tokens_metadata_status ON token_platform.tokens(metadata_status);
-        `);
-
-        // Add after tokens table creation, around line 73
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS token_platform.raydium_pools (
-                pool_address VARCHAR(255) PRIMARY KEY,
-                base_mint VARCHAR(255) NOT NULL,
-                quote_mint VARCHAR(255) NOT NULL,
-                base_decimals INTEGER NOT NULL,
-                quote_decimals INTEGER NOT NULL,
-                program_id VARCHAR(255) NOT NULL,
-                version INTEGER NOT NULL,
-                pool_type VARCHAR(50) NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                CONSTRAINT valid_pool_type CHECK (pool_type IN ('LEGACY_AMM', 'STANDARD_AMM', 'CLMM'))
-            );
-
-            -- Index for fast lookups by mint address
-            CREATE INDEX IF NOT EXISTS idx_raydium_pools_base_mint 
-            ON token_platform.raydium_pools(base_mint);
-            
-            CREATE INDEX IF NOT EXISTS idx_raydium_pools_quote_mint 
-            ON token_platform.raydium_pools(quote_mint);
-
-            CREATE INDEX IF NOT EXISTS idx_raydium_pools_mints 
-            ON token_platform.raydium_pools(base_mint, quote_mint);
         `);
 
         // Create price_history table first
@@ -124,6 +149,7 @@ export async function initializeDatabase() {
                 low NUMERIC(78,36) NOT NULL,
                 close NUMERIC(78,36) NOT NULL,
                 volume NUMERIC(78,36) DEFAULT 0,
+                market_cap_usd NUMERIC(78,36) DEFAULT 0,
                 CONSTRAINT price_history_pkey PRIMARY KEY (mint_address, time)
             )
         `)
@@ -301,7 +327,6 @@ export async function initializeDatabase() {
                 schedule_interval => INTERVAL '1 day',
                 if_not_exists => TRUE);
         `);
-
         logger.info('Database initialized successfully')
         return true
 

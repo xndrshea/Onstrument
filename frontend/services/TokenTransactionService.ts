@@ -43,9 +43,9 @@ export class TokenTransactionService {
     ): Promise<TokenRecord> {
         try {
             // Create token with bonding curve
-            const { mint, curve, signature } = await this.bondingCurve.createTokenWithCurve(params);
+            const { mint, curve, tokenVault, signature } = await this.bondingCurve.createTokenWithCurve(params);
 
-            if (!signature || !mint || !curve) {
+            if (!signature || !mint || !curve || !tokenVault) {
                 throw new Error('Failed to create token - missing required parameters');
             }
 
@@ -68,6 +68,7 @@ export class TokenTransactionService {
             const tokenRecord: TokenRecord = {
                 mintAddress: mint.toString(),
                 curveAddress: curve.toString(),
+                tokenVault: tokenVault.toString(),
                 verified: false,
                 name: params.name,
                 symbol: params.symbol,

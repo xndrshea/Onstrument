@@ -53,7 +53,6 @@ export const dexService = {
             }
 
             const tokenDecimals = (mintInfo.value.data as any).parsed.info.decimals;
-            console.log('Token decimals from mint:', tokenDecimals);
 
             // When buying, we want this many tokens as OUTPUT
             // So we need to query with the output amount
@@ -66,7 +65,6 @@ export const dexService = {
             );
 
             const quoteResponse = await response.json();
-            console.log('Jupiter quote response:', quoteResponse);
 
             if (!response.ok || !quoteResponse.outAmount) {
                 console.error('Invalid quote response:', quoteResponse);
@@ -85,16 +83,6 @@ export const dexService = {
                 totalCost = solNeeded;
             }
 
-            console.log('Price calculation:', {
-                rawInAmount: amount,
-                rawOutAmount: quoteResponse.outAmount,
-                inAmount: quoteResponse.inAmount,
-                tokenDecimals,
-                price,
-                actualSolCost: Number(quoteResponse.inAmount) / 1e9,  // Add this for clarity
-                totalCost,
-                isSelling
-            });
 
             return {
                 price,

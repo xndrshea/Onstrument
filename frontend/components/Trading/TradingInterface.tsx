@@ -49,7 +49,7 @@ const formatSmallNumber = (num: number): JSX.Element | string => {
     return `${num.toFixed(8)} SOL`;
 };
 
-export function TradingInterface({ token, currentPrice, onPriceUpdate }: TradingInterfaceProps) {
+export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUpdate }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
     const { publicKey, connected } = wallet
@@ -66,6 +66,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
     const [isUserSubscribed, setIsUserSubscribed] = useState(false)
     const [isMigrating, setIsMigrating] = useState(false)
+    const [spotPrice, setSpotPrice] = useState<number | null>(null);
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -87,7 +88,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
     }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet])
 
     const getAppropriateConnection = () => {
-        if (token.tokenType === 'pool' && config.HELIUS_RPC_URL) {
+        if (token.tokenType === 'dex' && config.HELIUS_RPC_URL) {
             return mainnetConnection;
         }
         return devnetConnection;
@@ -95,46 +96,51 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
 
     const checkTokenTradability = async () => {
         if (token.tokenType === 'custom') {
-            try {
-                // Check if token is migrating
-                const response = await fetch(`/api/tokens/${token.mintAddress}`);
-                const tokenData = await response.json();
-
-                if (tokenData.curveConfig?.migrationStatus === "migrated") {
-                    // Check if Raydium pool exists and has liquidity
-                    const quote = await dexService.calculateTradePrice(
-                        token.mintAddress,
-                        1,
-                        true,
-                        mainnetConnection
-                    );
-
-                    if (!quote || quote.price <= 0) {
-                        setIsMigrating(true);
-                        setIsTokenTradable(false);
-                        return;
-                    }
-                }
-            } catch (error) {
-                console.error("Migration status check failed:", error);
+            // If token has curveConfig and is active, it should be tradeable via bonding curve
+            if (token.curveConfig?.migrationStatus === "active") {
+                setIsTokenTradable(true);
+                setIsMigrating(false);
+                return;
             }
-        }
 
-        // Existing liquidity check
-        try {
-            const appropriateConnection = getAppropriateConnection();
-            const quote = await dexService.calculateTradePrice(
-                token.mintAddress,
-                1,
-                true,
-                appropriateConnection
-            );
+            // If token is in migration status, set appropriate flags
+            if (token.curveConfig?.migrationStatus === "migrated") {
+                setIsMigrating(true);  // Set migrating to true
+                setIsTokenTradable(false);  // Disable trading while migrating
+                return;  // Exit early
+            }
 
-            setIsTokenTradable(quote && quote.price > 0);
-            setIsMigrating(false);
-        } catch (error) {
-            console.log("Token tradability check failed:", error);
-            setIsTokenTradable(false);
+            // Only check Raydium if we get here
+            try {
+                const quote = await dexService.calculateTradePrice(
+                    token.mintAddress,
+                    1,
+                    true,
+                    mainnetConnection
+                );
+                setIsTokenTradable(quote && quote.price > 0);
+                setIsMigrating(false);
+            } catch (error) {
+                console.log("Raydium price check failed:", error);
+                setIsTokenTradable(false);
+                setIsMigrating(false);
+            }
+        } else {
+            // Handle pool tokens as before
+            try {
+                const appropriateConnection = getAppropriateConnection();
+                const quote = await dexService.calculateTradePrice(
+                    token.mintAddress,
+                    1,
+                    true,
+                    appropriateConnection
+                );
+                setIsTokenTradable(quote && quote.price > 0);
+                setIsMigrating(false);
+            } catch (error) {
+                console.log("Token tradability check failed:", error);
+                setIsTokenTradable(false);
+            }
         }
     };
 
@@ -162,12 +168,27 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
             }
 
             // Skip spot price check if we already know token isn't tradable
-            if (token.tokenType === 'pool' && isTokenTradable) {
+            if (token.tokenType === 'dex' && isTokenTradable) {
                 await checkTokenTradability();
             }
         } catch (error) {
             console.error('Balance update error:', error);
             setError('Failed to fetch balances');
+        }
+    };
+
+    // Fetch spot price from database
+    const fetchSpotPrice = async () => {
+        try {
+            const latestPrice = await priceClient.getLatestPrice(token.mintAddress);
+            if (latestPrice) {
+                setSpotPrice(latestPrice);
+                if (onPriceUpdate) {
+                    onPriceUpdate(latestPrice);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching spot price:', error);
         }
     };
 
@@ -180,7 +201,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
             }
 
             try {
-                if (token.tokenType === 'pool') {
+                if (token.tokenType === 'dex') {
                     const appropriateConnection = getAppropriateConnection()
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
@@ -189,8 +210,6 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                         appropriateConnection
                     )
                     setPriceInfo(quote)
-                    onPriceUpdate?.(quote.totalCost / LAMPORTS_PER_SOL)
-                    setError(null)
                 } else if (bondingCurve) {
                     const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling)
                     setPriceInfo(quote)
@@ -247,7 +266,7 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
             const appropriateConnection = getAppropriateConnection()
 
             // Execute the trade
-            if (token.tokenType === 'pool') {
+            if (token.tokenType === 'dex') {
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
                     amount: parsedAmount,
@@ -263,7 +282,8 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                     await bondingCurve.sell({
                         amount: parsedAmount,
                         minSolReturn: minReturn,
-                        isSubscribed: isUserSubscribed
+                        isSubscribed: isUserSubscribed,
+                        slippageTolerance
                     })
                 } else {
                     const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL)
@@ -312,14 +332,42 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
     }
 
     useEffect(() => {
-    }, [token.tokenType, token.tokenType === 'pool', isTokenTradable, token.decimals]);
+    }, [token.tokenType, token.tokenType === 'dex', isTokenTradable, token.decimals]);
 
     // Update price display to use currentPrice prop
     useEffect(() => {
-        if (currentPrice !== null) {
-            onPriceUpdate?.(currentPrice);
+        if (token.tokenType === 'dex') {
+            // For DEX tokens, get initial price quote
+            const getInitialPrice = async () => {
+                try {
+                    const appropriateConnection = getAppropriateConnection();
+                    const quote = await dexService.calculateTradePrice(
+                        token.mintAddress,
+                        1,
+                        true,  // isSelling
+                        appropriateConnection
+                    );
+                    if (quote) {
+                        const price = quote.price;
+                        setSpotPrice(price);
+                        if (onPriceUpdate) {
+                            onPriceUpdate(price);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error getting initial price:', error);
+                }
+            };
+
+            getInitialPrice();
+            const interval = setInterval(getInitialPrice, 10000);
+            return () => clearInterval(interval);
+        } else {
+            fetchSpotPrice();
+            const interval = setInterval(fetchSpotPrice, 10000);
+            return () => clearInterval(interval);
         }
-    }, [currentPrice, onPriceUpdate]);
+    }, [token.mintAddress, token.tokenType]);
 
     useEffect(() => {
         async function checkSubscription() {
@@ -339,11 +387,10 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
     }, [connected, publicKey, token.mintAddress]);
 
     return (
-        <div className="p-4 bg-white rounded-lg shadow">
-            {/* Connection Status */}
+        <div className="p-4 bg-[#1a1b1f] rounded-lg">
             {!connected && (
                 <div className="text-center mb-4">
-                    <p className="text-gray-600 mb-2">Connect your wallet to trade</p>
+                    <p className="text-gray-400 mb-2">Connect your wallet to trade</p>
                     <WalletMultiButton />
                 </div>
             )}
@@ -352,175 +399,110 @@ export function TradingInterface({ token, currentPrice, onPriceUpdate }: Trading
                 <>
                     {/* Balance Information */}
                     <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
-                            <p className="text-sm text-gray-700">Your SOL Balance</p>
-                            <p className="text-lg font-semibold text-gray-900">{solBalance.toFixed(4)} SOL</p>
+                        <div className="p-4 bg-[#1e2025] rounded-lg">
+                            <p className="text-gray-400 text-[14px]">Your SOL Balance</p>
+                            <p className="text-white text-[20px]">{solBalance.toFixed(4)} SOL</p>
                         </div>
-                        <div className="p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
-                            <p className="text-sm text-gray-700">Your {token.symbol} Balance</p>
-                            <p className="text-lg font-semibold text-gray-900">
+                        <div className="p-4 bg-[#1e2025] rounded-lg">
+                            <p className="text-gray-400 text-[14px]">Your {token.symbol} Balance</p>
+                            <p className="text-white text-[20px]">
                                 {Number(userBalance) / (10 ** token.decimals)} {token.symbol}
                             </p>
                         </div>
                     </div>
 
                     {/* Current Price Display */}
-                    <div className="mb-4 p-3 bg-gray-100 border border-gray-200 rounded-md shadow-sm">
-                        <div className="flex justify-between">
-                            <span className="text-sm text-gray-700">Current Token Price</span>
-                            <span className="font-medium text-gray-900">
-                                {currentPrice !== null
-                                    ? formatSmallNumber(currentPrice)
-                                    : 'Loading...'}
+                    <div className="mb-4 p-4 bg-[#1e2025] rounded-lg">
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-400 text-[14px]">Current Token Price</span>
+                            <span className="text-white text-[20px]">
+                                {spotPrice !== null ? formatSmallNumber(spotPrice) : 'Loading...'}
                             </span>
                         </div>
                     </div>
 
-                    {/* Trading Interface */}
-                    <div className="mb-4">
-                        {/* Buy/Sell Toggle */}
-                        <div className="flex mb-4">
-                            <button
-                                className={`flex-1 py-2 px-4 text-center ${!isSelling ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
-                                    }`}
-                                onClick={() => setIsSelling(false)}
-                                disabled={!isTokenTradable || isLoading || isMigrating}
-                            >
-                                Buy
-                            </button>
-                            <button
-                                className={`flex-1 py-2 px-4 text-center ${isSelling ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'
-                                    }`}
-                                onClick={() => setIsSelling(true)}
-                                disabled={!isTokenTradable || isLoading || isMigrating}
-                            >
-                                Sell
-                            </button>
-                        </div>
-
-                        {/* Amount Input */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Amount ({token.symbol})
-                            </label>
-                            <input
-                                type="number"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                className={`w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!isTokenTradable ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                                    } text-gray-900`}
-                                placeholder="Enter amount"
-                                disabled={!isTokenTradable || isLoading}
-                            />
-                        </div>
-
-                        {/* Slippage Tolerance Input */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Slippage Tolerance (%)
-                            </label>
-                            <input
-                                type="text"
-                                value={slippageTolerance * 100}
-                                onChange={(e) => {
-                                    const value = e.target.value
-                                    if (value === '') {
-                                        setSlippageTolerance(0)
-                                    } else {
-                                        const parsed = parseFloat(value)
-                                        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-                                            setSlippageTolerance(parsed / 100)
-                                        }
-                                    }
-                                }}
-                                className={`w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${!isTokenTradable ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-                                    } text-gray-900`}
-                                placeholder="Enter slippage %"
-                                disabled={!isTokenTradable || isLoading}
-                            />
-                        </div>
-
-                        {/* Price Information */}
-                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md shadow-sm">
-                            {amount && !isNaN(parseFloat(amount)) && (
-                                <div className="flex justify-between mb-2">
-                                    <span className="text-sm text-blue-700">
-                                        {isSelling ? 'SOL You Will Receive' : 'SOL Cost'}
-                                    </span>
-                                    <span className="font-medium text-blue-900">
-                                        {(priceInfo?.price || 0).toFixed(6)} SOL
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Error Display */}
-                        {error && (
-                            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-900 rounded-md shadow-sm">
-                                <div className="flex items-center">
-                                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                    </svg>
-                                    <p className="text-sm font-medium">{error}</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Transaction Status */}
-                        {isLoading && (
-                            <div className="mb-4 p-4 bg-blue-100 border border-blue-400 text-blue-900 rounded-md shadow-sm">
-                                <div className="flex items-center">
-                                    <svg className="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                    <p className="text-sm font-medium">Processing transaction...</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Trade Button */}
+                    {/* Buy/Sell Toggle */}
+                    <div className="flex mb-4">
                         <button
-                            className={`w-full py-2 px-4 rounded font-medium ${isLoading || !isTokenTradable
-                                ? 'bg-gray-300 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-700 text-white'
-                                }`}
-                            onClick={handleTransaction}
-                            disabled={isLoading || !amount || isNaN(parseFloat(amount)) || !isTokenTradable}
+                            className={`flex-1 py-2 text-[16px] ${!isSelling ? 'bg-[#22c55e] text-white' : 'bg-white text-[#1a1b1f]'}`}
+                            onClick={() => setIsSelling(false)}
+                            disabled={!isTokenTradable || isLoading || isMigrating}
                         >
-                            {isLoading ? (
-                                <span>Processing...</span>
-                            ) : (
-                                <span>{isSelling ? 'Sell' : 'Buy'} {token.symbol}</span>
-                            )}
+                            Buy
                         </button>
-
-                        {/* Updated warning message section */}
-                        {(!isTokenTradable || isMigrating) && (
-                            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-200 rounded-md">
-                                <div className="text-yellow-800">
-                                    {isMigrating ? (
-                                        <div>
-                                            <p className="font-medium">Token Currently Migrating to Raydium</p>
-                                            <p className="text-sm mt-2">
-                                                Trading is temporarily disabled while the token completes its migration to Raydium DEX.
-                                                This process typically takes a few minutes while liquidity is being established.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            This token cannot be traded at the moment. This could be because:
-                                            <ul className="list-disc ml-5 mt-2">
-                                                <li>The token is newly created</li>
-                                                <li>There is no liquidity available</li>
-                                                <li>The token hasn't been listed on any DEX yet</li>
-                                            </ul>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                        <button
+                            className={`flex-1 py-2 text-[16px] ${isSelling ? 'bg-[#ef4444] text-white' : 'bg-white text-[#1a1b1f]'}`}
+                            onClick={() => setIsSelling(true)}
+                            disabled={!isTokenTradable || isLoading || isMigrating}
+                        >
+                            Sell
+                        </button>
                     </div>
+
+                    {/* Amount Input */}
+                    <div className="mb-4">
+                        <label className="block text-gray-400 text-[14px] mb-2">
+                            Amount ({token.symbol})
+                        </label>
+                        <input
+                            type="number"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            className="w-full p-3 bg-white rounded-lg text-[#1a1b1f] text-[16px]"
+                            placeholder="Enter amount"
+                            disabled={!isTokenTradable || isLoading}
+                        />
+                    </div>
+
+                    {/* Slippage Tolerance Input */}
+                    <div className="mb-4">
+                        <label className="block text-gray-400 text-[14px] mb-2">
+                            Slippage Tolerance (%)
+                        </label>
+                        <input
+                            type="text"
+                            value={slippageTolerance * 100}
+                            onChange={(e) => {
+                                const value = e.target.value
+                                if (value === '') {
+                                    setSlippageTolerance(0)
+                                } else {
+                                    const parsed = parseFloat(value)
+                                    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                                        setSlippageTolerance(parsed / 100)
+                                    }
+                                }
+                            }}
+                            className="w-full p-3 bg-white rounded-lg text-[#1a1b1f] text-[16px]"
+                            placeholder="Enter slippage %"
+                            disabled={!isTokenTradable || isLoading}
+                        />
+                    </div>
+
+                    {/* Trade Button */}
+                    <button
+                        className={`w-full py-3 rounded-lg text-[16px] ${isLoading || !isTokenTradable
+                            ? 'bg-gray-600 cursor-not-allowed'
+                            : isSelling
+                                ? 'bg-[#ef4444] hover:bg-[#dc2626] text-white'
+                                : 'bg-[#22c55e] hover:bg-[#16a34a] text-white'
+                            }`}
+                        onClick={handleTransaction}
+                        disabled={isLoading || !amount || isNaN(parseFloat(amount)) || !isTokenTradable}
+                    >
+                        {isLoading ? (
+                            <span>Processing...</span>
+                        ) : (
+                            <span>{isSelling ? `Sell ${token.symbol}` : `Buy ${token.symbol}`}</span>
+                        )}
+                    </button>
+
+                    {/* Error Display */}
+                    {error && (
+                        <div className="mt-4 p-3 bg-red-900/20 border border-red-500 text-red-400 rounded-lg text-[14px]">
+                            {error}
+                        </div>
+                    )}
                 </>
             )}
         </div>

@@ -12,7 +12,7 @@ export class HeliusManager extends EventEmitter {
     private wsClientMainnet: WebSocket | null = null;
     private wsClientDevnet: WebSocket | null = null;
     private wss!: WebSocket.Server;
-    private raydiumProcessor: RaydiumProcessor;
+    // private raydiumProcessor: RaydiumProcessor;
     private bondingCurveProcessor: BondingCurveProcessor;
     private lastHeartbeat: number = Date.now();
     private lastReconnectAttempt: number = 0;
@@ -24,7 +24,7 @@ export class HeliusManager extends EventEmitter {
 
     private constructor() {
         super();
-        this.raydiumProcessor = new RaydiumProcessor();
+        // this.raydiumProcessor = new RaydiumProcessor();
         this.bondingCurveProcessor = new BondingCurveProcessor();
     }
 
@@ -43,13 +43,13 @@ export class HeliusManager extends EventEmitter {
 
     private setupWebSocketServer(wss: WebSocket.Server): void {
         // Forward price updates from processors to connected clients
-        this.raydiumProcessor.on('priceUpdate', (update) => {
-            wss.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify({ type: 'price', data: update }));
-                }
-            });
-        });
+        // this.raydiumProcessor.on('priceUpdate', (update) => {
+        //     wss.clients.forEach(client => {
+        //         if (client.readyState === WebSocket.OPEN) {
+        //             client.send(JSON.stringify({ type: 'price', data: update }));
+        //         }
+        //     });
+        // });
 
         this.bondingCurveProcessor.on('priceUpdate', (update) => {
             wss.clients.forEach(client => {
@@ -67,18 +67,17 @@ export class HeliusManager extends EventEmitter {
 
     private async connect(): Promise<void> {
         // Connect to mainnet for Raydium
-        this.wsClientMainnet = new WebSocket(config.HELIUS_MAINNET_WEBSOCKET_URL);
-        this.setupWebSocketHandlers(this.wsClientMainnet, 'mainnet');
+        // this.wsClientMainnet = new WebSocket(config.HELIUS_MAINNET_WEBSOCKET_URL);
+        // this.setupWebSocketHandlers(this.wsClientMainnet, 'mainnet');
 
         // Connect to devnet for custom tokens
         this.wsClientDevnet = new WebSocket(config.HELIUS_DEVNET_WEBSOCKET_URL);
         this.setupWebSocketHandlers(this.wsClientDevnet, 'devnet');
 
-        // Subscribe to appropriate programs on each network
-        await Promise.all([
-            this.subscribeToPrograms(this.wsClientMainnet, config.RAYDIUM_PROGRAMS),
-            this.subscribeToPrograms(this.wsClientDevnet, [config.BONDING_CURVE_PROGRAM_ID])
-        ]);
+        // Update subscriptions to only include bonding curve
+        await this.subscribeToPrograms(this.wsClientDevnet, [config.BONDING_CURVE_PROGRAM_ID]);
+        // Comment out Raydium subscription
+        // await this.subscribeToPrograms(this.wsClientMainnet, config.RAYDIUM_PROGRAMS),
     }
 
     private setupWebSocketHandlers(wsClient: WebSocket | null, network: string): void {
@@ -150,9 +149,11 @@ export class HeliusManager extends EventEmitter {
                 const programId = message.result.data.programId;
                 logger.info('Program event received:', { programId, accountKeys });
 
-                if (Object.values(config.RAYDIUM_PROGRAMS).includes(programId)) {
-                    this.raydiumProcessor.processEvent(Buffer.from(message.result.data.accountData[0], 'base64'), accountKeys[0], programId);
-                } else if (programId === config.BONDING_CURVE_PROGRAM_ID) {
+                // Comment out Raydium processing
+                // if (Object.values(config.RAYDIUM_PROGRAMS).includes(programId)) {
+                //     this.raydiumProcessor.processEvent(Buffer.from(message.result.data.accountData[0], 'base64'), accountKeys[0], programId);
+                // } else 
+                if (programId === config.BONDING_CURVE_PROGRAM_ID) {
                     this.bondingCurveProcessor.processEvent(Buffer.from(message.result.data.accountData[0], 'base64'), accountKeys[0], programId);
                 }
             }

@@ -10,35 +10,44 @@ export class TokenService {
     constructor(private wallet?: WalletContextState) { }
 
     async transformToken(token: any): Promise<TokenRecord> {
+        // Helper function to convert snake_case to camelCase
+        const toCamelCase = (str: string) => str.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
 
-
-        const transformedToken = {
-            mintAddress: token.mint_address || token.mintAddress,
-            name: (token.name || '').trim(),
-            symbol: (token.symbol || '').trim(),
-            description: token.description || '',
-            metadataUri: token.metadata_url || token.metadataUri,
-            totalSupply: token.supply || undefined,
-            decimals: token.decimals || TOKEN_DECIMALS,
-            curveAddress: token.curve_address || token.curveAddress,
-            curveConfig: token.curve_config ? {
-                migrationStatus: token.curve_config.migration_status || "Active",
-                isSubscribed: token.curve_config.is_subscribed,
-                developer: token.curve_config.developer || ''
-            } : undefined,
-            createdAt: token.created_at || token.createdAt || new Date().toISOString(),
-            tokenType: token.token_type || token.tokenType || 'custom',
-            verified: token.verified || false,
-            imageUrl: token.image_url || token.imageUrl,
-            content: token.content,
-            attributes: token.attributes,
-            currentPrice: token.current_price || token.currentPrice,
-            volume24h: token.volume_24h || token.volume24h,
-            interface: token.interface,
-            metadataStatus: token.metadata_status
+        // Helper function to safely convert string to number
+        const toNumber = (value: any) => {
+            if (value === null || value === undefined) return 0;
+            const num = Number(value);
+            return isNaN(num) ? 0 : num;
         };
 
-        return transformedToken;
+        // Convert all snake_case keys to camelCase
+        const transformed: any = {};
+        Object.entries(token).forEach(([key, value]) => {
+            // Special cases for compound words
+            if (key === 'mint_address') {
+                transformed.mintAddress = value;
+            } else if (key.startsWith('volume_')) {
+                // Handle volume metrics (volume_5m -> volume5m)
+                const period = key.split('_')[1];
+                transformed[`volume${period}`] = toNumber(value);
+            } else if (key.startsWith('tx_')) {
+                // Handle transaction metrics (tx_5m_buys -> tx5mBuys)
+                const [_, period, type] = key.split('_');
+                const transformedKey = `tx${period}${type.charAt(0).toUpperCase() + type.slice(1)}`;
+                transformed[transformedKey] = toNumber(value);
+            } else if (key.startsWith('price_change_')) {
+                // Handle price changes (price_change_5m -> priceChange5m)
+                const period = key.split('_')[2];
+                transformed[`priceChange${period}`] = toNumber(value);
+            } else {
+                // Default camelCase conversion for other fields
+                const camelKey = toCamelCase(key);
+                transformed[camelKey] = key.includes('price') || key.includes('volume') ||
+                    key.includes('cap') || key.includes('tvl') ? toNumber(value) : value;
+            }
+        });
+
+        return transformed;
     }
 
     async create(token: TokenRecord): Promise<TokenRecord> {
@@ -51,13 +60,14 @@ export class TokenService {
                 description: token.description || '',
                 metadataUri: token.metadataUri || '',
                 totalSupply: token.totalSupply?.toString() || '0',
-                decimals: token.decimals || 6,
+                decimals: token.decimals,
                 curveConfig: token.curveConfig,
                 initialPrice: token.initialPrice,
                 websiteUrl: token.websiteUrl || '',
                 twitterUrl: token.twitterUrl || '',
                 docsUrl: token.docsUrl || '',
-                telegramUrl: token.telegramUrl || ''
+                telegramUrl: token.telegramUrl || '',
+                tokenVault: token.tokenVault
             };
 
             console.log('Sending token creation request:', requestData);

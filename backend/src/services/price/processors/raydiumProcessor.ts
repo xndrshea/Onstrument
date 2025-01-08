@@ -215,7 +215,7 @@ export class RaydiumProcessor extends BaseProcessor {
                     metadata_source,
                     token_type
                 )
-                VALUES ($1, $2, 'pending', 'raydium', 'pool')
+                VALUES ($1, $2, 'pending', 'raydium', 'dex')
                 ON CONFLICT (mint_address) 
                 DO UPDATE SET 
                     metadata_status = CASE 

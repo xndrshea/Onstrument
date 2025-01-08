@@ -95,9 +95,10 @@ export class MetadataService {
                     off_chain_metadata = $20::jsonb,
                     metadata_status = 'fetched',
                     metadata_source = $21,
+                    decimals = $22,
                     metadata_fetch_attempts = metadata_fetch_attempts + 1,
                     last_metadata_fetch = CURRENT_TIMESTAMP
-                 WHERE mint_address = $22`,
+                 WHERE mint_address = $23`,
                 [
                     metadata.name || null,
                     metadata.symbol || null,
@@ -120,6 +121,7 @@ export class MetadataService {
                     cleanMetadata.attributes,
                     cleanMetadata.off_chain_metadata,
                     source,
+                    metadata.decimals || null,
                     mintAddress
                 ]
             );

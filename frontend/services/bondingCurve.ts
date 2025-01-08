@@ -152,6 +152,7 @@ export class BondingCurve {
             return {
                 mint: mintKeypair.publicKey,
                 curve: curveAddress,
+                tokenVault: tokenVault,
                 signature: tx
             };
 
@@ -341,6 +342,7 @@ export class BondingCurve {
         amount: InstanceType<typeof BN> | number;
         minSolReturn: InstanceType<typeof BN> | number;
         isSubscribed: boolean;
+        slippageTolerance: number;
     }) {
         if (!this.mintAddress) throw new Error('Mint address is required');
 
@@ -351,7 +353,7 @@ export class BondingCurve {
                 mintAddress: this.mintAddress.toString(),
                 amount: BN.isBN(params.amount) ? params.amount : new BN(params.amount),
                 isSelling: true,
-                slippageTolerance: 0.01, // 1% default slippage
+                slippageTolerance: params.slippageTolerance,
                 wallet: this.wallet!,
                 connection: this.connection,
                 isSubscribed: params.isSubscribed
