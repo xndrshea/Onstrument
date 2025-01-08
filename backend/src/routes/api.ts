@@ -228,13 +228,13 @@ router.get('/tokens', async (req, res) => {
         } else if (sortBy === 'oldest') {
             orderByClause = 'ORDER BY t.created_at ASC';
         } else if (sortBy === 'marketCap') {
-            orderByClause = 'ORDER BY t.market_cap DESC NULLS LAST';
+            orderByClause = 'ORDER BY t.market_cap_usd DESC NULLS LAST';
         }
 
         const result = await pool.query(`
             SELECT 
                 t.*,
-                t.market_cap
+                t.market_cap_usd
                 ${volumeSelect}
             FROM token_platform.tokens t
             WHERE token_type = 'custom'
@@ -255,7 +255,7 @@ router.get('/tokens', async (req, res) => {
             supply: token.supply,
             totalSupply: token.supply,
             volume: token.volume,
-            marketCap: token.market_cap ? Number(token.market_cap) : null
+            marketCap: token.market_cap_usd ? Number(token.market_cap_usd) : null
         }));
 
         res.json({ tokens });
@@ -283,7 +283,7 @@ router.get('/market/tokens', async (req, res) => {
 
         switch (sortBy) {
             case 'marketCap':
-                orderByClause = 'ORDER BY t.market_cap DESC NULLS LAST';
+                orderByClause = 'ORDER BY t.market_cap_usd DESC NULLS LAST';
                 break;
             case 'volume5m':
                 additionalSelect = ', COALESCE(t.volume_5m, 0) as volume';
@@ -333,7 +333,7 @@ router.get('/market/tokens', async (req, res) => {
                 t.verified,
                 t.image_url,
                 t.current_price,
-                t.market_cap,
+                t.market_cap_usd,
                 t.volume_5m,
                 t.volume_1h,
                 t.volume_24h,
@@ -365,7 +365,7 @@ router.get('/market/tokens', async (req, res) => {
                 verified: token.verified,
                 imageUrl: token.image_url,
                 currentPrice: token.current_price,
-                marketCap: token.market_cap,
+                marketCapUsd: token.market_cap_usd,
                 volume5m: token.volume_5m,
                 volume1h: token.volume_1h,
                 volume24h: token.volume_24h,
@@ -393,33 +393,27 @@ router.get('/tokens/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
 
-        // Add debug logging
-        console.log('Fetching token details for:', mintAddress);
-
-        const result = await pool.query(`
+        const query = `
             SELECT * FROM token_platform.tokens 
             WHERE mint_address = $1
-        `, [mintAddress]);
+        `;
 
-        // Just pass through all fields, converting snake_case to camelCase where needed
+        const result = await pool.query(query, [mintAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                error: 'Token not found'
+            });
+        }
+
         const token = result.rows[0];
-        const response = {
-            ...token,
-            mintAddress: token.mint_address,  // only convert the primary identifier
-        };
+        return res.json(token);
 
-        console.log('Raw database result:', {
-            curve_config: token.curve_config,
-            typeof_curve_config: typeof token.curve_config
-        });
-
-        res.json(response);
     } catch (error) {
-        // Improve error logging
         console.error('Detailed error in /tokens/:mintAddress:', error);
-        res.status(500).json({
+        return res.status(500).json({
             error: 'Internal server error',
-            details: (error as Error).message
+            details: error instanceof Error ? error.message : 'Unknown error'
         });
     }
 });

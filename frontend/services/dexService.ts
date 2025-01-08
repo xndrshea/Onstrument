@@ -53,7 +53,6 @@ export const dexService = {
             }
 
             const tokenDecimals = (mintInfo.value.data as any).parsed.info.decimals;
-            console.log('Token decimals from mint:', tokenDecimals);
 
             // When buying, we want this many tokens as OUTPUT
             // So we need to query with the output amount

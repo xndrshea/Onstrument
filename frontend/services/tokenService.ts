@@ -20,8 +20,6 @@ export class TokenService {
             return isNaN(num) ? 0 : num;
         };
 
-        console.log('Starting transformation of token:', token.mint_address);
-
         // Convert all snake_case keys to camelCase
         const transformed: any = {};
         Object.entries(token).forEach(([key, value]) => {
@@ -32,30 +30,23 @@ export class TokenService {
                 // Handle volume metrics (volume_5m -> volume5m)
                 const period = key.split('_')[1];
                 transformed[`volume${period}`] = toNumber(value);
-                console.log(`Transformed ${key} to volume${period}:`, transformed[`volume${period}`]);
             } else if (key.startsWith('tx_')) {
                 // Handle transaction metrics (tx_5m_buys -> tx5mBuys)
                 const [_, period, type] = key.split('_');
                 const transformedKey = `tx${period}${type.charAt(0).toUpperCase() + type.slice(1)}`;
                 transformed[transformedKey] = toNumber(value);
-                console.log(`Transformed ${key} to ${transformedKey}:`, transformed[transformedKey]);
             } else if (key.startsWith('price_change_')) {
                 // Handle price changes (price_change_5m -> priceChange5m)
                 const period = key.split('_')[2];
                 transformed[`priceChange${period}`] = toNumber(value);
-                console.log(`Transformed ${key} to priceChange${period}:`, transformed[`priceChange${period}`]);
             } else {
                 // Default camelCase conversion for other fields
                 const camelKey = toCamelCase(key);
                 transformed[camelKey] = key.includes('price') || key.includes('volume') ||
                     key.includes('cap') || key.includes('tvl') ? toNumber(value) : value;
-                if (key.includes('price') || key.includes('volume') || key.includes('cap') || key.includes('tvl')) {
-                    console.log(`Transformed numeric ${key} to ${camelKey}:`, transformed[camelKey]);
-                }
             }
         });
 
-        console.log('Final transformed token:', transformed);
         return transformed;
     }
 

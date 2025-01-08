@@ -76,7 +76,6 @@ export async function initializeDatabase() {
                 metadata_source VARCHAR(50),
                 metadata_fetch_attempts INTEGER DEFAULT 0,
                 last_metadata_fetch TIMESTAMP WITH TIME ZONE,
-                market_cap NUMERIC(78,36),
                 token_vault VARCHAR(255),
                 market_cap_usd NUMERIC(78,36),
                 fully_diluted_value_usd NUMERIC(78,36),
@@ -99,8 +98,6 @@ export async function initializeDatabase() {
                 apr_7d NUMERIC(78,36) DEFAULT 0,
                 apr_30d NUMERIC(78,36) DEFAULT 0,
                 tvl NUMERIC(78,36),
-                price_sources JSONB DEFAULT '[]'::jsonb,
-                sol_price_sources JSONB DEFAULT '[]'::jsonb,
                 -- Transaction metrics
                 tx_5m_buys INTEGER DEFAULT 0,
                 tx_5m_sells INTEGER DEFAULT 0,

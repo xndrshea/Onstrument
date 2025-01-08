@@ -108,21 +108,26 @@ function CustomTokenChart({ token, width, height, currentPrice }: PriceChartProp
     // Update price data
     useEffect(() => {
         const fetchPriceHistory = async () => {
-            if (!token.mintAddress || !seriesRef.current) return;
+            if (!token.mintAddress || token.tokenType === 'dex') return;
 
-            const history = await priceClient.getPriceHistory(token.mintAddress);
-            if (history?.length) {
-                seriesRef.current.setData(
-                    history.map(point => ({
-                        time: point.time as UTCTimestamp,
-                        value: point.value
-                    }))
-                );
+            try {
+                const history = await priceClient.getPriceHistory(token.mintAddress);
+                if (history?.length && seriesRef.current) {
+                    seriesRef.current.setData(
+                        history.map(point => ({
+                            time: point.time as UTCTimestamp,
+                            value: point.value
+                        }))
+                    );
+                }
+            } catch (error) {
+                console.warn('Error fetching price history:', error);
+                // Handle error gracefully - maybe show a message to user
             }
         };
 
         fetchPriceHistory();
-    }, [token.mintAddress]);
+    }, [token.mintAddress, token.tokenType]);
 
     // Update live price
     useEffect(() => {
