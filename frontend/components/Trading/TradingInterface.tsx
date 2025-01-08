@@ -19,25 +19,22 @@ interface TradingInterfaceProps {
 }
 
 // Helper function to format small numbers with subscript notation
-const formatSmallNumber = (num: number): JSX.Element | string => {
+const formatSmallNumber = (num: number | null): JSX.Element | string => {
+    if (num === null) return 'Loading...';
     if (num === 0) return '0';
 
     // For very small numbers
     if (num < 0.01) {
-        const numStr = num.toFixed(8); // Keep full precision
-        // Find position of first non-zero digit after decimal
+        const numStr = num.toFixed(8);
         let zeroCount = 0;
-        for (let i = 2; i < numStr.length; i++) { // Start at 2 to skip "0."
+        for (let i = 2; i < numStr.length; i++) {
             if (numStr[i] === '0') {
                 zeroCount++;
             } else {
                 break;
             }
         }
-
-        // Get all digits after zeros to maintain full precision
         const remainingDigits = numStr.slice(2 + zeroCount);
-
         return (
             <span>
                 0.0<sub>{zeroCount}</sub>{remainingDigits} SOL
@@ -45,8 +42,8 @@ const formatSmallNumber = (num: number): JSX.Element | string => {
         );
     }
 
-    // For regular numbers, show full precision
-    return `${num.toFixed(8)} SOL`;
+    // For regular numbers
+    return `${num.toFixed(4)} SOL`;
 };
 
 export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUpdate }: TradingInterfaceProps) {
@@ -66,7 +63,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
     const [isUserSubscribed, setIsUserSubscribed] = useState(false)
     const [isMigrating, setIsMigrating] = useState(false)
-    const [spotPrice, setSpotPrice] = useState<number | null>(null);
+    const [spotPrice, setSpotPrice] = useState<number | null>(_currentPrice || null);
 
     // Initialize bonding curve interface
     const bondingCurve = useMemo(() => {
@@ -177,52 +174,88 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         }
     };
 
-    // Fetch spot price from database
     const fetchSpotPrice = async () => {
-        try {
-            const latestPrice = await priceClient.getLatestPrice(token.mintAddress);
-            if (latestPrice) {
+        // For unmigrated custom tokens, use price history
+        if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
+            const history = await priceClient.getPriceHistory(token.mintAddress);
+            if (history?.length) {
+                const latestPrice = history[history.length - 1].close;
                 setSpotPrice(latestPrice);
                 if (onPriceUpdate) {
                     onPriceUpdate(latestPrice);
                 }
             }
-        } catch (error) {
-            console.error('Error fetching spot price:', error);
+        }
+        // For DEX tokens and migrated custom tokens, use Jupiter
+        else {
+            try {
+                const appropriateConnection = getAppropriateConnection();
+                const quote = await dexService.calculateTradePrice(
+                    token.mintAddress,
+                    1,
+                    true,
+                    appropriateConnection
+                );
+                if (quote) {
+                    setSpotPrice(quote.price);
+                    if (onPriceUpdate) {
+                        onPriceUpdate(quote.price);
+                    }
+                }
+            } catch (error) {
+                console.error('Error getting spot price:', error);
+            }
         }
     };
+
+    useEffect(() => {
+        fetchSpotPrice();
+        const interval = setInterval(fetchSpotPrice, 10000);
+        return () => clearInterval(interval);
+    }, [token.mintAddress, token.tokenType, token.curveConfig?.migrationStatus]);
 
     // Price quote updates
     useEffect(() => {
         const updatePriceQuote = async () => {
             if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-                setPriceInfo(null)
-                return
+                setPriceInfo(null);
+                return;
             }
 
             try {
-                if (token.tokenType === 'dex') {
-                    const appropriateConnection = getAppropriateConnection()
+                // For DEX tokens and migrated custom tokens, use Jupiter
+                if (token.tokenType === 'dex' ||
+                    (token.tokenType === 'custom' && token.curveConfig?.migrationStatus === 'migrated')) {
+                    const appropriateConnection = getAppropriateConnection();
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
                         parseFloat(amount),
                         isSelling,
                         appropriateConnection
-                    )
-                    setPriceInfo(quote)
-                } else if (bondingCurve) {
-                    const quote = await bondingCurve.getPriceQuote(parseFloat(amount), !isSelling)
-                    setPriceInfo(quote)
+                    );
+                    setPriceInfo(quote);
+                }
+                // For unmigrated custom tokens, use bonding curve
+                else if (bondingCurve) {
+                    const parsedAmount = parseFloat(amount);
+                    const quote = await bondingCurve.getPriceQuote(parsedAmount, !isSelling);
+                    // Convert from lamports to SOL
+                    if (quote) {
+                        setPriceInfo({
+                            ...quote,
+                            totalCost: quote.totalCost / LAMPORTS_PER_SOL
+                        });
+                    }
                 }
             } catch (error: any) {
-                console.error('Error fetching price quote:', error)
-                setPriceInfo(null)
-                setError(error.message)
+                console.error('Error fetching price quote:', error);
+                setPriceInfo(null);
+                setError(error.message);
             }
-        }
+        };
 
-        updatePriceQuote()
-    }, [amount, isSelling, token.tokenType, token.mintAddress, bondingCurve])
+        updatePriceQuote();
+    }, [amount, isSelling, token.tokenType, token.mintAddress, token.curveConfig?.migrationStatus, bondingCurve]);
 
     // Initial balance fetch and periodic updates
     useEffect(() => {
@@ -496,6 +529,18 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                             <span>{isSelling ? `Sell ${token.symbol}` : `Buy ${token.symbol}`}</span>
                         )}
                     </button>
+
+                    {/* Price Quote Display */}
+                    {priceInfo && (
+                        <div className="mt-4 p-3 bg-[#1e2025] rounded-lg">
+                            <p className="text-gray-400 text-[14px]">
+                                {isSelling ? 'You will receive' : 'You will pay'}
+                            </p>
+                            <p className="text-white text-[20px]">
+                                {formatSmallNumber(priceInfo.totalCost)}
+                            </p>
+                        </div>
+                    )}
 
                     {/* Error Display */}
                     {error && (

@@ -169,8 +169,35 @@ class WebSocketClient {
         }
 
         console.log(`Setting up WebSocket subscription for custom token ${mintAddress}`);
-        const instance = WebSocketClient.getInstance();
-        return await instance.subscribeToPrice(mintAddress, callback, network);
+
+        // Store the network for this token
+        this.tokenNetworks.set(mintAddress, network);
+
+        // Ensure we have a connection
+        await this.ensureConnected(network);
+
+        // Create or get the set of callbacks for this mint address
+        if (!this.subscribers.has(mintAddress)) {
+            this.subscribers.set(mintAddress, new Set());
+        }
+
+        // Add the callback to the subscribers
+        const callbacks = this.subscribers.get(mintAddress)!;
+        callbacks.add(callback);
+
+        // Send the subscription message
+        this.sendSubscription(mintAddress);
+
+        // Return cleanup function
+        return () => {
+            const callbacks = this.subscribers.get(mintAddress);
+            if (callbacks) {
+                callbacks.delete(callback);
+                if (callbacks.size === 0) {
+                    this.subscribers.delete(mintAddress);
+                }
+            }
+        };
     }
 
     async getDexTokenPrice(mintAddress: string): Promise<number | null> {
@@ -203,6 +230,26 @@ class WebSocketClient {
             low: point.low,
             close: point.close
         }));
+    }
+
+    async getLatestPrice(mintAddress: string): Promise<number | null> {
+        try {
+            console.log('Fetching latest price for:', mintAddress);
+            const response = await fetch(`${API_BASE_URL}/prices/${mintAddress}/latest`);
+            console.log('Price API Response:', response);
+
+            if (!response.ok) {
+                console.error('Price fetch failed:', response.status, response.statusText);
+                return null;
+            }
+
+            const data = await response.json();
+            console.log('Price data received:', data);
+            return data.price;
+        } catch (error) {
+            console.error('Error in getLatestPrice:', error);
+            return null;
+        }
     }
 }
 

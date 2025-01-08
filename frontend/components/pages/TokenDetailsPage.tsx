@@ -98,6 +98,9 @@ export function TokenDetailsPage() {
                 if (!mintAddress) return;
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
 
+                // Simple full data log
+                console.log('Full Token Data:', tokenData);
+
                 setToken(tokenData);
                 setLoading(false);
             } catch (error) {

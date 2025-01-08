@@ -1,13 +1,19 @@
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
-import { useEffect, useRef, useState } from 'react';
-import { TokenRecord } from '../../../shared/types/token';
+declare global {
+    interface Window {
+        TradingView: any;
+    }
+}
+
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { priceClient } from '../../services/priceClient';
+import { TokenRecord } from '../../../shared/types/token';
 
 interface PriceChartProps {
     token: TokenRecord;
     width?: number;
     height?: number;
     currentPrice?: number;
+    onPriceUpdate?: (price: number) => void;
 }
 
 interface PricePoint {
@@ -19,33 +25,39 @@ interface PricePoint {
     volume?: number;
 }
 
-export function PriceChart({ token, width = 600, height = 300, currentPrice }: PriceChartProps) {
+export function PriceChart({ token, width = 600, height = 300, currentPrice, onPriceUpdate }: PriceChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const [mostLiquidPool, setMostLiquidPool] = useState<string | null>(null);
 
+    const shouldUseGecko = useMemo(() => {
+        return token.tokenType === 'dex' ||
+            (token.tokenType === 'custom' && token.curveConfig?.migrationStatus === 'migrated');
+    }, [token.tokenType, token.curveConfig?.migrationStatus]);
+
     useEffect(() => {
-        if (!token?.mintAddress) return;
+        if (!shouldUseGecko || !token?.mintAddress) return;
 
         const fetchMostLiquidPool = async () => {
-            if (token.tokenType === 'dex') {
-                try {
-                    const response = await fetch(
-                        `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${token.mintAddress}/pools?sort=h24_volume_usd_liquidity_desc`
-                    );
-                    const data = await response.json();
-                    if (data.data?.[0]?.attributes?.address) {
-                        setMostLiquidPool(data.data[0].attributes.address);
-                    }
-                } catch (error) {
-                    console.error('Error fetching most liquid pool:', error);
+            try {
+                const response = await fetch(
+                    `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${token.mintAddress}/pools?sort=h24_volume_usd_liquidity_desc`
+                );
+                const data = await response.json();
+                if (data.data?.[0]?.attributes?.address) {
+                    setMostLiquidPool(data.data[0].attributes.address);
                 }
+            } catch (error) {
+                console.error('Error fetching most liquid pool:', error);
             }
         };
 
         fetchMostLiquidPool();
-    }, [token?.mintAddress, token?.tokenType]);
+    }, [token?.mintAddress, shouldUseGecko]);
 
-    if (token.tokenType === 'dex' && mostLiquidPool) {
+    if (shouldUseGecko) {
+        if (!mostLiquidPool) {
+            return <div style={{ width, height }}>Loading...</div>;
+        }
         return (
             <div style={{ width, height, position: 'relative' }}>
                 <iframe
@@ -66,74 +78,93 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
         );
     }
 
-    // For custom tokens, use existing chart implementation
     return (
         <div ref={chartContainerRef} style={{ width, height }}>
-            {/* Existing lightweight-charts implementation remains here */}
-            <CustomTokenChart
+            <TradingViewChart
                 token={token}
                 width={width}
                 height={height}
                 currentPrice={currentPrice}
+                onPriceUpdate={onPriceUpdate}
             />
         </div>
     );
 }
 
-// Separate component for custom token chart
-function CustomTokenChart({ token, width, height, currentPrice }: PriceChartProps) {
-    const chartRef = useRef<IChartApi | null>(null);
-    const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-
+function TradingViewChart({ token, width, height, currentPrice, onPriceUpdate }: PriceChartProps) {
     useEffect(() => {
-        if (!containerRef.current) return;
+        const script = document.createElement('script');
+        script.src = 'https://s3.tradingview.com/tv.js';
+        script.async = true;
+        document.body.appendChild(script);
 
-        chartRef.current = createChart(containerRef.current, {
-            width,
-            height,
-            layout: {
-                background: { color: '#232427' },
-                textColor: 'rgba(255, 255, 255, 0.9)',
-            },
-            grid: {
-                vertLines: { color: '#2c2c2c' },
-                horzLines: { color: '#2c2c2c' },
-            },
-        });
-
-        seriesRef.current = chartRef.current.addCandlestickSeries({
-            upColor: '#26a69a',
-            downColor: '#ef5350',
-            borderVisible: false,
-            wickUpColor: '#26a69a',
-            wickDownColor: '#ef5350'
-        });
+        script.onload = () => {
+            if (typeof window.TradingView !== 'undefined') {
+                new window.TradingView.widget({
+                    container_id: "tradingview_chart",
+                    width,
+                    height,
+                    theme: "dark",
+                    symbol: "CUSTOM",
+                    library_path: "/charting_library/",
+                    custom_css_url: "/charting_library/custom.css",
+                    datafeed: {
+                        onReady: (cb: any) => {
+                            console.log('[DataFeed] onReady');
+                            cb({});
+                        },
+                        resolveSymbol: (symbolName: string, cb: any) => {
+                            console.log('[DataFeed] resolveSymbol:', symbolName);
+                            cb({
+                                name: "CUSTOM",
+                                description: token.name || "",
+                                type: "crypto",
+                                session: "24x7",
+                                timezone: "Etc/UTC",
+                                minmov: 1,
+                                pricescale: 1000000,
+                                has_intraday: true,
+                                has_no_volume: true,
+                                data_status: 'streaming',
+                                supported_resolutions: ["1"]
+                            });
+                        },
+                        getBars: async (symbolInfo: any, resolution: string, from: number, to: number, cb: any) => {
+                            console.log('[DataFeed] getBars');
+                            const history = await priceClient.getPriceHistory(token.mintAddress);
+                            const bars = history.map(candle => ({
+                                time: Number(candle.time) * 1000,
+                                open: candle.open,
+                                high: candle.high,
+                                low: candle.low,
+                                close: candle.close
+                            }));
+                            cb(bars, { noData: false });
+                        },
+                        subscribeBars: (symbolInfo: any, resolution: string, onRealtimeCallback: any) => {
+                            console.log('[DataFeed] subscribeBars');
+                            priceClient.subscribeToPrice(token.mintAddress, (update) => {
+                                onRealtimeCallback({
+                                    time: Number(update.time) * 1000,
+                                    open: update.price,
+                                    high: update.price,
+                                    low: update.price,
+                                    close: update.price
+                                });
+                            });
+                        },
+                        unsubscribeBars: () => { }
+                    }
+                });
+            }
+        };
 
         return () => {
-            if (chartRef.current) {
-                chartRef.current.remove();
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
             }
         };
-    }, [width, height]);
+    }, [token]);
 
-    // Update price data
-    useEffect(() => {
-        const fetchPriceHistory = async () => {
-            if (!token.mintAddress || token.tokenType === 'dex') return;
-
-            try {
-                const history = await priceClient.getPriceHistory(token.mintAddress);
-                if (history?.length && seriesRef.current) {
-                    seriesRef.current.setData(history as CandlestickData<Time>[]);
-                }
-            } catch (error) {
-                console.warn('Error fetching price history:', error);
-            }
-        };
-
-        fetchPriceHistory();
-    }, [token.mintAddress, token.tokenType]);
-
-    return <div ref={containerRef} />;
+    return <div id="tradingview_chart" style={{ width, height }} />;
 }
