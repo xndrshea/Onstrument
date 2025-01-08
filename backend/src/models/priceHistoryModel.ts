@@ -1,5 +1,7 @@
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
+import { UTCTimestamp } from 'lightweight-charts';
+
 export class PriceHistoryModel {
     // Map TradingView intervals to our base aggregates
     private static readonly TIMEFRAME_MAP = {
@@ -30,27 +32,24 @@ export class PriceHistoryModel {
         toTimestamp: number
     ) {
         try {
-            // Select appropriate time bucket based on resolution
-            const timeBucket = resolution === '1D' ? '1 day' :
-                resolution === '1H' ? '1 hour' :
-                    '1 minute';
+            // Get the appropriate table based on resolution
+            const tableToUse = this.TIMEFRAME_MAP[resolution as keyof typeof this.TIMEFRAME_MAP] || 'price_history_1m';
 
             const result = await pool.query(`
                 SELECT 
-                    extract(epoch from time_bucket($1, time)) * 1000 as time,
-                    first(open, time) as open,
-                    max(high) as high,
-                    min(low) as low,
-                    last(close, time) as close,
-                    sum(volume) as volume
-                FROM token_platform.price_history
+                    extract(epoch from bucket) * 1000 as time,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume
+                FROM token_platform.${tableToUse}
                 WHERE 
-                    mint_address = $2 AND
-                    time >= to_timestamp($3) AND
-                    time <= to_timestamp($4)
-                GROUP BY time_bucket($1, time)
-                ORDER BY time_bucket($1, time) ASC
-            `, [timeBucket, tokenMintAddress, fromTimestamp, toTimestamp]);
+                    mint_address = $1 AND
+                    bucket >= to_timestamp($2) AND
+                    bucket <= to_timestamp($3)
+                ORDER BY bucket ASC
+            `, [tokenMintAddress, fromTimestamp, toTimestamp]);
 
             return result.rows;
         } catch (error) {
@@ -87,25 +86,9 @@ export class PriceHistoryModel {
         const { mintAddress, price, volume = 0, timestamp = new Date(), marketCap } = update;
 
         try {
-            if (!isFinite(price) || price <= 0) {
-                logger.error(`Invalid price for ${mintAddress}:`, { price, volume });
-                return;
-            }
-
-            // Get token's supply
-            const tokenResult = await pool.query(
-                'SELECT supply FROM token_platform.tokens WHERE mint_address = $1',
-                [mintAddress]
-            );
-            logger.info('Token supply query result:', {
-                mintAddress,
-                supply: tokenResult.rows[0]?.supply,
-                hasRows: tokenResult.rows.length > 0
-            });
-
             // Get the last price point for this token within the current minute
             const lastPrice = await pool.query(`
-                SELECT price, high, low, open
+                SELECT price, high, low, open, close
                 FROM token_platform.price_history 
                 WHERE mint_address = $1 
                 AND time >= date_trunc('minute'::text, $2::timestamp)
@@ -115,29 +98,17 @@ export class PriceHistoryModel {
 
             const previousData = lastPrice.rows[0];
 
-            // Update price history
+            // Calculate OHLC values
+            const open = previousData?.open || price;
+            const high = previousData ? Math.max(previousData.high, price) : price;
+            const low = previousData ? Math.min(previousData.low, price) : price;
+            const close = price;
+
+            // Record price history
             await pool.query(`
                 INSERT INTO token_platform.price_history (
-                    time,
-                    mint_address,
-                    price,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                    market_cap
-                ) VALUES (
-                    $1,
-                    $2,
-                    $3,
-                    $4,
-                    $5,
-                    $6,
-                    $3,
-                    $7,
-                    $8
-                )
+                    time, mint_address, price, open, high, low, close, volume, market_cap
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (mint_address, time) DO UPDATE
                 SET 
                     price = EXCLUDED.price,
@@ -146,31 +117,18 @@ export class PriceHistoryModel {
                     close = EXCLUDED.price,
                     volume = token_platform.price_history.volume + EXCLUDED.volume,
                     market_cap = EXCLUDED.market_cap
-            `, [
-                timestamp,
-                mintAddress,
-                price,
-                previousData?.open || price,
-                Math.max(previousData?.high || price, price),
-                Math.min(previousData?.low || price, price),
-                volume,
-                marketCap
-            ]);
+            `, [timestamp, mintAddress, price, open, high, low, close, volume, marketCap]);
 
             // Update current price and market cap in tokens table
             await pool.query(`
                 UPDATE token_platform.tokens 
                 SET 
-                    market_cap = $2
+                    current_price = $2,
+                    market_cap_usd = $3,
+                    last_price_update = $4
                 WHERE mint_address = $1
-            `, [mintAddress, marketCap]);
+            `, [mintAddress, price, marketCap, timestamp]);
 
-            logger.info('Successfully recorded price', {
-                mintAddress,
-                price,
-                volume: volume || 0,
-                timestamp: timestamp.toISOString()
-            });
         } catch (error) {
             logger.error('Error recording price:', error);
             throw error;
@@ -182,8 +140,12 @@ export class PriceHistoryModel {
         try {
             const query = `
                 SELECT 
-                    time,
-                    price as value
+                    extract(epoch from time) as time,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume
                 FROM token_platform.price_history
                 WHERE mint_address = $1
                 ORDER BY time ASC
@@ -192,12 +154,13 @@ export class PriceHistoryModel {
             const params = [tokenMintAddress];
             const result = await pool.query(query, params);
 
-            // Log the raw data
-            logger.info('Raw query results:', result.rows);
-
             return result.rows.map(row => ({
-                time: Math.floor(Date.parse(row.time) / 1000),
-                value: Number(row.value)
+                time: Math.floor(row.time) as UTCTimestamp,
+                open: Number(row.open),
+                high: Number(row.high),
+                low: Number(row.low),
+                close: Number(row.close),
+                volume: Number(row.volume)
             }));
         } catch (error) {
             logger.error('Error getting price history:', error);

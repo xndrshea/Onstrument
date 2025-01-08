@@ -453,17 +453,7 @@ router.get('/search/tokens', async (req, res) => {
 router.get('/price-history/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
-        logger.info(`Fetching price history for ${mintAddress}`);
-
         const history = await PriceHistoryModel.getPriceHistory(mintAddress);
-        logger.info(`Found ${history.length} price points for ${mintAddress}`);
-
-        // Log first and last points
-        if (history.length > 0) {
-            logger.info('First point:', history[0]);
-            logger.info('Last point:', history[history.length - 1]);
-        }
-
         res.json(history);
     } catch (error) {
         logger.error('Error fetching price history:', error);

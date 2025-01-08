@@ -1,4 +1,4 @@
-import { createChart, ColorType, IChartApi, ISeriesApi, LineData, UTCTimestamp } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
 import { useEffect, useRef, useState } from 'react';
 import { TokenRecord } from '../../../shared/types/token';
 import { priceClient } from '../../services/priceClient';
@@ -8,6 +8,15 @@ interface PriceChartProps {
     width?: number;
     height?: number;
     currentPrice?: number;
+}
+
+interface PricePoint {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
 }
 
 export function PriceChart({ token, width = 600, height = 300, currentPrice }: PriceChartProps) {
@@ -74,7 +83,7 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice }: P
 // Separate component for custom token chart
 function CustomTokenChart({ token, width, height, currentPrice }: PriceChartProps) {
     const chartRef = useRef<IChartApi | null>(null);
-    const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -93,9 +102,12 @@ function CustomTokenChart({ token, width, height, currentPrice }: PriceChartProp
             },
         });
 
-        seriesRef.current = chartRef.current.addLineSeries({
-            color: '#26a69a',
-            lineWidth: 2,
+        seriesRef.current = chartRef.current.addCandlestickSeries({
+            upColor: '#26a69a',
+            downColor: '#ef5350',
+            borderVisible: false,
+            wickUpColor: '#26a69a',
+            wickDownColor: '#ef5350'
         });
 
         return () => {
@@ -113,29 +125,15 @@ function CustomTokenChart({ token, width, height, currentPrice }: PriceChartProp
             try {
                 const history = await priceClient.getPriceHistory(token.mintAddress);
                 if (history?.length && seriesRef.current) {
-                    seriesRef.current.setData(
-                        history.map(point => ({
-                            time: point.time as UTCTimestamp,
-                            value: point.value
-                        }))
-                    );
+                    seriesRef.current.setData(history as CandlestickData<Time>[]);
                 }
             } catch (error) {
                 console.warn('Error fetching price history:', error);
-                // Handle error gracefully - maybe show a message to user
             }
         };
 
         fetchPriceHistory();
     }, [token.mintAddress, token.tokenType]);
-
-    // Update live price
-    useEffect(() => {
-        if (currentPrice && seriesRef.current) {
-            const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
-            seriesRef.current.update({ time: now, value: currentPrice });
-        }
-    }, [currentPrice]);
 
     return <div ref={containerRef} />;
 }

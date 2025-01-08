@@ -1,5 +1,7 @@
 import { API_BASE_URL, MAINNET_API_BASE_URL } from '../config';
 import { WebSocketMessage } from '../../shared/types/websocket';
+import { CandlestickData } from 'lightweight-charts';
+import { Time } from 'lightweight-charts';
 
 class WebSocketClient {
     private static instance: WebSocketClient;
@@ -188,13 +190,35 @@ class WebSocketClient {
             return null;
         }
     }
+
+    async getPriceHistory(mintAddress: string): Promise<CandlestickData<Time>[]> {
+        const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
+        if (!response.ok) throw new Error('Failed to fetch price history');
+
+        const data: PriceHistoryPoint[] = await response.json();
+        return data.map(point => ({
+            time: point.time as Time,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close
+        }));
+    }
+}
+
+interface PriceHistoryPoint {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
 }
 
 export const priceClient = {
     wsClient: WebSocketClient.getInstance(),
 
     // Only used for getting historical price data for charts
-    async getPriceHistory(mintAddress: string): Promise<Array<{ time: number, value: number }>> {
+    async getPriceHistory(mintAddress: string): Promise<CandlestickData<Time>[]> {
         console.log('Fetching price history from API for:', mintAddress);
         const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
 
@@ -203,24 +227,20 @@ export const priceClient = {
             throw new Error('Failed to fetch price history');
         }
 
-        const data = await response.json();
+        const data: PriceHistoryPoint[] = await response.json();
 
         if (!data || !data.length) {
             console.warn('No price data available for:', mintAddress);
             throw new Error('No price data available');
         }
 
-        return data.map((point: any) => {
-            const time = Number(point.time);
-            const value = Number(point.value);
-
-            if (!isFinite(time) || !isFinite(value)) {
-                console.warn('Invalid data point:', point);
-                return null;
-            }
-
-            return { time, value };
-        }).filter(Boolean);
+        return data.map(point => ({
+            time: point.time as Time,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close
+        }));
     },
 
     getLatestPrice: async (mintAddress: string): Promise<number | null> => {
