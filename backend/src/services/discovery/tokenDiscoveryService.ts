@@ -256,7 +256,6 @@ export class TokenDiscoveryService {
 
     private async processRaydiumToken(pool: RaydiumPool): Promise<void> {
         try {
-            // Get SOL's current price from database using mint address
             const solResult = await this.client.query(
                 'SELECT current_price FROM token_platform.tokens WHERE mint_address = $1',
                 ['So11111111111111111111111111111111111111112']
@@ -265,14 +264,14 @@ export class TokenDiscoveryService {
 
             const isBaseSol = this.SOL_ADDRESSES.includes(pool.mintA.address);
 
-            // Adjust calculation based on decimals
+            // Simple division: SOL amount / Token amount
             const priceSol = isBaseSol
-                ? (pool.mintAmountB / Math.pow(10, pool.mintB.decimals)) / (pool.mintAmountA / Math.pow(10, pool.mintA.decimals))
-                : (pool.mintAmountA / Math.pow(10, pool.mintA.decimals)) / (pool.mintAmountB / Math.pow(10, pool.mintB.decimals));
+                ? pool.mintAmountA / pool.mintAmountB  // SOL/Token
+                : pool.mintAmountB / pool.mintAmountA; // SOL/Token
 
             const priceUSD = priceSol * solPriceUSD;
 
-            console.log(`Raydium - ${isBaseSol ? pool.mintB.address : pool.mintA.address}: priceUSD: ${priceUSD}, priceSol: ${priceSol}, decimalsA: ${pool.mintA.decimals}, decimalsB: ${pool.mintB.decimals}`);
+            console.log(`Raydium - ${isBaseSol ? pool.mintB.address : pool.mintA.address}: priceUSD: ${priceUSD}, priceSol: ${priceSol}, decimalsA: ${pool.mintA.decimals}, decimalsB: ${pool.mintB.decimals}, solana price: ${solPriceUSD}`);
 
             const tokenData: TokenUpsertData = {
                 address: isBaseSol ? pool.mintB.address : pool.mintA.address,
