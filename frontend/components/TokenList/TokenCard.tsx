@@ -68,7 +68,7 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
 
                     <div className="flex justify-between items-center mt-2">
                         <div className="text-sm text-gray-400">
-                            Market Cap: {token.marketCap ? formatMarketCap(token.marketCap) : 'N/A'}
+                            Market Cap: {token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
                         </div>
                     </div>
                 </div>

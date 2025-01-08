@@ -3,6 +3,7 @@ import { TokenRecord } from '../../../shared/types/token'
 import { Link, useNavigate } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { API_BASE_URL } from '../../config'
+import { formatMarketCap } from '../../utils/formatting'
 
 export function MarketPage() {
     const navigate = useNavigate();

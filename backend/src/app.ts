@@ -27,25 +27,41 @@ export function createApp() {
     })
 
     // Set up scheduled jobs
-    const geckoJob = new CronJob('* * * * *', async () => {
-        try {
-            logger.info('Starting GeckoTerminal pools fetch...')
-            await discoveryService.fetchGeckoTerminalPools()
-            logger.info('GeckoTerminal pools fetch completed')
-        } catch (error) {
-            logger.error('Error fetching GeckoTerminal pools:', error)
-        }
-    })
+    const geckoJob = new CronJob(
+        '* * * * *',
+        async () => {
+            try {
+                logger.info('Starting GeckoTerminal pools fetch...')
+                await discoveryService.fetchGeckoTerminalPools()
+                logger.info('GeckoTerminal pools fetch completed')
+            } catch (error) {
+                logger.error('Error fetching GeckoTerminal pools:', error)
+            }
+        },
+        null,    // onComplete
+        true,    // start
+        undefined, // timezone
+        undefined, // context
+        true     // runOnInit - This makes it run immediately
+    )
 
-    const raydiumJob = new CronJob('*/5 * * * *', async () => {
-        try {
-            logger.info('Starting Raydium pools fetch...')
-            await discoveryService.fetchRaydiumPools()
-            logger.info('Raydium pools fetch completed')
-        } catch (error) {
-            logger.error('Error fetching Raydium pools:', error)
-        }
-    })
+    const raydiumJob = new CronJob(
+        '*/5 * * * *',
+        async () => {
+            try {
+                logger.info('Starting Raydium pools fetch...')
+                await discoveryService.fetchRaydiumPools()
+                logger.info('Raydium pools fetch completed')
+            } catch (error) {
+                logger.error('Error fetching Raydium pools:', error)
+            }
+        },
+        null,
+        true,
+        undefined,
+        undefined,
+        true    // runOnInit
+    )
 
     // Start the cron jobs
     geckoJob.start()

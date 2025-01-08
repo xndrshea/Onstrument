@@ -65,7 +65,7 @@ export interface TokenRecord {
     twitter?: string;
     discord?: string;
     telegram?: string;
-    marketCap?: number;
+    marketCapUsd?: number;
     volume?: number;
     tvl?: number;
     volume5m?: number;

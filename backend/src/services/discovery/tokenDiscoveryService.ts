@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import { MetadataService } from '../metadata/metadataService';
@@ -110,6 +110,13 @@ interface RaydiumPoolResponse {
     };
 }
 
+interface PriceUpdate {
+    tokenAddress: string;
+    price: number;
+    timestamp: Date;
+    source: string;
+}
+
 export class TokenDiscoveryService {
     private static instance: TokenDiscoveryService;
     private metadataService: MetadataService;
@@ -121,10 +128,20 @@ export class TokenDiscoveryService {
         'So11111111111111111111111111111111111111112', // WSOL
         'SOL' // Native SOL
     ];
+    private tokenPriceQueue: Set<string> = new Set();
+    private queueTimer: NodeJS.Timeout | null = null;
+    private readonly JUPITER_PRICE_API = 'https://api.jup.ag/price/v2';
+    private readonly BATCH_SIZE = 99;
+    private readonly QUEUE_TIMEOUT = 5000; // 5 seconds
+    private readonly SOL_ADDRESS = 'So11111111111111111111111111111111111111112';
+    private readonly retryDelay = 1000; // 1 second
+    private readonly maxRetries = 5;
+    private isFetching: boolean = false;
 
     private constructor(client: Pool) {
         this.client = client;
         this.metadataService = MetadataService.getInstance();
+
         // Ensure SOL exists in database once when service starts
         this.ensureTokenMetadata('So11111111111111111111111111111111111111112').catch(err =>
             this.logger.error('Failed to ensure SOL metadata:', err)
@@ -148,9 +165,6 @@ export class TokenDiscoveryService {
 
             // Process pools and update database
             await this.processPools(raydiumPools, geckoTerminalPools);
-
-            // Update market caps after processing all pools
-            await this.updateMarketCaps();
         } catch (error) {
             logger.error('Error in pool discovery:', error);
         }
@@ -219,7 +233,7 @@ export class TokenDiscoveryService {
                         poolType: 'all',
                         poolSortField: 'volume24h',
                         sortType: 'desc',
-                        pageSize: 20,
+                        pageSize: 1000,
                         page: 1
                     }
                 }
@@ -231,13 +245,12 @@ export class TokenDiscoveryService {
 
             const allPools = response.data.data.data;
 
-            // Only ensure metadata for non-SOL tokens
+            // Process pools in batches to avoid overwhelming the system
             for (const pool of allPools) {
                 await Promise.all([
-                    // Only queue non-SOL tokens
                     !this.SOL_ADDRESSES.includes(pool.mintA.address) && this.ensureTokenMetadata(pool.mintA.address),
                     !this.SOL_ADDRESSES.includes(pool.mintB.address) && this.ensureTokenMetadata(pool.mintB.address)
-                ].filter(Boolean)); // Filter out false values from the Promise.all array
+                ].filter(Boolean));
 
                 await this.processRaydiumToken(pool);
             }
@@ -256,51 +269,28 @@ export class TokenDiscoveryService {
 
     private async processRaydiumToken(pool: RaydiumPool): Promise<void> {
         try {
-            const solResult = await this.client.query(
-                'SELECT current_price FROM token_platform.tokens WHERE mint_address = $1',
-                ['So11111111111111111111111111111111111111112']
-            );
-            const solPriceUSD = solResult.rows[0]?.current_price;
+            // Queue the non-SOL token for price updates
+            if (this.SOL_ADDRESSES.includes(pool.mintA.address)) {
+                this.queueTokenForPriceUpdate(pool.mintB.address);
+            } else if (this.SOL_ADDRESSES.includes(pool.mintB.address)) {
+                this.queueTokenForPriceUpdate(pool.mintA.address);
+            }
 
-            const isBaseSol = this.SOL_ADDRESSES.includes(pool.mintA.address);
-
-            // Simple division: SOL amount / Token amount
-            const priceSol = isBaseSol
-                ? pool.mintAmountA / pool.mintAmountB  // SOL/Token
-                : pool.mintAmountB / pool.mintAmountA; // SOL/Token
-
-            const priceUSD = priceSol * solPriceUSD;
-
-            console.log(`Raydium - ${isBaseSol ? pool.mintB.address : pool.mintA.address}: priceUSD: ${priceUSD}, priceSol: ${priceSol}, decimalsA: ${pool.mintA.decimals}, decimalsB: ${pool.mintB.decimals}, solana price: ${solPriceUSD}`);
-
+            // Store all non-price metrics
             const tokenData: TokenUpsertData = {
-                address: isBaseSol ? pool.mintB.address : pool.mintA.address,
-                token_type: 'dex' as const,
-                name: isBaseSol ? pool.mintB.name : pool.mintA.name,
-                symbol: isBaseSol ? pool.mintB.symbol : pool.mintA.symbol,
-                decimals: isBaseSol ? pool.mintB.decimals : pool.mintA.decimals,
-                current_price: priceUSD,
-                price_sol: priceSol,
-                // Standardize volume fields
-                volume_24h: pool.day?.volume || 0,        // Use this as primary 24h volume
-                volume_7d: pool.week?.volume || 0,        // Use this as primary 7d volume
-                volume_30d: pool.month?.volume || 0,      // Use this as primary 30d volume
+                address: pool.mintA.address,
+                token_type: 'dex',
+                name: pool.mintA.name,
+                symbol: pool.mintA.symbol,
+                decimals: pool.mintA.decimals,
+                volume_24h: pool.day?.volume || 0,
+                volume_7d: pool.week?.volume || 0,
+                volume_30d: pool.month?.volume || 0,
                 tvl: pool.tvl,
-                // Standardize price changes
-                price_change_24h: this.calculatePriceChange(pool.day?.priceMin, pool.day?.priceMax),
-                price_change_7d: this.calculatePriceChange(pool.week?.priceMin, pool.week?.priceMax),
-                price_change_30d: this.calculatePriceChange(pool.month?.priceMin, pool.month?.priceMax),
-                // Store APR data
-                apr_24h: pool.day?.apr || 0,
-                apr_7d: pool.week?.apr || 0,
-                apr_30d: pool.month?.apr || 0,
-                // Additional Raydium-specific data
                 fee_rate: pool.feeRate,
                 lp_price: pool.lpPrice,
                 lp_amount: pool.lpAmount,
                 burn_percent: pool.burnPercent,
-                mint_amount_a: pool.mintAmountA,
-                mint_amount_b: pool.mintAmountB,
                 market_id: pool.marketId,
                 program_id: pool.programId,
                 pool_type: pool.pooltype?.join(','),
@@ -314,20 +304,56 @@ export class TokenDiscoveryService {
     }
 
     public async fetchGeckoTerminalPools(): Promise<GeckoTerminalPool[]> {
+        if (this.isFetching) {
+            this.logger.info('Skipping GeckoTerminal fetch - previous fetch still in progress');
+            return [];
+        }
+
+        this.isFetching = true;
         try {
+            const allPools: GeckoTerminalPool[] = [];
+            const totalPages = 10;
+
+            for (let page = 1; page <= totalPages; page++) {
+                try {
+                    const pools = await this.fetchWithRetry(page);
+                    allPools.push(...pools);
+                    this.logger.info(`Successfully processed page ${page}/${totalPages}`);
+                } catch (error) {
+                    this.logger.error(`Error fetching page ${page}:`, error);
+                }
+            }
+
+            return allPools;
+        } catch (error) {
+            this.logger.error('Error fetching GeckoTerminal pools:', error);
+            throw error;
+        } finally {
+            this.isFetching = false;
+        }
+    }
+
+    private async fetchWithRetry(page: number, retryCount = 0): Promise<any> {
+        try {
+            await this.delay(this.retryDelay);
+
             const response = await axios.get('https://api.geckoterminal.com/api/v2/networks/solana/pools', {
-                params: { page: 1 },
+                params: {
+                    page,
+                    duration: '5m',
+                    include: 'base_token,quote_token'
+                },
                 headers: { 'Accept': 'application/json;version=20230302' }
             });
 
-            const allPools = response.data?.data || [];
+            const pools = response.data?.data || [];
 
-            for (const pool of allPools) {
+            // Process pools from this page
+            for (const pool of pools) {
                 const baseTokenId = pool.relationships.base_token.data.id.split('_')[1];
                 const quoteTokenId = pool.relationships.quote_token.data.id.split('_')[1];
 
                 await Promise.all([
-                    // Only queue non-SOL tokens
                     !this.SOL_ADDRESSES.includes(baseTokenId) && this.ensureTokenMetadata(baseTokenId),
                     !this.SOL_ADDRESSES.includes(quoteTokenId) && this.ensureTokenMetadata(quoteTokenId)
                 ].filter(Boolean));
@@ -335,9 +361,21 @@ export class TokenDiscoveryService {
                 await this.processGeckoToken(pool);
             }
 
-            return allPools;
+            return pools;
         } catch (error) {
-            logger.error('Error fetching GeckoTerminal pools:', error);
+            if (error instanceof AxiosError && error.response?.status === 429) {
+                if (retryCount >= this.maxRetries) {
+                    throw new Error('Max retries reached for rate limiting');
+                }
+
+                const retryAfter = parseInt(error.response.headers['retry-after'] || '0');
+                const backoffDelay = retryAfter * 1000 || this.retryDelay * Math.pow(2, retryCount);
+
+                this.logger.info(`Rate limited, waiting ${backoffDelay}ms before retry ${retryCount + 1}`);
+                await this.delay(backoffDelay);
+
+                return this.fetchWithRetry(page, retryCount + 1);
+            }
             throw error;
         }
     }
@@ -348,7 +386,6 @@ export class TokenDiscoveryService {
             const baseTokenId = pool.relationships.base_token.data.id.split('_')[1];
             const quoteTokenId = pool.relationships.quote_token.data.id.split('_')[1];
 
-            // Save SOL's price data first
             await this.upsertToken({
                 address: 'So11111111111111111111111111111111111111112',
                 token_type: 'dex',
@@ -358,28 +395,35 @@ export class TokenDiscoveryService {
             });
 
             const isBaseSol = this.SOL_ADDRESSES.includes(baseTokenId);
-
-            const priceUSD = isBaseSol
+            const currentPrice = isBaseSol
                 ? parseFloat(attributes.quote_token_price_usd)
                 : parseFloat(attributes.base_token_price_usd);
-            const priceSol = isBaseSol
-                ? parseFloat(attributes.quote_token_price_native_currency)
-                : parseFloat(attributes.base_token_price_native_currency);
 
-            console.log(`Gecko - ${isBaseSol ? quoteTokenId : baseTokenId}: priceUSD: ${priceUSD}, priceSol: ${priceSol}`);
+            // Get the token's supply and decimals
+            const tokenResult = await this.client.query(
+                'SELECT supply, decimals FROM token_platform.tokens WHERE mint_address = $1',
+                [isBaseSol ? quoteTokenId : baseTokenId]
+            );
+
+            const totalSupply = tokenResult.rows[0]?.supply;
+            const decimals = tokenResult.rows[0]?.decimals;
+
+            const marketCapUsd = totalSupply && currentPrice && decimals
+                ? (totalSupply * currentPrice) / Math.pow(10, decimals)
+                : null;
 
             const tokenData: TokenUpsertData = {
                 address: isBaseSol ? quoteTokenId : baseTokenId,
                 token_type: 'dex' as const,
-                current_price: isBaseSol
-                    ? parseFloat(attributes.quote_token_price_usd)
-                    : parseFloat(attributes.base_token_price_usd),
+                current_price: currentPrice,
                 price_sol: isBaseSol
                     ? parseFloat(attributes.quote_token_price_native_currency)
                     : parseFloat(attributes.base_token_price_native_currency),
                 price_quote_token: isBaseSol
                     ? parseFloat(attributes.quote_token_price_base_token)
                     : parseFloat(attributes.base_token_price_quote_token),
+                // Add calculated market cap
+                market_cap_usd: marketCapUsd,
                 // Standard volume fields
                 volume_24h: parseFloat(attributes.volume_usd.h24),
                 volume_1h: parseFloat(attributes.volume_usd.h1),
@@ -390,9 +434,6 @@ export class TokenDiscoveryService {
                 price_change_1h: parseFloat(attributes.price_change_percentage.h1),
                 price_change_6h: parseFloat(attributes.price_change_percentage.h6),
                 price_change_5m: parseFloat(attributes.price_change_percentage.m5),
-                // Market data
-                market_cap_usd: attributes.market_cap_usd ? parseFloat(attributes.market_cap_usd) : null,
-                fdv_usd: parseFloat(attributes.fdv_usd),
                 // Transaction data
                 tx_5m_buys: attributes.transactions.m5.buys,
                 tx_5m_sells: attributes.transactions.m5.sells,
@@ -428,40 +469,6 @@ export class TokenDiscoveryService {
 
     private async upsertToken(data: TokenUpsertData): Promise<void> {
         try {
-            // Get existing price sources for both token and SOL
-            const existingData = await pool.query(`
-                SELECT price_sources, sol_price_sources 
-                FROM token_platform.tokens 
-                WHERE mint_address = $1
-            `, [data.address]);
-
-            // Handle token price sources
-            let priceSources = existingData.rows[0]?.price_sources || [];
-            if (!Array.isArray(priceSources)) priceSources = [];
-
-            priceSources.unshift({
-                price_sol: data.price_sol,
-                price_usd: data.current_price,
-                source: data.token_source,
-                timestamp: new Date().toISOString()
-            });
-            priceSources = priceSources.slice(0, 5);
-
-            // Handle SOL price sources
-            let solPriceSources = existingData.rows[0]?.sol_price_sources || [];
-            if (!Array.isArray(solPriceSources)) solPriceSources = [];
-
-            solPriceSources.unshift({
-                price_usd: data.sol_price,
-                source: data.token_source,
-                timestamp: new Date().toISOString()
-            });
-            solPriceSources = solPriceSources.slice(0, 5);
-
-            // Calculate averages
-            const averagePriceSol = priceSources.reduce((sum: number, entry: any) => sum + entry.price_sol, 0) / priceSources.length;
-            const averagePriceUSD = priceSources.reduce((sum: number, entry: any) => sum + entry.price_usd, 0) / priceSources.length;
-
             const query = `
                 INSERT INTO token_platform.tokens (
                     mint_address,
@@ -500,62 +507,61 @@ export class TokenDiscoveryService {
                     tx_24h_sells,
                     tx_24h_buyers,
                     tx_24h_sellers,
-                    price_sources,
-                    sol_price_sources,
                     token_source,
+                    market_cap_usd,
                     last_price_update
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
                     $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-                    $31, $32, $33, $34, $35, $36, $37, $38, $39, NOW()
+                    $31, $32, $33, $34, $35, $36, $37, $38, NOW()
                 )
                 ON CONFLICT (mint_address) DO UPDATE SET
-                    current_price = $3,
-                    price_sol = $4,
-                    volume_5m = $5,
-                    volume_1h = $6,
-                    volume_6h = $7,
-                    volume_24h = $8,
-                    volume_7d = $9,
-                    volume_30d = $10,
-                    price_change_5m = $11,
-                    price_change_1h = $12,
-                    price_change_6h = $13,
-                    price_change_24h = $14,
-                    price_change_7d = $15,
-                    price_change_30d = $16,
-                    apr_24h = $17,
-                    apr_7d = $18,
-                    apr_30d = $19,
-                    tvl = $20,
-                    tx_5m_buys = $21,
-                    tx_5m_sells = $22,
-                    tx_5m_buyers = $23,
-                    tx_5m_sellers = $24,
-                    tx_1h_buys = $25,
-                    tx_1h_sells = $26,
-                    tx_1h_buyers = $27,
-                    tx_1h_sellers = $28,
-                    tx_6h_buys = $29,
-                    tx_6h_sells = $30,
-                    tx_6h_buyers = $31,
-                    tx_6h_sellers = $32,
-                    tx_24h_buys = $33,
-                    tx_24h_sells = $34,
-                    tx_24h_buyers = $35,
-                    tx_24h_sellers = $36,
-                    price_sources = $37,
-                    sol_price_sources = $38,
-                    token_source = $39,
+                    token_type = EXCLUDED.token_type,
+                    current_price = EXCLUDED.current_price,
+                    price_sol = EXCLUDED.price_sol,
+                    volume_5m = EXCLUDED.volume_5m,
+                    volume_1h = EXCLUDED.volume_1h,
+                    volume_6h = EXCLUDED.volume_6h,
+                    volume_24h = EXCLUDED.volume_24h,
+                    volume_7d = EXCLUDED.volume_7d,
+                    volume_30d = EXCLUDED.volume_30d,
+                    price_change_5m = EXCLUDED.price_change_5m,
+                    price_change_1h = EXCLUDED.price_change_1h,
+                    price_change_6h = EXCLUDED.price_change_6h,
+                    price_change_24h = EXCLUDED.price_change_24h,
+                    price_change_7d = EXCLUDED.price_change_7d,
+                    price_change_30d = EXCLUDED.price_change_30d,
+                    apr_24h = EXCLUDED.apr_24h,
+                    apr_7d = EXCLUDED.apr_7d,
+                    apr_30d = EXCLUDED.apr_30d,
+                    tvl = EXCLUDED.tvl,
+                    tx_5m_buys = EXCLUDED.tx_5m_buys,
+                    tx_5m_sells = EXCLUDED.tx_5m_sells,
+                    tx_5m_buyers = EXCLUDED.tx_5m_buyers,
+                    tx_5m_sellers = EXCLUDED.tx_5m_sellers,
+                    tx_1h_buys = EXCLUDED.tx_1h_buys,
+                    tx_1h_sells = EXCLUDED.tx_1h_sells,
+                    tx_1h_buyers = EXCLUDED.tx_1h_buyers,
+                    tx_1h_sellers = EXCLUDED.tx_1h_sellers,
+                    tx_6h_buys = EXCLUDED.tx_6h_buys,
+                    tx_6h_sells = EXCLUDED.tx_6h_sells,
+                    tx_6h_buyers = EXCLUDED.tx_6h_buyers,
+                    tx_6h_sellers = EXCLUDED.tx_6h_sellers,
+                    tx_24h_buys = EXCLUDED.tx_24h_buys,
+                    tx_24h_sells = EXCLUDED.tx_24h_sells,
+                    tx_24h_buyers = EXCLUDED.tx_24h_buyers,
+                    tx_24h_sellers = EXCLUDED.tx_24h_sellers,
+                    token_source = EXCLUDED.token_source,
+                    market_cap_usd = EXCLUDED.market_cap_usd,
                     last_price_update = NOW()
             `;
 
             await pool.query(query, [
                 data.address,
                 data.token_type,
-                averagePriceUSD,
-                averagePriceSol,
+                data.current_price || null,
+                data.price_sol || null,
                 data.volume_5m || null,
                 data.volume_1h || null,
                 data.volume_6h || null,
@@ -588,9 +594,8 @@ export class TokenDiscoveryService {
                 data.tx_24h_sells || null,
                 data.tx_24h_buyers || null,
                 data.tx_24h_sellers || null,
-                JSON.stringify(priceSources),
-                JSON.stringify(solPriceSources),
-                data.token_source
+                data.token_source,
+                data.market_cap_usd || null,
             ]);
 
         } catch (error) {
@@ -626,51 +631,103 @@ export class TokenDiscoveryService {
         ]);
     }
 
-    async updateMarketCaps(): Promise<void> {
+    private async processQueuedPriceUpdates(): Promise<void> {
+        if (this.tokenPriceQueue.size === 0) return;
+
         try {
-            const query = `
-                WITH market_cap_updates AS (
-                    SELECT 
-                        mint_address,
-                        current_price,
-                        supply->>'total_supply' as total_supply,
-                        CASE 
-                            WHEN supply->>'total_supply' IS NOT NULL AND current_price IS NOT NULL
-                            THEN (supply->>'total_supply')::numeric * current_price
-                            ELSE NULL
-                        END as calculated_market_cap
-                    FROM token_platform.tokens 
-                    WHERE token_type = 'dex'
-                    AND current_price IS NOT NULL
-                    AND (
-                        last_price_update >= NOW() - INTERVAL '5 minutes'
-                        OR market_cap_usd IS NULL
-                    )
-                )
-                UPDATE token_platform.tokens t
-                SET 
-                    market_cap_usd = u.calculated_market_cap,
-                    last_updated = CURRENT_TIMESTAMP
-                FROM market_cap_updates u
-                WHERE t.mint_address = u.mint_address
-                AND t.market_cap_usd IS DISTINCT FROM u.calculated_market_cap
-                RETURNING t.mint_address, t.market_cap_usd, t.current_price
-            `;
+            const addresses = Array.from(this.tokenPriceQueue);
 
-            const result = await pool.query(query);
+            for (let i = 0; i < addresses.length; i += this.BATCH_SIZE) {
+                const batchAddresses = addresses.slice(i, i + this.BATCH_SIZE);
+                const addressesWithSol = [this.SOL_ADDRESS, ...batchAddresses];
 
-            this.logger.info(`Updated market caps for ${result.rowCount} tokens`, {
-                firstFewUpdates: result.rows.slice(0, 3),
-                totalUpdated: result.rowCount
-            });
+                const response = await axios.get(`${this.JUPITER_PRICE_API}?ids=${addressesWithSol.join(',')}`);
 
+                if (!response.data?.data?.[this.SOL_ADDRESS]) {
+                    throw new Error('Failed to fetch SOL price from Jupiter');
+                }
+
+                await this.updateBatchPrices(response.data.data);
+            }
+
+            this.tokenPriceQueue.clear();
         } catch (error) {
-            this.logger.error('Error updating market caps:', {
-                error: error instanceof Error ? error.message : error,
-                stack: error instanceof Error ? error.stack : undefined
-            });
+            this.logger.error('Error processing queued price updates:', error);
+        }
+    }
+
+    private async updateBatchPrices(updates: PriceUpdate[]): Promise<void> {
+        if (updates.length === 0) return;
+
+        // Convert to array and sort
+        const sortedUpdates = Array.from(updates).sort((a, b) =>
+            a.tokenAddress.localeCompare(b.tokenAddress)
+        );
+
+        try {
+            await this.client.query('BEGIN');
+
+            for (const update of sortedUpdates) {
+                await this.client.query(
+                    `UPDATE token_platform.tokens 
+                     SET current_price = $1, 
+                         price_updated_at = $2,
+                         price_source = $3,
+                         market_cap_usd = CASE 
+                             WHEN supply IS NOT NULL AND supply > 0 AND decimals IS NOT NULL
+                             THEN (supply::numeric * $1::numeric) / POWER(10, decimals)
+                             ELSE NULL
+                         END
+                     WHERE mint_address = $4`,
+                    [update.price, update.timestamp, update.source, update.tokenAddress]
+                );
+            }
+
+            await this.client.query('COMMIT');
+        } catch (error) {
+            await this.client.query('ROLLBACK');
             throw error;
         }
+    }
+
+    private queueTokenForPriceUpdate(address: string): void {
+        if (!this.SOL_ADDRESSES.includes(address)) {
+            this.tokenPriceQueue.add(address);
+
+            // Start timer if this is the first token
+            if (this.tokenPriceQueue.size === 1) {
+                this.startQueueTimer();
+            }
+
+            // Process immediately if we hit batch size
+            if (this.tokenPriceQueue.size >= this.BATCH_SIZE) {
+                this.clearQueueTimer();
+                this.processQueuedPriceUpdates();
+            }
+        }
+    }
+
+    private startQueueTimer(): void {
+        if (this.queueTimer === null) {
+            this.queueTimer = setTimeout(() => {
+                this.processQueuedPriceUpdates();
+            }, this.QUEUE_TIMEOUT);
+        }
+    }
+
+    private clearQueueTimer(): void {
+        if (this.queueTimer) {
+            clearTimeout(this.queueTimer);
+            this.queueTimer = null;
+        }
+    }
+
+    public cleanup(): void {
+        this.clearQueueTimer();
+    }
+
+    private async delay(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
 }

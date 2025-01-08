@@ -40,6 +40,8 @@ export function TokenDetailsPage() {
     const navigate = useNavigate();
     const [topTokens, setTopTokens] = useState<TokenRecord[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [sortField, setSortField] = useState<'marketCapUsd' | 'volume24h'>('volume24h');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     // Add useRef and useEffect for click-outside handling
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -120,7 +122,8 @@ export function TokenDetailsPage() {
             try {
                 const response = await fetch(`${API_BASE_URL}/market/tokens?sortBy=volume24h&limit=100`);
                 const data = await response.json();
-                setTopTokens(data.tokens);
+                console.log('Raw API response:', data);
+                setTopTokens(data.tokens || data);
             } catch (error) {
                 console.error('Error fetching top tokens:', error);
             }
@@ -137,7 +140,16 @@ export function TokenDetailsPage() {
         return price.toString().replace(/\.?0+$/, '');
     };
 
-    // Add this near your chart component
+    // Add this sorting function
+    const sortTokens = (tokens: TokenRecord[]) => {
+        return [...tokens].sort((a, b) => {
+            const aValue = a[sortField] || 0;
+            const bValue = b[sortField] || 0;
+            return sortDirection === 'asc' ? Number(aValue) - Number(bValue) : Number(bValue) - Number(aValue);
+        });
+    };
+
+    // Update the dropdown header section
     const renderTokenSelector = () => (
         <div ref={dropdownRef} className="relative inline-flex items-center">
             <button
@@ -153,11 +165,41 @@ export function TokenDetailsPage() {
                 <div className="absolute left-0 top-full mt-1 w-[400px] bg-[#1E222D] text-white rounded-md border border-gray-700 shadow-lg z-50 max-h-[400px] overflow-hidden">
                     <div className="sticky top-0 bg-[#1E222D] grid grid-cols-[1fr_auto_auto] px-4 py-2 text-xs text-gray-400 border-b border-gray-700">
                         <span>Token</span>
-                        <span className="px-4">Price</span>
-                        <span>24h Volume</span>
+                        <button
+                            onClick={() => {
+                                if (sortField === 'marketCapUsd') {
+                                    setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                } else {
+                                    setSortField('marketCapUsd');
+                                    setSortDirection('desc');
+                                }
+                            }}
+                            className="px-4 flex items-center gap-1 hover:text-white"
+                        >
+                            Market Cap
+                            {sortField === 'marketCapUsd' && (
+                                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (sortField === 'volume24h') {
+                                    setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                } else {
+                                    setSortField('volume24h');
+                                    setSortDirection('desc');
+                                }
+                            }}
+                            className="flex items-center gap-1 hover:text-white"
+                        >
+                            24h Volume
+                            {sortField === 'volume24h' && (
+                                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                        </button>
                     </div>
                     <div className="overflow-y-auto max-h-[360px] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                        {topTokens.map(token => (
+                        {sortTokens(topTokens).map(token => (
                             <div
                                 key={token.mintAddress}
                                 onClick={() => {
@@ -180,7 +222,7 @@ export function TokenDetailsPage() {
                                     <span className="font-medium">{token.symbol}</span>
                                 </div>
                                 <span className="px-4 text-right tabular-nums">
-                                    ${formatPriceWithoutTrailingZeros(token.currentPrice || 0)}
+                                    {formatMarketCap(token.marketCapUsd || null)}
                                 </span>
                                 <span className="text-right tabular-nums">
                                     ${formatNumber(token.volume24h || 0)}
@@ -192,6 +234,11 @@ export function TokenDetailsPage() {
             )}
         </div>
     );
+
+    useEffect(() => {
+        console.log("Token data:", token);
+        console.log("Market cap:", token?.marketCapUsd);
+    }, [token]);
 
     if (loading) return <div className="p-4 text-white">Loading...</div>;
     if (error) return <div className="p-4 text-white">Error: {error}</div>;
@@ -232,20 +279,12 @@ export function TokenDetailsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <MetricsCard
                         title="Market Cap"
-                        value={token.marketCap ? formatMarketCap(token.marketCap) : 'N/A'}
+                        value={token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
                     />
                     <MetricsCard
                         title="Current Price"
                         value={`$${Number(token.currentPrice)?.toFixed(6) || 'N/A'}`}
                         change={token.priceChange24h}
-                    />
-                    <MetricsCard
-                        title="24h Volume"
-                        value={formatNumber(token.volume24h || 0)}
-                    />
-                    <MetricsCard
-                        title="TVL"
-                        value={formatMarketCap(token.tvl || 0)}
                     />
                 </div>
 
@@ -312,62 +351,6 @@ export function TokenDetailsPage() {
                                         <h3 className="text-gray-400 text-sm">{period} Volume</h3>
                                         <p className="text-white font-semibold">
                                             ${formatNumber(Number(token[`volume${period}` as TokenKey]) || 0)}
-                                        </p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Transaction Metrics */}
-                        <div className="bg-[#232427] rounded-lg p-4">
-                            <h2 className="text-xl mb-4">Transaction Metrics</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {['5m', '1h', '6h', '24h'].map(period => (
-                                    <div key={period} className="p-4 bg-gray-800 rounded-lg">
-                                        <h3 className="text-gray-400 mb-2">{period} Transactions</h3>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <p className="text-sm text-gray-400">Buys</p>
-                                                <p className="text-white">
-                                                    {(token[`tx${period}Buys` as TokenKey] as number) || 0}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-400">Sells</p>
-                                                <p className="text-white">
-                                                    {(token[`tx${period}Sells` as TokenKey] as number) || 0}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-400">Buyers</p>
-                                                <p className="text-white">
-                                                    {(token[`tx${period}Buyers` as TokenKey] as number) || 0}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-400">Sellers</p>
-                                                <p className="text-white">
-                                                    {(token[`tx${period}Sellers` as TokenKey] as number) || 0}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Price Changes */}
-                        <div className="bg-[#232427] rounded-lg p-4">
-                            <h2 className="text-xl mb-4">Price Changes</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {['5m', '1h', '6h', '24h', '7d', '30d'].map(period => (
-                                    <div key={period} className="p-3 bg-gray-800 rounded-lg">
-                                        <h3 className="text-gray-400 text-sm">{period}</h3>
-                                        <p className={`font-semibold ${(token[`priceChange${period}` as TokenKey] as number) >= 0
-                                            ? 'text-green-400'
-                                            : 'text-red-400'
-                                            }`}>
-                                            {((token[`priceChange${period}` as TokenKey] as number) || 0).toFixed(2)}%
                                         </p>
                                     </div>
                                 ))}
