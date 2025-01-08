@@ -428,6 +428,40 @@ export class TokenDiscoveryService {
 
     private async upsertToken(data: TokenUpsertData): Promise<void> {
         try {
+            // Get existing price sources for both token and SOL
+            const existingData = await pool.query(`
+                SELECT price_sources, sol_price_sources 
+                FROM token_platform.tokens 
+                WHERE mint_address = $1
+            `, [data.address]);
+
+            // Handle token price sources
+            let priceSources = existingData.rows[0]?.price_sources || [];
+            if (!Array.isArray(priceSources)) priceSources = [];
+
+            priceSources.unshift({
+                price_sol: data.price_sol,
+                price_usd: data.current_price,
+                source: data.token_source,
+                timestamp: new Date().toISOString()
+            });
+            priceSources = priceSources.slice(0, 5);
+
+            // Handle SOL price sources
+            let solPriceSources = existingData.rows[0]?.sol_price_sources || [];
+            if (!Array.isArray(solPriceSources)) solPriceSources = [];
+
+            solPriceSources.unshift({
+                price_usd: data.sol_price,
+                source: data.token_source,
+                timestamp: new Date().toISOString()
+            });
+            solPriceSources = solPriceSources.slice(0, 5);
+
+            // Calculate averages
+            const averagePriceSol = priceSources.reduce((sum: number, entry: any) => sum + entry.price_sol, 0) / priceSources.length;
+            const averagePriceUSD = priceSources.reduce((sum: number, entry: any) => sum + entry.price_usd, 0) / priceSources.length;
+
             const query = `
                 INSERT INTO token_platform.tokens (
                     mint_address,
@@ -466,57 +500,62 @@ export class TokenDiscoveryService {
                     tx_24h_sells,
                     tx_24h_buyers,
                     tx_24h_sellers,
+                    price_sources,
+                    sol_price_sources,
                     token_source,
                     last_price_update
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                    $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-                    $29, $30, $31, $32, $33, $34, $35, $36, $37, CURRENT_TIMESTAMP
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
+                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+                    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+                    $31, $32, $33, $34, $35, $36, $37, $38, $39, NOW()
                 )
                 ON CONFLICT (mint_address) DO UPDATE SET
-                    current_price = EXCLUDED.current_price,
-                    price_sol = EXCLUDED.price_sol,
-                    volume_5m = EXCLUDED.volume_5m,
-                    volume_1h = EXCLUDED.volume_1h,
-                    volume_6h = EXCLUDED.volume_6h,
-                    volume_24h = EXCLUDED.volume_24h,
-                    volume_7d = EXCLUDED.volume_7d,
-                    volume_30d = EXCLUDED.volume_30d,
-                    price_change_5m = EXCLUDED.price_change_5m,
-                    price_change_1h = EXCLUDED.price_change_1h,
-                    price_change_6h = EXCLUDED.price_change_6h,
-                    price_change_24h = EXCLUDED.price_change_24h,
-                    price_change_7d = EXCLUDED.price_change_7d,
-                    price_change_30d = EXCLUDED.price_change_30d,
-                    apr_24h = EXCLUDED.apr_24h,
-                    apr_7d = EXCLUDED.apr_7d,
-                    apr_30d = EXCLUDED.apr_30d,
-                    tvl = EXCLUDED.tvl,
-                    tx_5m_buys = EXCLUDED.tx_5m_buys,
-                    tx_5m_sells = EXCLUDED.tx_5m_sells,
-                    tx_5m_buyers = EXCLUDED.tx_5m_buyers,
-                    tx_5m_sellers = EXCLUDED.tx_5m_sellers,
-                    tx_1h_buys = EXCLUDED.tx_1h_buys,
-                    tx_1h_sells = EXCLUDED.tx_1h_sells,
-                    tx_1h_buyers = EXCLUDED.tx_1h_buyers,
-                    tx_1h_sellers = EXCLUDED.tx_1h_sellers,
-                    tx_6h_buys = EXCLUDED.tx_6h_buys,
-                    tx_6h_sells = EXCLUDED.tx_6h_sells,
-                    tx_6h_buyers = EXCLUDED.tx_6h_buyers,
-                    tx_6h_sellers = EXCLUDED.tx_6h_sellers,
-                    tx_24h_buys = EXCLUDED.tx_24h_buys,
-                    tx_24h_sells = EXCLUDED.tx_24h_sells,
-                    tx_24h_buyers = EXCLUDED.tx_24h_buyers,
-                    tx_24h_sellers = EXCLUDED.tx_24h_sellers,
-                    token_source = EXCLUDED.token_source,
-                    last_price_update = CURRENT_TIMESTAMP
+                    current_price = $3,
+                    price_sol = $4,
+                    volume_5m = $5,
+                    volume_1h = $6,
+                    volume_6h = $7,
+                    volume_24h = $8,
+                    volume_7d = $9,
+                    volume_30d = $10,
+                    price_change_5m = $11,
+                    price_change_1h = $12,
+                    price_change_6h = $13,
+                    price_change_24h = $14,
+                    price_change_7d = $15,
+                    price_change_30d = $16,
+                    apr_24h = $17,
+                    apr_7d = $18,
+                    apr_30d = $19,
+                    tvl = $20,
+                    tx_5m_buys = $21,
+                    tx_5m_sells = $22,
+                    tx_5m_buyers = $23,
+                    tx_5m_sellers = $24,
+                    tx_1h_buys = $25,
+                    tx_1h_sells = $26,
+                    tx_1h_buyers = $27,
+                    tx_1h_sellers = $28,
+                    tx_6h_buys = $29,
+                    tx_6h_sells = $30,
+                    tx_6h_buyers = $31,
+                    tx_6h_sellers = $32,
+                    tx_24h_buys = $33,
+                    tx_24h_sells = $34,
+                    tx_24h_buyers = $35,
+                    tx_24h_sellers = $36,
+                    price_sources = $37,
+                    sol_price_sources = $38,
+                    token_source = $39,
+                    last_price_update = NOW()
             `;
 
             await pool.query(query, [
                 data.address,
                 data.token_type,
-                data.current_price,
-                data.price_sol,
+                averagePriceUSD,
+                averagePriceSol,
                 data.volume_5m || null,
                 data.volume_1h || null,
                 data.volume_6h || null,
@@ -549,8 +588,11 @@ export class TokenDiscoveryService {
                 data.tx_24h_sells || null,
                 data.tx_24h_buyers || null,
                 data.tx_24h_sellers || null,
+                JSON.stringify(priceSources),
+                JSON.stringify(solPriceSources),
                 data.token_source
             ]);
+
         } catch (error) {
             logger.error('Error upserting token:', {
                 error,

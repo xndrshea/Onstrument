@@ -74,4 +74,5 @@ export interface TokenUpsertData {
     market_id?: string;
     program_id?: string;
     pool_type?: string;
+    sol_price?: number;
 } 

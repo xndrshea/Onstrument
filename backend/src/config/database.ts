@@ -99,6 +99,8 @@ export async function initializeDatabase() {
                 apr_7d NUMERIC(78,36) DEFAULT 0,
                 apr_30d NUMERIC(78,36) DEFAULT 0,
                 tvl NUMERIC(78,36),
+                price_sources JSONB DEFAULT '[]'::jsonb,
+                sol_price_sources JSONB DEFAULT '[]'::jsonb,
                 -- Transaction metrics
                 tx_5m_buys INTEGER DEFAULT 0,
                 tx_5m_sells INTEGER DEFAULT 0,
