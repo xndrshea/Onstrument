@@ -2,6 +2,7 @@ import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import { PriceHistoryModel } from '../../models/priceHistoryModel';
 import axios from 'axios';
+import { wsManager } from '../websocket/WebSocketManager';
 
 interface JupiterResponse {
     data: {
@@ -43,7 +44,6 @@ export class JupiterPriceUpdater {
 
     private async processAllTokens() {
         if (this.isProcessing) {
-            logger.info('Price update already in progress, skipping...');
             return;
         }
 
@@ -52,16 +52,12 @@ export class JupiterPriceUpdater {
             logger.info('Starting price update cycle');
 
             const tokens = await this.fetchTokensForUpdate();
-            logger.info(`Fetched ${tokens.length} tokens for update`);
 
             const tokenBatches = this.chunkArray(tokens, this.BATCH_SIZE);
-            logger.info(`Split into ${tokenBatches.length} batches of ${this.BATCH_SIZE}`);
 
             for (const batch of tokenBatches) {
                 try {
-                    logger.info(`Processing batch of ${batch.length} tokens`);
                     const prices = await this.fetchJupiterPrices(batch.map(t => t.mint_address));
-                    logger.info(`Received prices for ${Object.keys(prices.data).length} tokens`);
 
                     await this.updateTokenPrices(batch, prices);
                     await this.delay(this.MIN_DELAY);
@@ -69,7 +65,6 @@ export class JupiterPriceUpdater {
                     logger.error('Error processing batch:', error);
                 }
             }
-            logger.info('Completed price update cycle');
         } catch (error) {
             logger.error('Error in price update cycle:', error);
         } finally {
@@ -141,6 +136,9 @@ export class JupiterPriceUpdater {
                         last_price_update = NOW()
                     WHERE mint_address = $1
                 `, [token.mint_address, price, marketCap]);
+
+                // Broadcast the price update
+                wsManager.broadcastPrice(token.mint_address, price);
 
                 logger.debug('Updated price for token:', {
                     mintAddress: token.mint_address,

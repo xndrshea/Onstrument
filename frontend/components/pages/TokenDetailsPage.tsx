@@ -61,35 +61,43 @@ export function TokenDetailsPage() {
 
     // Single WebSocket subscription - only for custom tokens
     useEffect(() => {
-        if (!token?.mintAddress || token.tokenType === 'dex') return;
+        if (!token?.mintAddress) return;
 
-        // Fetch initial price
-        priceClient.getLatestPrice(token.mintAddress)
-            .then(price => {
-                if (price !== null) {
-                    setCurrentPrice(price);
-                }
-            })
-            .catch(error => console.error('Error fetching initial price:', error));
-
-        // Setup WebSocket subscription only for custom tokens
         let cleanup: (() => void) | undefined;
         const setupSubscription = async () => {
+            // Add debug logging
+            console.log('Setting up WebSocket subscription for:', token.mintAddress);
+
             cleanup = await priceClient.subscribeToPrice(
                 token.mintAddress,
                 (update) => {
+                    console.log('Received price update:', update);
+                    // Update current price
                     setCurrentPrice(update.price);
+
+                    // Recalculate market cap if we have supply
+                    if (token?.supply) {
+                        const newMarketCap = update.price * token.supply;
+                        setToken(prevToken => prevToken ? {
+                            ...prevToken,
+                            currentPrice: update.price,
+                            marketCapUsd: newMarketCap
+                        } : null);
+                    }
                 },
-                'devnet'  // Custom tokens are always on devnet
+                token.tokenType === 'dex' ? 'mainnet' : 'devnet'
             );
         };
 
         setupSubscription();
 
         return () => {
-            if (cleanup) cleanup();
+            if (cleanup) {
+                console.log('Cleaning up WebSocket subscription');
+                cleanup();
+            }
         };
-    }, [token?.mintAddress, token?.tokenType]);
+    }, [token?.mintAddress]);
 
     useEffect(() => {
         const fetchTokenDetails = async () => {

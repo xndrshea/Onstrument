@@ -15,6 +15,7 @@ import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import fs from 'fs';
 import { createBurnCheckedInstruction } from '@solana/spl-token';
+import { WebSocketManager, wsManager } from '../websocket/WebSocketManager';
 
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -23,8 +24,10 @@ const txVersion = 0;
 export class MigrationService {
     private connection: Connection;
     private keypair: Keypair;
+    private readonly wsManager: WebSocketManager;
 
-    constructor() {
+    constructor(wsManager: WebSocketManager) {
+        this.wsManager = wsManager;
         if (process.env.NODE_ENV === 'production' && !process.env.MIGRATION_ADMIN_KEYPAIR_PATH) {
             throw new Error('MIGRATION_ADMIN_KEYPAIR_PATH not set in production');
         }
@@ -130,8 +133,12 @@ export class MigrationService {
                 poolAddress: poolAddress.toString(),
                 effectivePrice: event.effectivePrice
             });
+
+            // Broadcast migration event to WebSocket clients
+            this.wsManager.broadcastMigration(event.mint);
+
         } catch (error) {
-            logger.error('Migration failed:', error);
+            logger.error('Error handling migration event:', error);
             throw error;
         }
     }

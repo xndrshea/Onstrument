@@ -5,6 +5,7 @@ import { HeliusManager } from './services/price/websocket/heliusManager'
 import { Server } from 'http'
 import WebSocket from 'ws'
 import cors from 'cors'
+import { wsManager } from './services/websocket/WebSocketManager'
 
 const PORT = process.env.PORT || 3001
 
@@ -37,43 +38,13 @@ async function startServer() {
             }
         })
 
-        global.wss = wss;
+        // Initialize WebSocket Manager
+        wsManager.initialize(wss)
 
-        // WebSocket connection handling
-        wss.on('connection', (ws, req) => {
+        // Store WSS globally for legacy compatibility
+        global.wss = wss
 
-
-            // Add subscriptions tracking to the ws instance
-            (ws as any).subscriptions = new Set<string>();
-
-            ws.on('message', (message) => {
-                try {
-                    const data = JSON.parse(message.toString())
-                    logger.info('Received WebSocket message:', data)
-
-                    if (data.type === 'subscribe' && data.mintAddress) {
-                        (ws as any).subscriptions.add(data.mintAddress);
-                        logger.info(`Client subscribed to ${data.mintAddress}`);
-                    } else if (data.type === 'unsubscribe' && data.mintAddress) {
-                        (ws as any).subscriptions.delete(data.mintAddress);
-                        logger.info(`Client unsubscribed from ${data.mintAddress}`);
-                    }
-                } catch (error) {
-                    logger.error('Error parsing WebSocket message:', error)
-                }
-            })
-
-            ws.on('error', (error) => {
-                logger.error('WebSocket client error:', error)
-            })
-
-            ws.on('close', () => {
-                logger.info('Client disconnected, cleaning up subscriptions');
-                (ws as any).subscriptions.clear();
-            });
-        })
-
-        // Initialize HeliusManager
+        // Initialize HeliusManager with both WSS and WebSocketManager
         const heliusManager = HeliusManager.getInstance()
         await heliusManager.initialize(wss)
 

@@ -29,6 +29,16 @@ export class WebSocketManager extends EventEmitter {
     initialize(wss: WebSocket.Server) {
         this.wss = wss;
         this.setupWebSocketServer();
+
+        // Add debug logging
+        this.wss.on('connection', (ws) => {
+            logger.info('New WebSocket connection received');
+        });
+
+        this.wss.on('error', (error) => {
+            logger.error('WebSocket server error:', error);
+        });
+
         logger.info('WebSocket Manager initialized');
     }
 
@@ -124,7 +134,26 @@ export class WebSocketManager extends EventEmitter {
                         timestamp: Date.now()
                     }));
                 } catch (error) {
-                    logger.error(`Error broadcasting to ${client.id}:`, error);
+                    logger.error(`Failed to send price update to client: ${error}`);
+                }
+            }
+        });
+    }
+
+    broadcastMigration(mintAddress: string) {
+        const network = process.env.NODE_ENV === 'production' ? 'mainnet' : 'devnet';
+
+        this.clients.forEach(client => {
+            if (client.subscriptions.has(mintAddress)) {
+                try {
+                    client.send(JSON.stringify({
+                        type: 'migration',
+                        mintAddress,
+                        timestamp: Date.now(),
+                        network
+                    }));
+                } catch (error) {
+                    logger.error(`Error broadcasting migration to ${client.id}:`, error);
                     this.removeClient(client.id);
                 }
             }

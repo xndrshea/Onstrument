@@ -143,15 +143,20 @@ function TradingViewChart({ token, width, height, currentPrice, onPriceUpdate }:
                         },
                         subscribeBars: (symbolInfo: any, resolution: string, onRealtimeCallback: any) => {
                             console.log('[DataFeed] subscribeBars');
-                            priceClient.subscribeToPrice(token.mintAddress, (update) => {
-                                onRealtimeCallback({
-                                    time: Number(update.time) * 1000,
-                                    open: update.price,
-                                    high: update.price,
-                                    low: update.price,
-                                    close: update.price
-                                });
-                            });
+                            const network = token.tokenType === 'dex' ? 'mainnet' : 'devnet';
+                            priceClient.subscribeToPrice(
+                                token.mintAddress,
+                                (update) => {
+                                    onRealtimeCallback({
+                                        time: Number(update.time) * 1000,
+                                        open: update.price,
+                                        high: update.price,
+                                        low: update.price,
+                                        close: update.price
+                                    });
+                                },
+                                network
+                            );
                         },
                         unsubscribeBars: () => { }
                     }

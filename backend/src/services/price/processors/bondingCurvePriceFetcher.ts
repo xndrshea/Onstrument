@@ -5,6 +5,7 @@ import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 import WebSocket from 'ws';
 import { WebSocketClient } from '../websocket/types';
 import { TOKEN_PROGRAM_ID, AccountLayout } from '@solana/spl-token';
+import { wsManager } from '../../websocket/WebSocketManager';
 
 interface BondingCurvePairData {
     mintAddress: string;
@@ -183,31 +184,8 @@ export class BondingCurvePriceFetcher {
             timestamp: Date.now()
         });
 
-        const wss = global.wss;
-        if (wss) {
-            const connectedClients = Array.from(wss.clients).length;
-            const subscribedClients = Array.from(wss.clients).filter((client: any): client is WebSocketClient =>
-                client.readyState === WebSocket.OPEN &&
-                Boolean(client.subscriptions?.has(update.mintAddress))
-            ).length;
+        wsManager.broadcastPrice(update.mintAddress, update.price);
 
-            logger.debug('WebSocket clients status', {
-                totalClients: connectedClients,
-                subscribedClients,
-                mintAddress: update.mintAddress
-            });
-
-            wss.clients.forEach((client: WebSocketClient) => {
-                if (client.readyState === WebSocket.OPEN && client.subscriptions?.has(update.mintAddress)) {
-                    client.send(JSON.stringify({
-                        type: 'price',
-                        ...update,
-                        timestamp: Date.now()
-                    }));
-                }
-            });
-        } else {
-            logger.warn('WebSocket server not initialized, skipping price update emission');
-        }
+        logger.debug('WebSocket clients status', wsManager.getStats());
     }
 }

@@ -9,6 +9,8 @@ import apiRouter from './routes/api'
 import { TokenDiscoveryService } from './services/discovery/tokenDiscoveryService'
 import { CronJob } from 'cron'
 import { JupiterPriceUpdater } from './services/price/jupiterPriceUpdater'
+import { wsManager } from './services/websocket/WebSocketManager'
+import { HeliusManager } from './services/price/websocket/heliusManager'
 
 dotenv.config()
 
@@ -35,9 +37,7 @@ export function createApp() {
         '* * * * *',
         async () => {
             try {
-                logger.info('Starting GeckoTerminal pools fetch...')
                 await discoveryService.fetchGeckoTerminalPools()
-                logger.info('GeckoTerminal pools fetch completed')
             } catch (error) {
                 logger.error('Error fetching GeckoTerminal pools:', error)
             }
@@ -53,9 +53,7 @@ export function createApp() {
         '*/5 * * * *',
         async () => {
             try {
-                logger.info('Starting Raydium pools fetch...')
                 await discoveryService.fetchRaydiumPools()
-                logger.info('Raydium pools fetch completed')
             } catch (error) {
                 logger.error('Error fetching Raydium pools:', error)
             }
@@ -114,6 +112,18 @@ export function createApp() {
 
     // Error handling
     app.use(errorHandler)
+
+    // Add this with your other routes
+    app.get('/api/ws/health', (req, res) => {
+        res.json({
+            status: 'healthy',
+            timestamp: new Date(),
+            websocket: {
+                ...wsManager.getStats(),
+                helius: HeliusManager.getInstance().getStatus()
+            }
+        });
+    });
 
     return app
 }

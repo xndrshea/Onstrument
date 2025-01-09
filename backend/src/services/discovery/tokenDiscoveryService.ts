@@ -4,6 +4,8 @@ import { logger } from '../../utils/logger';
 import { MetadataService } from '../metadata/metadataService';
 import { Pool } from 'pg';
 import { TokenUpsertData } from '../../types/token';
+import { wsManager } from '../websocket/WebSocketManager';
+import { PoolClient } from 'pg';
 
 export interface RaydiumPool {
     type: string;
@@ -469,6 +471,9 @@ export class TokenDiscoveryService {
             };
 
             await this.upsertToken(tokenData);
+
+            // Add this line to broadcast the price
+            wsManager.broadcastPrice(tokenData.address, tokenData.current_price || 0);
         } catch (error) {
             this.logger.error('Failed to process GeckoTerminal token:', error);
         }
@@ -619,23 +624,36 @@ export class TokenDiscoveryService {
         return ((max - min) / min) * 100;
     }
 
-    private async updatePoolStats(client: any, pool: RaydiumPool): Promise<void> {
-        // Update token statistics
-        await client.query(`
-            UPDATE token_platform.tokens 
-            SET 
-                current_price = $1,
-                volume_24h = $2,
-                price_change_24h = $3,
-                token_source = 'raydium',
-                last_price_update = CURRENT_TIMESTAMP
-            WHERE mint_address = $4
-        `, [
-            pool.price,
-            pool.day.volume,
-            this.calculatePriceChange(pool.day.priceMin, pool.day.priceMax),
-            pool.mintA.address
-        ]);
+    private async updatePoolStats(client: PoolClient, pool: RaydiumPool): Promise<void> {
+        console.log('\n[DEBUG] updatePoolStats called with:', {
+            poolId: pool.id,
+            mintA: pool.mintA.address,
+            mintB: pool.mintB.address,
+            price: pool.price
+        });
+
+        try {
+            await client.query(`
+                UPDATE token_platform.tokens 
+                SET 
+                    current_price = $1,
+                    volume_24h = $2,
+                    price_change_24h = $3,
+                    token_source = 'raydium',
+                    last_price_update = CURRENT_TIMESTAMP
+                WHERE mint_address = $4
+            `, [
+                pool.price,
+                pool.day.volume,
+                this.calculatePriceChange(pool.day.priceMin, pool.day.priceMax),
+                pool.mintA.address
+            ]);
+            wsManager.broadcastPrice(pool.mintA.address, pool.price);
+            wsManager.broadcastPrice(pool.mintB.address, pool.price);
+        } catch (error) {
+            console.error('[DEBUG] Error in updatePoolStats:', error);
+            throw error;
+        }
     }
 
     private chunk<T>(array: T[], size: number): T[][] {
@@ -645,7 +663,6 @@ export class TokenDiscoveryService {
     }
 
     async processQueuedPriceUpdates() {
-        console.log('Processing queued updates...');
         // Take a snapshot of the queue and clear it immediately
         const queueSnapshot = Array.from(this.tokenPriceQueue);
         this.tokenPriceQueue.clear();  // Clear the queue before processing
@@ -654,7 +671,7 @@ export class TokenDiscoveryService {
 
         for (const batchAddresses of tokenChunks) {
             try {
-                console.log('Calling Jupiter API...');
+
                 const priceData = await this.fetchJupiterPrices(batchAddresses);
                 await this.updateBatchPrices(priceData);
 
@@ -712,6 +729,9 @@ export class TokenDiscoveryService {
                     update.price,
                     update.marketCap
                 ]);
+
+                // Add this line to broadcast price updates
+                wsManager.broadcastPrice(update.address, update.price);
             }
 
         } catch (error) {

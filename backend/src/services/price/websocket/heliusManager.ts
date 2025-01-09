@@ -4,6 +4,7 @@ import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { RaydiumProcessor } from '../processors/raydiumProcessor';
 import { BondingCurveProcessor } from '../processors/bondingCurveProcessor';
+import { wsManager } from '../../websocket/WebSocketManager';
 
 export class HeliusManager extends EventEmitter {
     private static instance: HeliusManager;
@@ -52,16 +53,8 @@ export class HeliusManager extends EventEmitter {
         // });
 
         this.bondingCurveProcessor.on('priceUpdate', (update) => {
-            wss.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN &&
-                    (client as any).subscriptions?.has(update.mintAddress)) {
-                    client.send(JSON.stringify({
-                        type: 'price',
-                        mintAddress: update.mintAddress,
-                        price: update.price
-                    }));
-                }
-            });
+            // Replace direct WebSocket broadcasting with WebSocketManager
+            wsManager.broadcastPrice(update.mintAddress, update.price);
         });
     }
 

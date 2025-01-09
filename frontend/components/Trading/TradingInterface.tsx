@@ -52,7 +52,8 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     const { publicKey, connected } = wallet
 
     // State management
-    const [amount, setAmount] = useState<string>('')
+    const [rawInput, setRawInput] = useState('');
+    const [amount, setAmount] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false)
     const [isSelling, setIsSelling] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -419,6 +420,18 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         }
     }, [connected, publicKey, token.mintAddress]);
 
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        // Allow empty string or valid numbers only
+        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+            setRawInput(value);
+            // Only update amount if it's a valid number
+            if (value && !isNaN(parseFloat(value))) {
+                setAmount(value);
+            }
+        }
+    };
+
     return (
         <div className="p-4 bg-[#1a1b1f] rounded-lg">
             {!connected && (
@@ -478,9 +491,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                             Amount ({token.symbol})
                         </label>
                         <input
-                            type="number"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            type="text"
+                            value={rawInput}
+                            onChange={handleInputChange}
                             className="w-full p-3 bg-white rounded-lg text-[#1a1b1f] text-[16px]"
                             placeholder="Enter amount"
                             disabled={!isTokenTradable || isLoading}

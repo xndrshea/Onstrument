@@ -4,22 +4,35 @@ import { logger } from '../utils/logger'
 
 dotenv.config()
 
-const config = {
-    user: process.env.DB_USER || 'alexandershea',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'token_platform',
-    password: process.env.DB_PASSWORD,
-    port: parseInt(process.env.DB_PORT || '5432'),
-}
+const dbConfig = {
+    user: 'alexandershea',
+    host: 'localhost',
+    database: 'token_platform',
+    port: 5432
+};
 
 logger.info('Database configuration:', {
-    user: config.user,
-    host: config.host,
-    database: config.database,
-    port: config.port
+    user: dbConfig.user,
+    host: dbConfig.host,
+    database: dbConfig.database,
+    port: dbConfig.port
 })
 
-export const pool = new Pool(config)
+const pool = new Pool({
+    user: 'alexandershea',
+    host: 'localhost',
+    database: 'token_platform',
+    port: 5432,
+    max: 20,
+    min: 4,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000
+});
+
+// Add error handler
+pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
+});
 
 // Simple connection test
 pool.query('SELECT NOW()', (err) => {
@@ -338,3 +351,5 @@ export async function initializeDatabase() {
         client.release()
     }
 }
+
+export { pool };

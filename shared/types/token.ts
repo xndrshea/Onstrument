@@ -99,6 +99,7 @@ export interface TokenRecord {
     apr7d?: number;
     apr30d?: number;
     tokenSource?: string;
+    supply?: number;
 }
 
 export interface TokenFormData {
