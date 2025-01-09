@@ -152,13 +152,15 @@ button[type="submit"]:disabled {
 
 .modal-content {
     position: relative;
+    background-color: #232427;
+    border-radius: 8px;
+    padding: 1.5rem;
     width: 90%;
-    max-width: 600px;
+    max-width: 42rem;
     max-height: 90vh;
     overflow-y: auto;
-    background-color: #1a1b1f;
-    border-radius: 8px;
-    padding: 2rem;
+    margin: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .modal-close {

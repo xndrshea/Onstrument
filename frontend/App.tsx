@@ -17,9 +17,9 @@ import { ProfileModal } from './components/Profile/ProfileModal'
 function App() {
     const { connected, publicKey } = useWallet()
     const [isModalOpen, setIsModalOpen] = useState(false)
-    const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
     const [user, setUser] = useState<User | null>(null)
+    const [isProfileOpen, setIsProfileOpen] = useState(false)
 
     useEffect(() => {
         if (connected && publicKey) {
@@ -51,7 +51,7 @@ function App() {
                 display: 'flex',
                 flexDirection: 'column'
             }}>
-                <Header />
+                <Header onProfileClick={() => setIsProfileOpen(true)} />
 
                 <main style={{ padding: '20px', color: 'white', flex: 1 }}>
                     <Routes>

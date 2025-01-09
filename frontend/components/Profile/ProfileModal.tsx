@@ -3,6 +3,7 @@ import { User, UserService } from '../../services/userService';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { API_BASE_URL } from '../../config';
 import { Link } from 'react-router-dom';
+import { TradingStats } from './TradingStats';
 
 interface TradingStatsRecord {
     mint_address: string;
@@ -81,128 +82,69 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-[#232427] p-6 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-white">Profile</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white">
-                        ✕
-                    </button>
-                </div>
-
-                {/* Existing User Info */}
-                {user && (
-                    <div className="space-y-4 text-white mb-8">
-                        <p>User ID: <span className="text-gray-300">{user.userId}</span></p>
-                        <p>Wallet: <span className="text-gray-300">{user.walletAddress}</span></p>
-
-                        <div className="flex items-center justify-between">
-                            <span>Subscription Status:</span>
-                            <button
-                                onClick={handleToggleSubscription}
-                                disabled={isLoading}
-                                className={`px-4 py-2 rounded-md transition-colors ${user.isSubscribed
-                                    ? 'bg-green-500 hover:bg-green-600'
-                                    : 'bg-gray-500 hover:bg-gray-600'
-                                    }`}
-                            >
-                                {isLoading ? 'Loading...' : user.isSubscribed ? 'Subscribed' : 'Not Subscribed'}
-                            </button>
-                        </div>
-
-                        {user.subscriptionExpiresAt && (
-                            <p>Expires: <span className="text-gray-300">
-                                {new Date(user.subscriptionExpiresAt).toLocaleDateString()}
-                            </span></p>
-                        )}
-                        <p>Member Since: <span className="text-gray-300">
-                            {new Date(user.createdAt).toLocaleDateString()}
-                        </span></p>
+        <div
+            className={`fixed inset-0 overflow-y-auto bg-black/50 flex items-center justify-center z-[9999] p-4 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                } transition-opacity duration-300`}
+            onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                    onClose();
+                }
+            }}
+        >
+            <div
+                className={`relative bg-[#232427] rounded-lg w-full max-w-2xl transform ${isOpen ? 'translate-y-0' : '-translate-y-8'
+                    } transition-transform duration-300`}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold text-white">Profile</h2>
+                        <button
+                            onClick={onClose}
+                            className="text-gray-400 hover:text-white"
+                        >
+                            ×
+                        </button>
                     </div>
-                )}
 
-                {/* Trading Statistics Section */}
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-white">Trading Statistics</h3>
+                    {/* Modal content */}
+                    <div className="max-h-[80vh] overflow-y-auto">
+                        {/* User info section */}
+                        {user && (
+                            <div className="space-y-4 text-white mb-8">
+                                <p>User ID: <span className="text-gray-300">{user.userId}</span></p>
+                                <p>Wallet: <span className="text-gray-300">{user.walletAddress}</span></p>
 
-                    {isLoadingStats ? (
-                        <div className="text-gray-400">Loading statistics...</div>
-                    ) : stats.length > 0 ? (
-                        <>
-                            {/* Overall Stats */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                                <div className="bg-[#2A2D31] p-3 rounded-lg">
-                                    <p className="text-sm text-gray-400">Total Trades</p>
-                                    <p className="text-lg font-bold text-white">
-                                        {stats.reduce((acc, s) => acc + (Number(s.total_trades) || 0), 0)}
-                                    </p>
+                                <div className="flex items-center justify-between">
+                                    <span>Subscription Status:</span>
+                                    <button
+                                        onClick={handleToggleSubscription}
+                                        disabled={isLoading}
+                                        className={`px-4 py-2 rounded-md transition-colors ${user.isSubscribed
+                                            ? 'bg-green-500 hover:bg-green-600'
+                                            : 'bg-gray-500 hover:bg-gray-600'
+                                            }`}
+                                    >
+                                        {isLoading ? 'Loading...' : user.isSubscribed ? 'Subscribed' : 'Not Subscribed'}
+                                    </button>
                                 </div>
-                                <div className="bg-[#2A2D31] p-3 rounded-lg">
-                                    <p className="text-sm text-gray-400">Total Volume</p>
-                                    <p className="text-lg font-bold text-white">
-                                        {stats.reduce((acc, s) => acc + (Number(s.total_volume) || 0), 0).toFixed(4)} SOL
-                                    </p>
-                                </div>
-                                <div className="bg-[#2A2D31] p-3 rounded-lg">
-                                    <p className="text-sm text-gray-400">Buy Volume</p>
-                                    <p className="text-lg font-bold text-white">
-                                        {stats.reduce((acc, s) => acc + (Number(s.total_buy_volume) || 0), 0).toFixed(4)} SOL
-                                    </p>
-                                </div>
-                                <div className="bg-[#2A2D31] p-3 rounded-lg">
-                                    <p className="text-sm text-gray-400">Sell Volume</p>
-                                    <p className="text-lg font-bold text-white">
-                                        {stats.reduce((acc, s) => acc + (Number(s.total_sell_volume) || 0), 0).toFixed(4)} SOL
-                                    </p>
-                                </div>
+
+                                {user.subscriptionExpiresAt && (
+                                    <p>Expires: <span className="text-gray-300">
+                                        {new Date(user.subscriptionExpiresAt).toLocaleDateString()}
+                                    </span></p>
+                                )}
+                                <p>Member Since: <span className="text-gray-300">
+                                    {new Date(user.createdAt).toLocaleDateString()}
+                                </span></p>
                             </div>
+                        )}
 
-                            {/* Token Stats Table */}
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full">
-                                    <thead className="bg-[#2A2D31]">
-                                        <tr>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-400">Token</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-400">Trades</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-400">Volume</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-400">Last Trade</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-700">
-                                        {stats.map((stat) => (
-                                            <tr key={stat.mint_address} className="bg-[#2A2D31] bg-opacity-50">
-                                                <td className="px-4 py-2">
-                                                    <Link
-                                                        to={`/token/${stat.mint_address}`}
-                                                        className="hover:opacity-80"
-                                                        onClick={onClose}
-                                                    >
-                                                        <div className="text-sm text-white hover:text-blue-400 transition-colors">
-                                                            {stat.symbol}
-                                                        </div>
-                                                        <div className="text-xs text-gray-400 hover:text-blue-300 transition-colors">
-                                                            {stat.name}
-                                                        </div>
-                                                    </Link>
-                                                </td>
-                                                <td className="px-4 py-2 text-sm text-gray-300">
-                                                    {Number(stat.total_trades)}
-                                                </td>
-                                                <td className="px-4 py-2 text-sm text-gray-300">
-                                                    {Number(stat.total_volume).toFixed(4)} SOL
-                                                </td>
-                                                <td className="px-4 py-2 text-sm text-gray-300">
-                                                    {new Date(stat.last_trade_at).toLocaleDateString()}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="text-gray-400">No trading history found.</div>
-                    )}
+                        {/* Trading stats section */}
+                        <div className="mt-6">
+                            <TradingStats />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

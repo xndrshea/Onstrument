@@ -182,44 +182,46 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         }
     };
 
-    const fetchSpotPrice = async () => {
-        // For unmigrated custom tokens, use price history
-        if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
-            const history = await priceClient.getPriceHistory(token.mintAddress);
-            if (history?.length) {
-                const latestPrice = history[history.length - 1].close;
-                setSpotPrice(latestPrice);
-                if (onPriceUpdate) {
-                    onPriceUpdate(latestPrice);
-                }
-            }
-        }
-        // For DEX tokens and migrated custom tokens, use Jupiter
-        else {
-            try {
-                const appropriateConnection = getAppropriateConnection();
-                const quote = await dexService.calculateTradePrice(
-                    token.mintAddress,
-                    1,
-                    true,
-                    appropriateConnection
-                );
-                if (quote) {
-                    setSpotPrice(quote.price);
-                    if (onPriceUpdate) {
-                        onPriceUpdate(quote.price);
-                    }
-                }
-            } catch (error) {
-                console.error('Error getting spot price:', error);
-            }
-        }
-    };
-
     useEffect(() => {
-        fetchSpotPrice();
-        const interval = setInterval(fetchSpotPrice, 10000);
-        return () => clearInterval(interval);
+        let intervalId: NodeJS.Timeout;
+
+        const updatePrice = async () => {
+            if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
+                // For unmigrated custom tokens, use price history
+                const history = await priceClient.getPriceHistory(token.mintAddress);
+                if (history?.length) {
+                    const latestPrice = history[history.length - 1].close;
+                    setSpotPrice(latestPrice);
+                    if (onPriceUpdate) onPriceUpdate(latestPrice);
+                }
+            } else {
+                // For DEX tokens and migrated custom tokens, use Jupiter
+                try {
+                    const appropriateConnection = getAppropriateConnection();
+                    const quote = await dexService.calculateTradePrice(
+                        token.mintAddress,
+                        1,
+                        true,
+                        appropriateConnection
+                    );
+                    if (quote) {
+                        setSpotPrice(quote.price);
+                        if (onPriceUpdate) onPriceUpdate(quote.price);
+                    }
+                } catch (error) {
+                    console.error('Error getting spot price:', error);
+                }
+            }
+        };
+
+        // Initial price fetch
+        updatePrice();
+
+        // Set up interval for updates
+        intervalId = setInterval(updatePrice, 10000);
+
+        // Cleanup
+        return () => clearInterval(intervalId);
     }, [token.mintAddress, token.tokenType, token.curveConfig?.migrationStatus]);
 
     // Price quote updates
@@ -408,10 +410,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
             getInitialPrice();
             const interval = setInterval(getInitialPrice, 10000);
-            return () => clearInterval(interval);
-        } else {
-            fetchSpotPrice();
-            const interval = setInterval(fetchSpotPrice, 10000);
             return () => clearInterval(interval);
         }
     }, [token.mintAddress, token.tokenType]);

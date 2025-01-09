@@ -109,52 +109,6 @@ export function TokenomicsRoadmap() {
                     </ul>
                 </div>
             </div>
-
-            <div className="roadmap-section mt-16 relative">
-                <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent"></div>
-                <div className="relative z-10 p-8">
-                    <h2 className="text-3xl font-bold mb-12 text-primary text-center">
-                        Development Roadmap
-                        <div className="mt-2 h-1 w-24 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto"></div>
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {[
-                            "Full Telegram bot integration",
-                            "Onstrument Eliza bot",
-                            "Full Telegram Integration",
-                            "Price backfilling for all tokens",
-                            "Full Ethereum expansion",
-                            "UI/UX improvements",
-                            "Lots of user feedback",
-                            "Transaction history for all tokens",
-                            "Live transactions for all of Onstrument",
-                            "Advanced order types",
-                            "Custom DEX aggregation",
-                            "Running our own nodes across ecosystems for faster info",
-                            "APIs for price history and everything else",
-                            "Potentially open source (?)",
-                            "No-fee perpetuals",
-                            "Most importantly: whatever YOU want",
-                            "Contact for feature and bug feedback"
-                        ].map((item, index) => (
-                            <div key={index}
-                                className="group relative p-4 rounded-xl border border-primary/10 backdrop-blur-sm
-                                    hover:border-primary/30 transition-all duration-300
-                                    bg-gradient-to-br from-gray-800/50 to-gray-900/50">
-                                <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
-                                <div className="relative z-10 flex items-center space-x-3">
-                                    <div className="flex-shrink-0">
-                                        <div className="h-2 w-2 rounded-full bg-primary group-hover:animate-pulse"></div>
-                                    </div>
-                                    <span className="text-gray-300 group-hover:text-primary transition-colors">
-                                        {item}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
         </div>
     );
 }
