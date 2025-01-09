@@ -43,6 +43,10 @@ export const dexService = {
         isSelling: boolean,
         _connection: Connection
     ) => {
+        if (!amount || isNaN(amount) || amount <= 0) {
+            return null;
+        }
+
         try {
             const mintInfo = await mainnetConnection.getParsedAccountInfo(
                 new PublicKey(mintAddress)
@@ -54,21 +58,33 @@ export const dexService = {
 
             const tokenDecimals = (mintInfo.value.data as any).parsed.info.decimals;
 
-            // When buying, we want this many tokens as OUTPUT
-            // So we need to query with the output amount
-            const response = await fetch(
-                `https://quote-api.jup.ag/v6/quote?` +
-                `inputMint=${isSelling ? mintAddress : NATIVE_SOL_MINT}` +
-                `&outputMint=${isSelling ? NATIVE_SOL_MINT : mintAddress}` +
-                `&amount=${Math.floor(amount * 10 ** tokenDecimals)}` +
-                `&swapMode=${isSelling ? 'ExactIn' : 'ExactOut'}`
-            );
+            // For buying: amount is desired token amount
+            // For selling: amount is token amount to sell
+            const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
+            const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
+            const calculatedAmount = Math.floor(amount * 10 ** tokenDecimals);
 
+            console.log('Trade calculation:', {
+                isSelling,
+                rawAmount: amount,
+                calculatedAmount,
+                tokenDecimals,
+                inputMint,
+                outputMint
+            });
+
+            const url = `https://quote-api.jup.ag/v6/quote?` +
+                `inputMint=${inputMint}` +
+                `&outputMint=${outputMint}` +
+                `&amount=${calculatedAmount}` +
+                `&swapMode=${isSelling ? 'ExactIn' : 'ExactOut'}`;
+
+            const response = await fetch(url);
             const quoteResponse = await response.json();
 
             if (!response.ok || !quoteResponse.outAmount) {
                 console.error('Invalid quote response:', quoteResponse);
-                return { price: 0, totalCost: 0, isSelling };
+                return null;
             }
 
             let price, totalCost;
@@ -79,10 +95,9 @@ export const dexService = {
                 totalCost = solReceived;
             } else {
                 const solNeeded = Number(quoteResponse.inAmount) / 1e9;
-                price = solNeeded;  // Total SOL needed
+                price = solNeeded / amount;  // Price per token
                 totalCost = solNeeded;
             }
-
 
             return {
                 price,
@@ -91,7 +106,7 @@ export const dexService = {
             };
         } catch (error) {
             console.error('Error calculating trade price:', error);
-            return { price: 0, totalCost: 0, isSelling };
+            return null;
         }
     },
 

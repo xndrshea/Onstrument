@@ -34,12 +34,19 @@ const formatSmallNumber = (num: number | null): JSX.Element | string => {
                 break;
             }
         }
-        const remainingDigits = numStr.slice(2 + zeroCount);
-        return (
-            <span>
-                0.0<sub>{zeroCount}</sub>{remainingDigits} SOL
-            </span>
-        );
+
+        // Only use subscript notation if there are more than 3 consecutive zeros
+        if (zeroCount > 3) {
+            const remainingDigits = numStr.slice(2 + zeroCount);
+            return (
+                <span>
+                    0.0<sub>{zeroCount}</sub>{remainingDigits} SOL
+                </span>
+            );
+        } else {
+            // Otherwise use regular notation
+            return `${num.toFixed(4)} SOL`;
+        }
     }
 
     // For regular numbers
@@ -116,7 +123,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     true,
                     mainnetConnection
                 );
-                setIsTokenTradable(quote && quote.price > 0);
+                setIsTokenTradable(Boolean(quote && quote.price > 0));
                 setIsMigrating(false);
             } catch (error) {
                 console.log("Raydium price check failed:", error);
@@ -133,7 +140,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     true,
                     appropriateConnection
                 );
-                setIsTokenTradable(quote && quote.price > 0);
+                setIsTokenTradable(Boolean(quote && quote.price > 0));
                 setIsMigrating(false);
             } catch (error) {
                 console.log("Token tradability check failed:", error);
@@ -218,7 +225,14 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     // Price quote updates
     useEffect(() => {
         const updatePriceQuote = async () => {
-            if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+            // Clear price info if input is empty or invalid
+            if (!rawInput || rawInput.trim() === '') {
+                setPriceInfo(null);
+                return;
+            }
+
+            const parsedAmount = parseFloat(amount);
+            if (isNaN(parsedAmount) || parsedAmount <= 0) {
                 setPriceInfo(null);
                 return;
             }
@@ -230,7 +244,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     const appropriateConnection = getAppropriateConnection();
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
-                        parseFloat(amount),
+                        parsedAmount,
                         isSelling,
                         appropriateConnection
                     );
@@ -238,7 +252,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 }
                 // For unmigrated custom tokens, use bonding curve
                 else if (bondingCurve) {
-                    const parsedAmount = parseFloat(amount);
                     const quote = await bondingCurve.getPriceQuote(parsedAmount, !isSelling);
                     // Convert from lamports to SOL
                     if (quote) {
@@ -256,7 +269,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         };
 
         updatePriceQuote();
-    }, [amount, isSelling, token.tokenType, token.mintAddress, token.curveConfig?.migrationStatus, bondingCurve]);
+    }, [amount, rawInput, isSelling, token.tokenType, token.mintAddress, token.curveConfig?.migrationStatus, bondingCurve]);
 
     // Initial balance fetch and periodic updates
     useEffect(() => {
@@ -544,7 +557,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     </button>
 
                     {/* Price Quote Display */}
-                    {priceInfo && (
+                    {priceInfo && amount && amount.trim() !== '' && parseFloat(amount) > 0 && (
                         <div className="mt-4 p-3 bg-[#1e2025] rounded-lg">
                             <p className="text-gray-400 text-[14px]">
                                 {isSelling ? 'You will receive' : 'You will pay'}
