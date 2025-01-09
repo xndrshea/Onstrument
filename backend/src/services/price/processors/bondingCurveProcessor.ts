@@ -10,6 +10,7 @@ import WebSocket from 'ws';
 import { WebSocketClient } from '../websocket/types';
 import { pool } from '../../../config/database';
 import { BondingCurvePriceFetcher } from './bondingCurvePriceFetcher';
+import { wsManager } from '../../websocket/WebSocketManager';
 
 
 const TOKEN_DECIMALS = 6;
@@ -31,7 +32,7 @@ export class BondingCurveProcessor extends BaseProcessor {
     constructor() {
         super();
         this.connection = new Connection(config.HELIUS_DEVNET_RPC_URL);
-        this.migrationService = new MigrationService();
+        this.migrationService = new MigrationService(wsManager);
         this.connectWebSocket();
     }
 
@@ -39,7 +40,6 @@ export class BondingCurveProcessor extends BaseProcessor {
         this.wsClient = new WebSocket(config.HELIUS_DEVNET_WEBSOCKET_URL);
 
         this.wsClient.on('open', () => {
-            logger.info('BondingCurve WebSocket Connected');
             this.subscribe();
         });
 
@@ -50,7 +50,6 @@ export class BondingCurveProcessor extends BaseProcessor {
         });
 
         this.wsClient.on('close', () => {
-            logger.warn('BondingCurve WebSocket closed, attempting to reconnect...');
             setTimeout(() => this.connectWebSocket(), 5000);
         });
     }
@@ -67,7 +66,6 @@ export class BondingCurveProcessor extends BaseProcessor {
                 { commitment: "confirmed" }
             ]
         };
-        logger.info('BondingCurve Subscribing to logs:', subscribeMessage);
         this.wsClient?.send(JSON.stringify(subscribeMessage));
     }
 

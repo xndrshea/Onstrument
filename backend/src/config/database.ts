@@ -11,13 +11,6 @@ const dbConfig = {
     port: 5432
 };
 
-logger.info('Database configuration:', {
-    user: dbConfig.user,
-    host: dbConfig.host,
-    database: dbConfig.database,
-    port: dbConfig.port
-})
-
 const pool = new Pool({
     user: 'alexandershea',
     host: 'localhost',
@@ -40,7 +33,6 @@ pool.query('SELECT NOW()', (err) => {
         logger.error('Database connection failed:', err)
         process.exit(1)
     }
-    logger.info('Database connected successfully')
 })
 
 export async function initializeDatabase() {
@@ -340,7 +332,6 @@ export async function initializeDatabase() {
                 schedule_interval => INTERVAL '1 day',
                 if_not_exists => TRUE);
         `);
-        logger.info('Database initialized successfully')
         return true
 
     } catch (error) {

@@ -246,7 +246,6 @@ export class TokenDiscoveryService {
 
     public async fetchRaydiumPools(): Promise<RaydiumPool[]> {
         try {
-            console.log('Attempting to fetch Raydium pools...');
             const allPools: RaydiumPool[] = [];
 
             // Fetch both pages
@@ -331,7 +330,6 @@ export class TokenDiscoveryService {
 
     public async fetchGeckoTerminalPools(): Promise<GeckoTerminalPool[]> {
         if (this.isFetching) {
-            this.logger.info('Skipping GeckoTerminal fetch - previous fetch still in progress');
             return [];
         }
 

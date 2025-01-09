@@ -77,11 +77,9 @@ export class HeliusManager extends EventEmitter {
         if (!wsClient) return;
 
         wsClient.on('open', () => {
-            logger.info(`Connected to Helius WebSocket on ${network}`);
         });
 
         wsClient.on('message', (data) => {
-            logger.info(`Raw WebSocket message on ${network}:`, data.toString());
             this.handleMessage(data, network);
         });
 
@@ -203,7 +201,6 @@ export class HeliusManager extends EventEmitter {
                     { encoding: 'base64', commitment: 'confirmed' }
                 ]
             }));
-            logger.info(`Subscribed to account: ${accountAddress} on ${network}`);
         } catch (error) {
             logger.error(`Failed to subscribe to account ${accountAddress}:`, error);
             throw error;

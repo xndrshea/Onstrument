@@ -49,8 +49,6 @@ async function startServer() {
         await heliusManager.initialize(wss)
 
         server.listen(PORT, () => {
-            logger.info(`Server running on port ${PORT}`)
-            logger.info(`WebSocket server running on ws://localhost:${PORT}/ws`)
         })
 
     } catch (error) {

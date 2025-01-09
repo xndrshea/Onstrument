@@ -30,16 +30,11 @@ export class WebSocketManager extends EventEmitter {
         this.wss = wss;
         this.setupWebSocketServer();
 
-        // Add debug logging
-        this.wss.on('connection', (ws) => {
-            logger.info('New WebSocket connection received');
-        });
 
         this.wss.on('error', (error) => {
             logger.error('WebSocket server error:', error);
         });
 
-        logger.info('WebSocket Manager initialized');
     }
 
     private setupWebSocketServer() {
@@ -58,7 +53,6 @@ export class WebSocketManager extends EventEmitter {
         ws.subscriptions = new Set();
         this.clients.set(id, ws);
 
-        logger.info(`New WebSocket client connected: ${id}`);
         return ws;
     }
 
@@ -91,7 +85,6 @@ export class WebSocketManager extends EventEmitter {
             case 'subscribe':
                 if (message.mintAddress) {
                     client.subscriptions.add(message.mintAddress);
-                    logger.info(`Client ${client.id} subscribed to ${message.mintAddress}`);
                 }
                 break;
             case 'unsubscribe':

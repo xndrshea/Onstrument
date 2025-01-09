@@ -65,19 +65,15 @@ export function TokenDetailsPage() {
 
         let cleanup: (() => void) | undefined;
         const setupSubscription = async () => {
-            // Add debug logging
-            console.log('Setting up WebSocket subscription for:', token.mintAddress);
-
             cleanup = await priceClient.subscribeToPrice(
                 token.mintAddress,
                 (update) => {
-                    console.log('Received price update:', update);
-                    // Update current price
                     setCurrentPrice(update.price);
 
-                    // Recalculate market cap if we have supply
-                    if (token?.supply) {
-                        const newMarketCap = update.price * token.supply;
+                    // Recalculate market cap accounting for decimals
+                    if (token?.supply && token.decimals !== undefined) {
+                        const adjustedSupply = token.supply / Math.pow(10, token.decimals);
+                        const newMarketCap = update.price * adjustedSupply;
                         setToken(prevToken => prevToken ? {
                             ...prevToken,
                             currentPrice: update.price,
@@ -93,7 +89,6 @@ export function TokenDetailsPage() {
 
         return () => {
             if (cleanup) {
-                console.log('Cleaning up WebSocket subscription');
                 cleanup();
             }
         };

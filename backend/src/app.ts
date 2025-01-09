@@ -24,7 +24,6 @@ export function createApp() {
     const discoveryService = TokenDiscoveryService.getInstance()
 
     // Run initial queries immediately
-    logger.info('Running initial token discovery...')
     Promise.all([
         discoveryService.fetchGeckoTerminalPools(),
         discoveryService.fetchRaydiumPools()
@@ -69,7 +68,6 @@ export function createApp() {
     geckoJob.start()
     raydiumJob.start()
 
-    logger.info('Price discovery jobs started')
 
     // Security middleware
     app.use(helmet({

@@ -1,10 +1,7 @@
 import { API_BASE_URL, MAINNET_API_BASE_URL } from '../config';
-import { WebSocketMessage } from '../../shared/types/websocket';
 import { CandlestickData } from 'lightweight-charts';
 import { Time } from 'lightweight-charts';
 
-console.log('API_BASE_URL:', API_BASE_URL);
-console.log('MAINNET_API_BASE_URL:', MAINNET_API_BASE_URL);
 
 class WebSocketClient {
     private static instance: WebSocketClient | null = null;
@@ -39,10 +36,6 @@ class WebSocketClient {
         this.wsDevnetUrl = API_BASE_URL.replace('http', 'ws') + '/ws';  // Remove 'api/'
         this.wsMainnetUrl = MAINNET_API_BASE_URL.replace('http', 'ws') + '/ws';
 
-        console.log('WebSocket URLs:', {
-            devnet: this.wsDevnetUrl,
-            mainnet: this.wsMainnetUrl
-        });
     }
 
     static getInstance(): WebSocketClient {
@@ -68,19 +61,13 @@ class WebSocketClient {
     private async ensureConnected(network: 'mainnet' | 'devnet' = 'devnet'): Promise<void> {
         const ws = this.getWebSocketForNetwork(network);
         if (ws?.readyState === WebSocket.OPEN) {
-            console.log(`WebSocket already connected to ${network}`);
             return;
         }
-
-        console.log(`Attempting to connect WebSocket to ${network} at URL:`,
-            network === 'mainnet' ? this.wsMainnetUrl : this.wsDevnetUrl
-        );
 
         if (!this.connectionPromises[network]) {
             this.connectionPromises[network] = new Promise((resolve, reject) => {
                 try {
                     const wsUrl = network === 'devnet' ? this.wsDevnetUrl : this.wsMainnetUrl;
-                    console.log('Connecting to WebSocket URL:', wsUrl);
                     const newWs = new WebSocket(wsUrl);
 
                     // Assign the WebSocket instance immediately
@@ -102,7 +89,6 @@ class WebSocketClient {
 
                     // Rest of the WebSocket setup remains the same
                     newWs.onclose = () => {
-                        console.log(`WebSocket disconnected from ${network} network`);
                         if (network === 'mainnet') {
                             this.wsMainnet = null;
                         } else {
@@ -169,7 +155,6 @@ class WebSocketClient {
 
     private sendSubscription(mintAddress: string) {
         const ws = this.getWebSocketForMint(mintAddress);
-        console.log('Sending subscription for:', mintAddress, 'WebSocket state:', ws?.readyState);
 
         if (ws?.readyState === WebSocket.OPEN) {
             const subscribeMsg = {
@@ -177,7 +162,6 @@ class WebSocketClient {
                 mintAddress,
                 channel: 'price'
             };
-            console.log('Sending subscribe message:', subscribeMsg);
             ws.send(JSON.stringify(subscribeMsg));
         } else {
             console.error('WebSocket not ready. State:', ws?.readyState);
@@ -210,7 +194,6 @@ class WebSocketClient {
         callback: (update: { price: number; time: number }) => void,
         network: 'mainnet' | 'devnet' = 'devnet'
     ): Promise<() => void> {
-        console.log(`Setting up WebSocket subscription for ${mintAddress} on ${network}`);
 
         // Store the network for this token
         this.tokenNetworks.set(mintAddress, network);
@@ -276,9 +259,7 @@ class WebSocketClient {
 
     async getLatestPrice(mintAddress: string): Promise<number | null> {
         try {
-            console.log('Fetching latest price for:', mintAddress);
             const response = await fetch(`${API_BASE_URL}/prices/${mintAddress}/latest`);
-            console.log('Price API Response:', response);
 
             if (!response.ok) {
                 console.error('Price fetch failed:', response.status, response.statusText);
@@ -286,7 +267,6 @@ class WebSocketClient {
             }
 
             const data = await response.json();
-            console.log('Price data received:', data);
             return data.price;
         } catch (error) {
             console.error('Error in getLatestPrice:', error);
@@ -397,7 +377,6 @@ export const priceClient = {
 
     // Only used for getting historical price data for charts
     async getPriceHistory(mintAddress: string): Promise<CandlestickData<Time>[]> {
-        console.log('Fetching price history from API for:', mintAddress);
         const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
 
         if (!response.ok) {
@@ -440,7 +419,6 @@ export const priceClient = {
         callback: (update: { price: number; time: number }) => void,
         network: 'mainnet' | 'devnet' = 'devnet'
     ): Promise<() => void> {
-        console.log(`Setting up WebSocket subscription for ${mintAddress} on ${network}`);
         return await this.wsClient.subscribeToPrice(mintAddress, callback, network);
     },
 

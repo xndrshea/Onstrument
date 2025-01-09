@@ -25,9 +25,7 @@ export class JupiterPriceUpdater {
     private updateTimer: NodeJS.Timeout | null = null;
 
     private constructor() {
-        logger.info('Initializing JupiterPriceUpdater service...');
         this.startUpdateCycle();
-        logger.info('JupiterPriceUpdater service initialized and update cycle started');
     }
 
     static getInstance(): JupiterPriceUpdater {
@@ -49,8 +47,6 @@ export class JupiterPriceUpdater {
 
         try {
             this.isProcessing = true;
-            logger.info('Starting price update cycle');
-
             const tokens = await this.fetchTokensForUpdate();
 
             const tokenBatches = this.chunkArray(tokens, this.BATCH_SIZE);
