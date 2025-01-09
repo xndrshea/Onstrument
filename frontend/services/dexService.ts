@@ -15,6 +15,13 @@ interface TradeParams {
     isSubscribed: boolean;
 }
 
+type PriceQuote = {
+    price: number;
+    totalCost: number;
+    outAmount: string | number;
+    isSelling: boolean;
+};
+
 export const dexService = {
     getTokenPrice: async (
         mintAddress: string,
@@ -42,7 +49,7 @@ export const dexService = {
         amount: number,
         isSelling: boolean,
         _connection: Connection
-    ) => {
+    ): Promise<PriceQuote | null> => {
         if (!amount || isNaN(amount) || amount <= 0) {
             return null;
         }
@@ -58,32 +65,45 @@ export const dexService = {
 
             const tokenDecimals = (mintInfo.value.data as any).parsed.info.decimals;
 
-            // For buying: amount is desired token amount
-            // For selling: amount is token amount to sell
+            // For buying: amount is in tokens, but we need to convert to SOL input
+            // For selling: amount is in tokens directly
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
-            const calculatedAmount = Math.floor(amount * 10 ** tokenDecimals);
 
-            console.log('Trade calculation:', {
-                isSelling,
-                rawAmount: amount,
-                calculatedAmount,
-                tokenDecimals,
-                inputMint,
-                outputMint
-            });
+            // Always use ExactIn, but calculate amount differently
+            const calculatedAmount = isSelling
+                ? Math.floor(amount * 10 ** tokenDecimals)  // Selling tokens
+                : Math.floor(amount * 1e9);                 // Buying with SOL
 
             const url = `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
                 `&amount=${calculatedAmount}` +
-                `&swapMode=${isSelling ? 'ExactIn' : 'ExactOut'}`;
+                `&swapMode=ExactIn`;  // Always ExactIn
+
+            console.log('Requesting quote:', {
+                isSelling,
+                inputMint,
+                outputMint,
+                amount: calculatedAmount,
+                swapMode: 'ExactIn'
+            });
 
             const response = await fetch(url);
             const quoteResponse = await response.json();
 
-            if (!response.ok || !quoteResponse.outAmount) {
-                console.error('Invalid quote response:', quoteResponse);
+            if (!response.ok) {
+                console.error('Quote failed:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: quoteResponse,
+                    params: {
+                        inputMint,
+                        outputMint,
+                        amount: calculatedAmount,
+                        isSelling
+                    }
+                });
                 return null;
             }
 
@@ -91,17 +111,18 @@ export const dexService = {
 
             if (isSelling) {
                 const solReceived = Number(quoteResponse.outAmount) / 1e9;
-                price = solReceived / amount;  // Price per token
+                price = solReceived / amount;
                 totalCost = solReceived;
             } else {
-                const solNeeded = Number(quoteResponse.inAmount) / 1e9;
-                price = solNeeded / amount;  // Price per token
-                totalCost = solNeeded;
+                const tokensReceived = Number(quoteResponse.outAmount) / 10 ** tokenDecimals;
+                price = amount / tokensReceived;  // SOL per token
+                totalCost = amount;  // Amount of SOL
             }
 
             return {
                 price,
                 totalCost,
+                outAmount: isSelling ? amount : quoteResponse.outAmount,
                 isSelling
             };
         } catch (error) {

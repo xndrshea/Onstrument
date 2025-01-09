@@ -42,8 +42,12 @@ export function TokenDetailsPage() {
     const navigate = useNavigate();
     const [topTokens, setTopTokens] = useState<TokenRecord[]>([]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [sortField, setSortField] = useState<'marketCapUsd' | 'volume24h'>('marketCapUsd');
+    const [sortField, setSortField] = useState<'marketCapUsd' | 'volume24h'>('volume24h');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    const [windowDimensions, setWindowDimensions] = useState({
+        width: window.innerWidth,
+        height: window.innerHeight
+    });
 
     // Add useRef and useEffect for click-outside handling
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -170,9 +174,13 @@ export function TokenDetailsPage() {
         <div ref={dropdownRef} className="relative inline-flex items-center">
             <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center gap-1 p-1 text-gray-300 hover:text-white transition-colors"
+                className="flex items-center gap-1 px-2 py-1 text-gray-300 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
             >
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                <span className="text-sm">Select Token</span>
+                <svg
+                    className={`w-5 h-5 fill-current transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+                    viewBox="0 0 20 20"
+                >
                     <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
                 </svg>
             </button>
@@ -251,6 +259,18 @@ export function TokenDetailsPage() {
         </div>
     );
 
+    // Add this useEffect for window resize handling
+    useEffect(() => {
+        const handleResize = () => {
+            setWindowDimensions({
+                width: window.innerWidth,
+                height: window.innerHeight
+            });
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     if (loading) return <div className="p-4 text-white">Loading...</div>;
     if (error) return <div className="p-4 text-white">Error: {error}</div>;
@@ -287,23 +307,25 @@ export function TokenDetailsPage() {
                     </div>
                 </div>
 
-                {/* Key Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    <MetricsCard
-                        title="Market Cap"
-                        value={token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
-                    />
-                    <MetricsCard
-                        title="Current Price"
-                        value={`$${Number(token.currentPrice)?.toFixed(6) || 'N/A'}`}
-                        change={token.priceChange24h}
-                    />
-                </div>
-
                 {/* Main content grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6">
                     {/* Trading interface column */}
                     <div className="space-y-4">
+                        {/* Key Metrics Card */}
+                        <div className="bg-[#232427] rounded-lg p-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <MetricsCard
+                                    title="Market Cap"
+                                    value={token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
+                                />
+                                <MetricsCard
+                                    title="Current Price"
+                                    value={`$${Number(token.currentPrice)?.toFixed(6) || 'N/A'}`}
+                                    change={token.priceChange24h}
+                                />
+                            </div>
+                        </div>
+
                         {/* Trading interface */}
                         <div className="bg-[#232427] rounded-lg p-4">
                             <TradingInterface token={token} currentPrice={currentPrice} />
@@ -372,7 +394,7 @@ export function TokenDetailsPage() {
                         <div className="bg-[#232427] rounded-lg p-4">
                             <PriceChart
                                 token={token}
-                                width={window.innerWidth > 1024 ? window.innerWidth - 500 : window.innerWidth - 48}
+                                width={windowDimensions.width > 1024 ? windowDimensions.width - 500 : windowDimensions.width - 48}
                                 height={600}
                                 currentPrice={currentPrice || undefined}
                             />

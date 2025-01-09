@@ -501,14 +501,14 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     {/* Amount Input */}
                     <div className="mb-4">
                         <label className="block text-gray-400 text-[14px] mb-2">
-                            Amount ({token.symbol})
+                            Amount ({isSelling ? token.symbol : 'SOL'})
                         </label>
                         <input
                             type="text"
                             value={rawInput}
                             onChange={handleInputChange}
                             className="w-full p-3 bg-white rounded-lg text-[#1a1b1f] text-[16px]"
-                            placeholder="Enter amount"
+                            placeholder={`Enter amount in ${isSelling ? token.symbol : 'SOL'}`}
                             disabled={!isTokenTradable || isLoading}
                         />
                     </div>
@@ -560,10 +560,13 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     {priceInfo && amount && amount.trim() !== '' && parseFloat(amount) > 0 && (
                         <div className="mt-4 p-3 bg-[#1e2025] rounded-lg">
                             <p className="text-gray-400 text-[14px]">
-                                {isSelling ? 'You will receive' : 'You will pay'}
+                                {isSelling ? 'You will receive' : 'You will receive'}
                             </p>
                             <p className="text-white text-[20px]">
-                                {formatSmallNumber(priceInfo.totalCost)}
+                                {isSelling
+                                    ? `${formatSmallNumber(priceInfo.totalCost)}`
+                                    : `${(parseFloat(amount) / priceInfo.price).toFixed(4)} ${token.symbol}`
+                                }
                             </p>
                         </div>
                     )}
