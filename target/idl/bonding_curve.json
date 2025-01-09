@@ -127,6 +127,125 @@
       ]
     },
     {
+      "name": "buy_with_sol",
+      "discriminator": [
+        49,
+        57,
+        124,
+        194,
+        240,
+        20,
+        216,
+        102
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "fee_collector",
+          "writable": true
+        },
+        {
+          "name": "migration_admin",
+          "writable": true
+        },
+        {
+          "name": "migration_admin_token_account",
+          "writable": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "curve",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  117,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "sol_amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_token_amount",
+          "type": "u64"
+        },
+        {
+          "name": "is_subscribed",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "calculate_price",
       "discriminator": [
         134,
@@ -219,6 +338,99 @@
         {
           "name": "is_buy",
           "type": "bool"
+        }
+      ],
+      "returns": "u64"
+    },
+    {
+      "name": "calculate_tokens_for_sol",
+      "discriminator": [
+        29,
+        110,
+        119,
+        122,
+        103,
+        131,
+        97,
+        43
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "docs": [
+            "The mint of the token"
+          ],
+          "relations": [
+            "curve"
+          ]
+        },
+        {
+          "name": "curve",
+          "docs": [
+            "The bonding curve account"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  117,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_vault",
+          "docs": [
+            "The token vault that holds the liquidity"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "sol_amount",
+          "type": "u64"
         }
       ],
       "returns": "u64"

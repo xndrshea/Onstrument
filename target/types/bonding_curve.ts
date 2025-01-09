@@ -133,6 +133,125 @@ export type BondingCurve = {
       ]
     },
     {
+      "name": "buyWithSol",
+      "discriminator": [
+        49,
+        57,
+        124,
+        194,
+        240,
+        20,
+        216,
+        102
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "feeCollector",
+          "writable": true
+        },
+        {
+          "name": "migrationAdmin",
+          "writable": true
+        },
+        {
+          "name": "migrationAdminTokenAccount",
+          "writable": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "curve",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  117,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tokenVault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyerTokenAccount",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "solAmount",
+          "type": "u64"
+        },
+        {
+          "name": "minTokenAmount",
+          "type": "u64"
+        },
+        {
+          "name": "isSubscribed",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "calculatePrice",
       "discriminator": [
         134,
@@ -225,6 +344,99 @@ export type BondingCurve = {
         {
           "name": "isBuy",
           "type": "bool"
+        }
+      ],
+      "returns": "u64"
+    },
+    {
+      "name": "calculateTokensForSol",
+      "discriminator": [
+        29,
+        110,
+        119,
+        122,
+        103,
+        131,
+        97,
+        43
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "docs": [
+            "The mint of the token"
+          ],
+          "relations": [
+            "curve"
+          ]
+        },
+        {
+          "name": "curve",
+          "docs": [
+            "The bonding curve account"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  117,
+                  114,
+                  118,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tokenVault",
+          "docs": [
+            "The token vault that holds the liquidity"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "solAmount",
+          "type": "u64"
         }
       ],
       "returns": "u64"

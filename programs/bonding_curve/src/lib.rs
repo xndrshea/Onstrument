@@ -31,4 +31,12 @@ pub mod bonding_curve {
     pub fn calculate_price(ctx: Context<GetPrice>, amount: u64, is_buy: bool) -> Result<u64> {
         price::calculate_price(ctx, amount, is_buy)
     }
+
+    pub fn buy_with_sol(ctx: Context<Buy>, sol_amount: u64, min_token_amount: u64, is_subscribed: bool) -> Result<()> {
+        buy::handler_with_sol(ctx, sol_amount, min_token_amount, is_subscribed)
+    }
+
+    pub fn calculate_tokens_for_sol(ctx: Context<GetPrice>, sol_amount: u64) -> Result<u64> {
+        price::calculate_tokens_for_sol(ctx, sol_amount)
+    }
 }

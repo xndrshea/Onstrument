@@ -227,6 +227,13 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     // Price quote updates
     useEffect(() => {
         const updatePriceQuote = async () => {
+            console.log('Starting updatePriceQuote:', {
+                rawInput,
+                amount,
+                isSelling,
+                bondingCurve: !!bondingCurve
+            });
+
             // Clear price info if input is empty or invalid
             if (!rawInput || rawInput.trim() === '') {
                 setPriceInfo(null);
@@ -254,14 +261,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 }
                 // For unmigrated custom tokens, use bonding curve
                 else if (bondingCurve) {
-                    const quote = await bondingCurve.getPriceQuote(parsedAmount, !isSelling);
-                    // Convert from lamports to SOL
-                    if (quote) {
-                        setPriceInfo({
-                            ...quote,
-                            totalCost: quote.totalCost / LAMPORTS_PER_SOL
-                        });
-                    }
+                    const quote = await bondingCurve.getPriceQuote(parsedAmount, isSelling);
+                    console.log('Got quote from bonding curve:', quote);
+                    setPriceInfo(quote);
                 }
             } catch (error: any) {
                 console.error('Error fetching price quote:', error);
@@ -271,7 +273,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         };
 
         updatePriceQuote();
-    }, [amount, rawInput, isSelling, token.tokenType, token.mintAddress, token.curveConfig?.migrationStatus, bondingCurve]);
+    }, [amount, rawInput, isSelling, token.tokenType, token.mintAddress]);
 
     // Initial balance fetch and periodic updates
     useEffect(() => {
@@ -311,14 +313,12 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
         try {
             setIsLoading(true)
-            const parsedAmount = new BN(parseFloat(amount) * (10 ** token.decimals))
             const appropriateConnection = getAppropriateConnection()
 
-            // Execute the trade
             if (token.tokenType === 'dex') {
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
-                    amount: parsedAmount,
+                    amount: new BN(parseFloat(amount) * LAMPORTS_PER_SOL), // Always in SOL for buys
                     isSelling,
                     slippageTolerance,
                     wallet,
@@ -327,6 +327,8 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 })
             } else if (bondingCurve && priceInfo) {
                 if (isSelling) {
+                    // Selling uses token amounts
+                    const parsedAmount = new BN(parseFloat(amount) * (10 ** token.decimals))
                     const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)))
                     await bondingCurve.sell({
                         amount: parsedAmount,
@@ -335,15 +337,17 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                         slippageTolerance
                     })
                 } else {
-                    const minRequired = priceInfo.totalCost + (0.01 * LAMPORTS_PER_SOL)
-                    if (solBalance * LAMPORTS_PER_SOL < minRequired) {
-                        throw new Error(`Insufficient SOL. Need ${(minRequired / LAMPORTS_PER_SOL).toFixed(4)} SOL (including fees)`)
+                    // Buying uses SOL amounts
+                    const solAmount = parseFloat(amount)
+                    const feeAmount = isUserSubscribed ? 0 : (solAmount * 0.01) // 100 BPS = 1%
+                    const minRequired = solAmount + feeAmount + 0.001 // Add 0.001 SOL for rent/gas
+                    if (solBalance < minRequired) {
+                        throw new Error(`Insufficient SOL. Need ${minRequired.toFixed(4)} SOL (including fees)`)
                     }
-                    await bondingCurve.buy({
-                        amount: parsedAmount,
-                        maxSolCost: priceInfo.totalCost * (1 + slippageTolerance),
-                        isSubscribed: isUserSubscribed,
-                        slippageTolerance
+                    await bondingCurve.buyWithSol({
+                        solAmount,
+                        slippageTolerance,
+                        isSubscribed: isUserSubscribed
                     })
                 }
             }
@@ -563,7 +567,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                             <p className="text-white text-[20px]">
                                 {isSelling
                                     ? `${formatSmallNumber(priceInfo.totalCost)}`
-                                    : `${(parseFloat(amount) / priceInfo.price).toFixed(4)} ${token.symbol}`
+                                    : `${priceInfo.price.toFixed(6)} ${token.symbol}`
                                 }
                             </p>
                         </div>

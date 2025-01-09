@@ -12,13 +12,13 @@ export function Header({ onProfileClick }: HeaderProps) {
     const { connected } = useWallet();
 
     return (
-        <header className="bg-[#1A1B1F] border-b border-gray-800/50 backdrop-blur-sm sticky top-0 z-50">
+        <header className="bg-[#1C1D21] border-b border-blue-500/20 backdrop-blur-sm sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
                     <div className="flex items-center space-x-8">
                         <Link
                             to="/"
-                            className="text-purple-400 font-bold text-xl tracking-tight hover:text-purple-300 transition-colors"
+                            className="text-blue-400 font-bold text-xl tracking-tight hover:text-violet-400 transition-colors"
                         >
                             Onstrument
                         </Link>

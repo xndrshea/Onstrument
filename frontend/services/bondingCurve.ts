@@ -424,76 +424,80 @@ export class BondingCurve {
         totalCost: number;
         isSelling: boolean;
     }> {
-        if (!this.mintAddress) throw new Error('Mint address is required');
+        console.log('ENTERING getPriceQuote:', { amount, isSelling });
 
-        // Check if migrated to Raydium
         if (await this.shouldUseRaydium()) {
-            return await dexService.calculateTradePrice(
+            console.log('Using Raydium path');
+            if (!this.mintAddress) throw new Error('Mint address is required');
+            const quote = await dexService.calculateTradePrice(
                 this.mintAddress.toString(),
                 amount,
                 isSelling,
                 this.connection
             );
+            if (!quote) throw new Error('Failed to get price quote from Raydium');
+            return quote;
         }
 
-        // Original bonding curve logic
-        if (!this.curveAddress) throw new Error('Curve address is required');
+        console.log('Using Bonding Curve path');
 
-        try {
-            const scaledAmount = new BN(amount * TOKEN_DECIMAL_MULTIPLIER);
-            const tokenVault = this.getTokenVault();
+        if (!this.mintAddress || !this.curveAddress) throw new Error('Required addresses missing');
+        const tokenVault = this.getTokenVault();
 
-            // Check accounts individually and provide specific error messages
-            const curveInfo = await this.connection.getAccountInfo(this.curveAddress);
-            if (!curveInfo) {
-                throw new Error(`Curve account ${this.curveAddress.toString()} not found`);
-            }
-
-            const vaultInfo = await this.connection.getAccountInfo(tokenVault);
-            if (!vaultInfo) {
-                throw new Error(`Token vault ${tokenVault.toString()} not found`);
-            }
-
-            try {
-                const price = await this.program.methods
-                    .calculatePrice(scaledAmount, isSelling)
-                    .accounts({
-                        mint: this.mintAddress,
-                        curve: this.curveAddress,
-                        tokenVault: tokenVault,
-                    })
-                    .view();
-
-                return {
-                    price: price.toNumber() / LAMPORTS_PER_SOL,
-                    totalCost: price.toNumber(),
-                    isSelling
-                };
-            } catch (viewError: any) {
-                console.error('View method error:', viewError);
-                // If the view method fails, try simulating the transaction
-                const priceSimulation = await this.program.methods
-                    .calculatePrice(scaledAmount, isSelling)
-                    .accounts({
-                        mint: this.mintAddress,
-                        curve: this.curveAddress,
-                        tokenVault: tokenVault,
-                    })
-                    .simulate();
-
-                // Extract the return value from simulation logs
-                // You might need to adjust this based on your program's actual logging
-                console.log('Simulation result:', priceSimulation);
-                throw new Error('Price calculation failed - please check program logs');
-            }
-        } catch (error: any) {
-            console.error('Price quote error:', {
-                error,
-                curveAddress: this.curveAddress.toString(),
-                mintAddress: this.mintAddress.toString(),
-                tokenVault: this.getTokenVault().toString()
+        if (isSelling) {
+            console.log('Selling calculation input:', {
+                amount,
+                scaledAmount: new BN(amount * TOKEN_DECIMAL_MULTIPLIER).toString()
             });
-            throw error;
+
+            const scaledAmount = new BN(amount * TOKEN_DECIMAL_MULTIPLIER);
+            const price = await this.program.methods
+                .calculatePrice(scaledAmount, true)
+                .accounts({
+                    mint: this.mintAddress,
+                    curve: this.curveAddress,
+                    tokenVault: tokenVault,
+                })
+                .view();
+
+            console.log('Program returned price:', price.toString());
+
+            const solReturn = price.toNumber() / LAMPORTS_PER_SOL;
+
+            console.log('Calculated values:', {
+                rawPrice: price.toString(),
+                solReturn,
+            });
+
+            return {
+                price: solReturn,
+                totalCost: solReturn,  // For selling, this is how much SOL you get back
+                isSelling: true
+            };
+        } else {
+            // For buying with SOL, use calculate_tokens_for_sol
+            const solAmount = new BN(amount * LAMPORTS_PER_SOL);
+            const tokenAmount = await this.program.methods
+                .calculateTokensForSol(solAmount)
+                .accounts({
+                    mint: this.mintAddress,
+                    curve: this.curveAddress,
+                    tokenVault: tokenVault,
+                })
+                .view();
+
+            console.log('Price Quote Debug:', {
+                inputSolAmount: amount,
+                rawSolAmount: solAmount.toString(),
+                rawTokenAmount: tokenAmount.toString(),
+                tokenAmount: tokenAmount.toNumber() / TOKEN_DECIMAL_MULTIPLIER,
+            });
+
+            return {
+                price: tokenAmount.toNumber() / TOKEN_DECIMAL_MULTIPLIER,
+                totalCost: amount,
+                isSelling: false
+            };
         }
     }
 
@@ -535,6 +539,66 @@ export class BondingCurve {
             .view();
 
         return price.toNumber() / LAMPORTS_PER_SOL;
+    }
+
+    async buyWithSol(params: {
+        solAmount: number;  // Amount in SOL
+        slippageTolerance: number;
+        isSubscribed: boolean;
+    }) {
+        if (!this.mintAddress) throw new Error('Mint address is required');
+
+        // Check if migrated to Raydium
+        if (await this.shouldUseRaydium()) {
+            return await dexService.executeTrade({
+                mintAddress: this.mintAddress.toString(),
+                amount: new BN(params.solAmount * LAMPORTS_PER_SOL),
+                isSelling: false,
+                slippageTolerance: params.slippageTolerance,
+                wallet: this.wallet!,
+                connection: this.connection,
+                isSubscribed: params.isSubscribed
+            });
+        }
+
+        const buyerTokenAccount = await this.ensureTokenAccount();
+        const rawSolAmount = new BN(params.solAmount * LAMPORTS_PER_SOL);
+
+        // Get expected token amount
+        const priceQuote = await this.getPriceQuote(params.solAmount, false);
+        const minTokens = new BN(Math.floor(
+            priceQuote.price *
+            (1 - params.slippageTolerance) *
+            TOKEN_DECIMAL_MULTIPLIER
+        ));
+
+        const [tokenVault] = PublicKey.findProgramAddressSync(
+            [Buffer.from("token_vault"), this.mintAddress.toBuffer()],
+            this.program.programId
+        );
+
+        const buyIx = await this.program.methods
+            .buyWithSol(rawSolAmount, minTokens, params.isSubscribed)
+            .accounts({
+                buyer: this.wallet!.publicKey!,
+                mint: this.mintAddress,
+                buyerTokenAccount,
+                // @ts-ignore - Anchor types mismatch
+                curve: this.curveAddress,
+                tokenVault,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+                rent: SYSVAR_RENT_PUBKEY,
+                feeCollector: new PublicKey('E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L'),
+                migrationAdmin: new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu'),
+                migrationAdminTokenAccount: await getAssociatedTokenAddress(
+                    this.mintAddress,
+                    new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu')
+                )
+            })
+            .instruction();
+
+        return await this.buildAndSendTransaction([buyIx], []);
     }
 
 }

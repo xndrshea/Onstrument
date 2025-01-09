@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { User, UserService } from '../../services/userService';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { API_BASE_URL } from '../../config';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { TradingStats } from './TradingStats';
 
 interface TradingStatsRecord {
@@ -28,6 +28,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [stats, setStats] = useState<TradingStatsRecord[]>([]);
     const [isLoadingStats, setIsLoadingStats] = useState(false);
+    const navigate = useNavigate();
 
     useEffect(() => {
         if (publicKey) {
@@ -77,6 +78,11 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleViewProfile = () => {
+        onClose();
+        navigate('/profile');
     };
 
     if (!isOpen) return null;
@@ -140,10 +146,13 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                             </div>
                         )}
 
-                        {/* Trading stats section */}
-                        <div className="mt-6">
-                            <TradingStats />
-                        </div>
+                        {/* View Full Profile Button */}
+                        <button
+                            onClick={handleViewProfile}
+                            className="w-full mt-6 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+                        >
+                            View Full Profile
+                        </button>
                     </div>
                 </div>
             </div>

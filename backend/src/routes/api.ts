@@ -193,8 +193,6 @@ router.post('/tokens', async (req, res) => {
 router.get('/tokens', async (req, res) => {
     try {
         const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCap' || '24h';
-        logger.info('Fetching custom tokens');
-
         // Handle volume-based intervals
         const volumeInterval = {
             '5m': 'INTERVAL \'5 minutes\'',

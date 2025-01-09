@@ -93,4 +93,36 @@ impl BondingCurve {
         
         Ok(price_difference as u64)
     }
+
+    pub fn calculate_tokens_for_sol(&self, token_vault: &Account<TokenAccount>, sol_amount: u64, curve_lamports: u64) -> Result<u64> {
+        let (effective_sol, total_tokens) = self.get_effective_amounts(token_vault, curve_lamports)?;
+        
+        let effective_sol_u128 = effective_sol as u128;
+        let total_tokens_u128 = total_tokens as u128;
+        let sol_amount_u128 = sol_amount as u128;
+
+        // Using x*y=k formula:
+        // (effective_sol + sol_amount) * (total_tokens - output_tokens) = effective_sol * total_tokens
+        let k = effective_sol_u128
+            .checked_mul(total_tokens_u128)
+            .ok_or(error!(ErrorCode::MathOverflow))?;
+
+        let new_sol = effective_sol_u128
+            .checked_add(sol_amount_u128)
+            .ok_or(error!(ErrorCode::MathOverflow))?;
+
+        let new_tokens = k
+            .checked_div(new_sol)
+            .ok_or(error!(ErrorCode::MathOverflow))?;
+
+        let token_amount = total_tokens_u128
+            .checked_sub(new_tokens)
+            .ok_or(error!(ErrorCode::MathOverflow))?;
+
+        if token_amount > u64::MAX as u128 {
+            return Err(error!(ErrorCode::MathOverflow));
+        }
+
+        Ok(token_amount as u64)
+    }
 }

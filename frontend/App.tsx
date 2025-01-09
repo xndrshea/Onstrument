@@ -13,6 +13,7 @@ import { Header } from './components/Header/Header'
 import { UserService } from './services/userService'
 import { User } from './services/userService'
 import { ProfileModal } from './components/Profile/ProfileModal'
+import { ProfilePage } from './components/pages/ProfilePage'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -64,6 +65,7 @@ function App() {
                         <Route path="/market" element={<MarketPage />} />
                         <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
                         <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
+                        <Route path="/profile" element={<ProfilePage />} />
                     </Routes>
                 </main>
 
