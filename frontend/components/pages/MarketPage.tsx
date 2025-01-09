@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { API_BASE_URL } from '../../config'
 import { formatMarketCap } from '../../utils/formatting'
+import { filterService } from '../../services/filterService'
 
 export function MarketPage() {
     const navigate = useNavigate();
@@ -30,7 +31,8 @@ export function MarketPage() {
             }
 
             const data = await response.json();
-            setTokens(data.tokens);
+            const filteredTokens = filterService.filterTokens(data.tokens);
+            setTokens(filteredTokens);
             setTotalPages(Math.ceil(data.pagination.total / TOKENS_PER_PAGE));
         } catch (error) {
             console.error('Error fetching market tokens:', error);

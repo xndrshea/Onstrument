@@ -8,11 +8,15 @@ import helmet from 'helmet'
 import apiRouter from './routes/api'
 import { TokenDiscoveryService } from './services/discovery/tokenDiscoveryService'
 import { CronJob } from 'cron'
+import { JupiterPriceUpdater } from './services/price/jupiterPriceUpdater'
 
 dotenv.config()
 
 export function createApp() {
     const app = express()
+
+    // Initialize all services
+    initializeServices()
 
     // Initialize discovery service
     const discoveryService = TokenDiscoveryService.getInstance()
@@ -112,4 +116,15 @@ export function createApp() {
     app.use(errorHandler)
 
     return app
+}
+
+export function initializeServices() {
+    // Initialize other services
+    const jupiterPriceUpdater = JupiterPriceUpdater.getInstance();
+
+    // Cleanup on shutdown
+    process.on('SIGTERM', () => {
+        jupiterPriceUpdater.cleanup();
+        // ... other cleanup
+    });
 } 

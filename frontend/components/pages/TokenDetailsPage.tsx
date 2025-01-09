@@ -8,10 +8,12 @@ import { priceClient } from '../../services/priceClient';
 import { TradingViewChart } from '../Trading/TradingViewChart';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
 import { API_BASE_URL } from '../../config';
+import { filterService } from '../../services/filterService';
 
 // Add at the top with other imports
 type VolumeKey = `volume${string}`;
 type TokenKey = keyof TokenRecord;
+const MAINNET_USDC_ADDRESS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 // New component for metrics display
 const MetricsCard = ({ title, value, change }: { title: string; value: string | number; change?: number }) => (
@@ -131,7 +133,8 @@ export function TokenDetailsPage() {
                 }
 
                 const data = await response.json();
-                setTopTokens(data.tokens);
+                const filteredTokens = filterService.filterTokens(data.tokens);
+                setTopTokens(filteredTokens);
             } catch (error) {
                 console.error('Error fetching top tokens:', error);
             }
@@ -139,13 +142,20 @@ export function TokenDetailsPage() {
         fetchTopTokens();
     }, [sortField, sortDirection]);
 
-    // Add this sorting function
+    // Update the sorting function
     const sortTokens = (tokens: TokenRecord[]) => {
+        // Filter out fake USDC tokens and tokens without images
+        const filteredTokens = tokens.filter(token =>
+            // Keep token if it's not a fake USDC AND has an image
+            !(token.symbol === 'USDC' && token.mintAddress !== MAINNET_USDC_ADDRESS) &&
+            (token.imageUrl || (token.content?.metadata?.image))
+        );
+
         const getFieldValue = (token: TokenRecord) => {
             return sortField === 'marketCapUsd' ? token.marketCapUsd : token[sortField];
         };
 
-        return [...tokens].sort((a, b) => {
+        return filteredTokens.sort((a, b) => {
             const aValue = getFieldValue(a) || 0;
             const bValue = getFieldValue(b) || 0;
             return sortDirection === 'asc' ? Number(aValue) - Number(bValue) : Number(bValue) - Number(aValue);
@@ -166,7 +176,7 @@ export function TokenDetailsPage() {
 
             {isDropdownOpen && (
                 <div className="absolute left-0 top-full mt-1 w-[400px] bg-[#1E222D] text-white rounded-md border border-gray-700 shadow-lg z-50 max-h-[400px] overflow-hidden">
-                    <div className="sticky top-0 bg-[#1E222D] grid grid-cols-[1fr_auto_auto] px-4 py-2 text-xs text-gray-400 border-b border-gray-700">
+                    <div className="sticky top-0 bg-[#1E222D] grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 text-xs text-gray-400 border-b border-gray-700">
                         <span>Token</span>
                         <button
                             onClick={() => {
@@ -177,7 +187,7 @@ export function TokenDetailsPage() {
                                     setSortDirection('desc');
                                 }
                             }}
-                            className="px-4 flex items-center gap-1 hover:text-white"
+                            className="text-left hover:text-white w-full"
                         >
                             Market Cap
                             {sortField === 'marketCapUsd' && (
@@ -193,7 +203,7 @@ export function TokenDetailsPage() {
                                     setSortDirection('desc');
                                 }
                             }}
-                            className="flex items-center gap-1 hover:text-white"
+                            className="text-right hover:text-white w-full"
                         >
                             24h Volume
                             {sortField === 'volume24h' && (
@@ -202,14 +212,14 @@ export function TokenDetailsPage() {
                         </button>
                     </div>
                     <div className="overflow-y-auto max-h-[360px] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                        {sortTokens(topTokens).map(token => (
+                        {topTokens.map(token => (
                             <div
                                 key={token.mintAddress}
                                 onClick={() => {
                                     setIsDropdownOpen(false);
                                     window.location.href = `/token/${token.mintAddress}`;
                                 }}
-                                className="grid grid-cols-[1fr_auto_auto] px-4 py-2 hover:bg-gray-700 cursor-pointer items-center text-sm"
+                                className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 hover:bg-gray-700 cursor-pointer items-center text-sm"
                             >
                                 <div className="flex items-center gap-2">
                                     {token.imageUrl && (
@@ -224,12 +234,12 @@ export function TokenDetailsPage() {
                                     )}
                                     <span className="font-medium">{token.symbol}</span>
                                 </div>
-                                <span className="px-4 text-right tabular-nums">
+                                <div className="text-left w-full">
                                     {formatMarketCap(token.marketCapUsd || null)}
-                                </span>
-                                <span className="text-right tabular-nums">
+                                </div>
+                                <div className="text-right w-full">
                                     ${formatNumber(token.volume24h || 0)}
-                                </span>
+                                </div>
                             </div>
                         ))}
                     </div>

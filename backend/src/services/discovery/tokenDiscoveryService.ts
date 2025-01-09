@@ -211,23 +211,28 @@ export class TokenDiscoveryService {
 
     private async ensureTokenMetadata(mintAddress: string): Promise<void> {
         try {
-
-            const result = await pool.query(
-                'SELECT mint_address, metadata_status FROM token_platform.tokens WHERE mint_address = $1',
+            await pool.query(
+                `INSERT INTO token_platform.tokens 
+                (mint_address, metadata_status, created_at, last_metadata_fetch, token_type) 
+                VALUES ($1, 'pending', NOW(), NOW(), 'dex')
+                ON CONFLICT (mint_address) 
+                DO UPDATE SET 
+                    metadata_status = CASE 
+                        WHEN tokens.metadata_status != 'fetched' 
+                        THEN 'pending' 
+                        ELSE tokens.metadata_status 
+                    END`,
                 [mintAddress]
             );
 
-            // If token doesn't exist or metadata is pending/null, queue it
-            if (!result.rows.length || !result.rows[0].metadata_status || result.rows[0].metadata_status === 'pending') {
-                await this.metadataService.queueMetadataUpdate(mintAddress, 'discovery_service');
+            // Queue metadata update if not already fetched
+            const result = await pool.query(
+                'SELECT metadata_status FROM token_platform.tokens WHERE mint_address = $1',
+                [mintAddress]
+            );
 
-                // Update metadata_status to 'pending' if it's null
-                if (!result.rows[0]?.metadata_status) {
-                    await pool.query(
-                        'UPDATE token_platform.tokens SET metadata_status = $1 WHERE mint_address = $2',
-                        ['pending', mintAddress]
-                    );
-                }
+            if (result.rows[0].metadata_status !== 'fetched') {
+                await this.metadataService.queueMetadataUpdate(mintAddress, 'discovery_service');
             }
         } catch (error) {
             this.logger.error(`Error ensuring token metadata: ${(error as Error).message}`, {
@@ -337,7 +342,6 @@ export class TokenDiscoveryService {
                 try {
                     const pools = await this.fetchWithRetry(page);
                     allPools.push(...pools);
-                    this.logger.info(`Successfully processed page ${page}/${totalPages}`);
                 } catch (error) {
                     this.logger.error(`Error fetching page ${page}:`, error);
                 }
@@ -751,7 +755,6 @@ export class TokenDiscoveryService {
             this.tokenPriceQueue.add(address);
 
             if (this.tokenPriceQueue.size === 1) {
-                this.logger.info('Starting queue timer');
                 this.startQueueTimer();
             }
 
