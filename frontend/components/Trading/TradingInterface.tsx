@@ -318,7 +318,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             if (token.tokenType === 'dex') {
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
-                    amount: new BN(parseFloat(amount) * LAMPORTS_PER_SOL), // Always in SOL for buys
+                    amount: new BN(parseFloat(amount) * (isSelling ? (10 ** token.decimals) : LAMPORTS_PER_SOL)),
                     isSelling,
                     slippageTolerance,
                     wallet,
@@ -560,17 +560,20 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
                     {/* Price Quote Display */}
                     {priceInfo && amount && amount.trim() !== '' && parseFloat(amount) > 0 && (
-                        <div className="mt-4 p-3 bg-[#1e2025] rounded-lg">
-                            <p className="text-gray-400 text-[14px]">
-                                {isSelling ? 'You will receive' : 'You will receive'}
-                            </p>
-                            <p className="text-white text-[20px]">
-                                {isSelling
-                                    ? `${formatSmallNumber(priceInfo.totalCost)}`
-                                    : `${priceInfo.price.toFixed(6)} ${token.symbol}`
-                                }
-                            </p>
-                        </div>
+                        <>
+                            {console.log('Price Info:', priceInfo)}
+                            <div className="mt-4 p-3 bg-[#1e2025] rounded-lg">
+                                <p className="text-gray-400 text-[14px]">
+                                    {isSelling ? 'You will receive' : 'You will receive'}
+                                </p>
+                                <p className="text-white text-[20px]">
+                                    {isSelling
+                                        ? `${priceInfo.totalCost.toString()} SOL`
+                                        : `${priceInfo.price.toString()} ${token.symbol}`
+                                    }
+                                </p>
+                            </div>
+                        </>
                     )}
 
                     {/* Error Display */}

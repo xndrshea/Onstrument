@@ -65,66 +65,58 @@ export const dexService = {
 
             const tokenDecimals = (mintInfo.value.data as any).parsed.info.decimals;
 
-            // For buying: amount is in tokens, but we need to convert to SOL input
-            // For selling: amount is in tokens directly
+            // For buying: amount is in SOL
+            // For selling: amount is in tokens
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
 
-            // Always use ExactIn, but calculate amount differently
+            // Convert input amount to smallest units (lamports or token decimals)
             const calculatedAmount = isSelling
-                ? Math.floor(amount * 10 ** tokenDecimals)  // Selling tokens
-                : Math.floor(amount * 1e9);                 // Buying with SOL
+                ? Math.floor(amount * (10 ** tokenDecimals))  // Convert token amount to raw units
+                : Math.floor(amount * 1e9);                   // Convert SOL to lamports
+
+            console.log('Quote request:', {
+                inputAmount: amount,
+                calculatedAmount,
+                isSelling,
+                tokenDecimals
+            });
 
             const url = `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
                 `&amount=${calculatedAmount}` +
-                `&swapMode=ExactIn`;  // Always ExactIn
-
-            console.log('Requesting quote:', {
-                isSelling,
-                inputMint,
-                outputMint,
-                amount: calculatedAmount,
-                swapMode: 'ExactIn'
-            });
+                `&swapMode=ExactIn`;
 
             const response = await fetch(url);
             const quoteResponse = await response.json();
 
             if (!response.ok) {
-                console.error('Quote failed:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    error: quoteResponse,
-                    params: {
-                        inputMint,
-                        outputMint,
-                        amount: calculatedAmount,
-                        isSelling
-                    }
-                });
+                console.error('Quote failed:', quoteResponse);
                 return null;
             }
 
-            let price, totalCost;
+            console.log('Quote response:', quoteResponse);
 
             if (isSelling) {
-                const solReceived = Number(quoteResponse.outAmount) / 1e9;
-                price = solReceived / amount;
-                totalCost = solReceived;
+                // Selling tokens for SOL
+                const solReceived = Number(quoteResponse.outAmount) / 1e9;  // Convert lamports to SOL
+                return {
+                    price: solReceived / amount,  // SOL per token
+                    totalCost: solReceived,       // Total SOL you'll receive
+                    outAmount: solReceived,
+                    isSelling: true
+                };
             } else {
-                const tokensReceived = Number(quoteResponse.outAmount) / 10 ** tokenDecimals;
-                price = amount / tokensReceived;  // SOL per token
-                totalCost = amount;  // Amount of SOL
+                // Buying tokens with SOL
+                const tokensReceived = Number(quoteResponse.outAmount) / (10 ** tokenDecimals);
+                return {
+                    price: tokensReceived,  // How many tokens you get for 1 SOL
+                    totalCost: amount,      // Total SOL being spent
+                    outAmount: tokensReceived,
+                    isSelling: false
+                };
             }
-
-            return {
-                price,
-                totalCost,
-                outAmount: isSelling ? amount : quoteResponse.outAmount,
-                isSelling
-            };
         } catch (error) {
             console.error('Error calculating trade price:', error);
             return null;
