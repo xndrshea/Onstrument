@@ -75,13 +75,6 @@ export const dexService = {
                 ? Math.floor(amount * (10 ** tokenDecimals))  // Convert token amount to raw units
                 : Math.floor(amount * 1e9);                   // Convert SOL to lamports
 
-            console.log('Quote request:', {
-                inputAmount: amount,
-                calculatedAmount,
-                isSelling,
-                tokenDecimals
-            });
-
             const url = `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
@@ -95,8 +88,6 @@ export const dexService = {
                 console.error('Quote failed:', quoteResponse);
                 return null;
             }
-
-            console.log('Quote response:', quoteResponse);
 
             if (isSelling) {
                 // Selling tokens for SOL

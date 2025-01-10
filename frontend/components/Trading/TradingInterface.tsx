@@ -227,12 +227,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     // Price quote updates
     useEffect(() => {
         const updatePriceQuote = async () => {
-            console.log('Starting updatePriceQuote:', {
-                rawInput,
-                amount,
-                isSelling,
-                bondingCurve: !!bondingCurve
-            });
 
             // Clear price info if input is empty or invalid
             if (!rawInput || rawInput.trim() === '') {
