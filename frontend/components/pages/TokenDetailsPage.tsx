@@ -5,7 +5,6 @@ import { useEffect, useState, useRef } from 'react';
 import { TokenRecord } from '../../../shared/types/token';
 import { tokenService } from '../../services/tokenService';
 import { priceClient } from '../../services/priceClient';
-import { TradingViewChart } from '../Trading/TradingViewChart';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
 import { API_BASE_URL } from '../../config';
 import { filterService } from '../../services/filterService';

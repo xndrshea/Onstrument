@@ -21,6 +21,7 @@ interface TradingInterfaceProps {
 // Helper function to format small numbers with subscript notation
 const formatSmallNumber = (num: number | null): JSX.Element | string => {
     if (num === null) return 'Loading...';
+    if (typeof num !== 'number') return 'Invalid price';
     if (num === 0) return '0';
 
     // For very small numbers
@@ -43,9 +44,6 @@ const formatSmallNumber = (num: number | null): JSX.Element | string => {
                     0.0<sub>{zeroCount}</sub>{remainingDigits} SOL
                 </span>
             );
-        } else {
-            // Otherwise use regular notation
-            return `${num.toFixed(4)} SOL`;
         }
     }
 
@@ -183,20 +181,15 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     };
 
     useEffect(() => {
-        let intervalId: NodeJS.Timeout;
-
         const updatePrice = async () => {
-            if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
-                // For unmigrated custom tokens, use price history
-                const history = await priceClient.getPriceHistory(token.mintAddress);
-                if (history?.length) {
-                    const latestPrice = history[history.length - 1].close;
-                    setSpotPrice(latestPrice);
-                    if (onPriceUpdate) onPriceUpdate(latestPrice);
-                }
-            } else {
-                // For DEX tokens and migrated custom tokens, use Jupiter
-                try {
+            try {
+                if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
+                    // Always use bonding curve for unmigrated custom tokens
+                    const initialPrice = await bondingCurve!.getInitialPrice();
+                    setSpotPrice(initialPrice);
+                    if (onPriceUpdate) onPriceUpdate(initialPrice);
+                } else {
+                    // For DEX tokens and migrated custom tokens, use Jupiter
                     const appropriateConnection = getAppropriateConnection();
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
@@ -208,21 +201,38 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                         setSpotPrice(quote.price);
                         if (onPriceUpdate) onPriceUpdate(quote.price);
                     }
-                } catch (error) {
-                    console.error('Error getting spot price:', error);
                 }
+            } catch (error) {
+                console.error('Error updating price:', error);
+                setSpotPrice(null);
             }
         };
 
         // Initial price fetch
         updatePrice();
 
-        // Set up interval for updates
-        intervalId = setInterval(updatePrice, 10000);
+        // Set up WebSocket subscription only for custom tokens
+        let cleanupFn: (() => void) | undefined;
 
-        // Cleanup
-        return () => clearInterval(intervalId);
-    }, [token.mintAddress, token.tokenType, token.curveConfig?.migrationStatus]);
+        if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
+            priceClient.subscribeToPrice(
+                token.mintAddress,
+                (update) => {
+                    if (typeof update.price === 'number') {
+                        setSpotPrice(update.price);
+                        if (onPriceUpdate) onPriceUpdate(update.price);
+                    }
+                },
+                'devnet'
+            ).then(cleanup => {
+                cleanupFn = cleanup;
+            });
+        }
+
+        return () => {
+            if (cleanupFn) cleanupFn();
+        };
+    }, [token.mintAddress, token.tokenType, token.curveConfig?.migrationStatus, bondingCurve]);
 
     // Price quote updates
     useEffect(() => {

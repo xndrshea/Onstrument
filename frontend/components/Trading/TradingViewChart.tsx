@@ -124,11 +124,22 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     },
                     getBars: async (symbolInfo: any, resolution: string, periodParams: any, onHistoryCallback: any) => {
                         try {
-                            const { from, to } = periodParams;
-                            console.log('Loading historical bars:', { from, to, resolution });
+                            // Check if we've already loaded data
+                            if (loadedDataRef.current) {
+                                console.log('Data already loaded, skipping request');
+                                onHistoryCallback([], { noData: false });
+                                return;
+                            }
 
-                            // Add delay between requests
-                            await new Promise(resolve => setTimeout(resolve, 300));
+                            // Override the time parameters
+                            const modifiedParams = {
+                                ...periodParams,
+                                from: 0,
+                                to: Math.floor(Date.now() / 1000),
+                                countBack: 100000
+                            };
+
+                            const { from, to } = modifiedParams;
 
                             const url = `/api/ohlcv/${token.mintAddress}?resolution=${resolution}&from=${from}&to=${to}&denomination=${denomination}`;
                             const response = await fetch(url);
@@ -138,8 +149,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                             }
 
                             const data = await response.json();
-
-                            // Process the bars
                             const bars = data.map((bar: any, index: number, array: any[]) => {
                                 const prevBar = index > 0 ? array[index - 1] : null;
 
@@ -177,7 +186,10 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                                 }
 
                                 return barData;
-                            }).filter(Boolean); // Remove any null values
+                            }).filter(Boolean);
+
+                            // Mark data as loaded
+                            loadedDataRef.current = true;
 
                             console.log('Historical bars:', bars);
                             onHistoryCallback(bars, { noData: bars.length === 0 });
