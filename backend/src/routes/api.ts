@@ -67,6 +67,21 @@ router.post('/tokens', async (req, res) => {
             telegramUrl
         } = req.body;
 
+        // Get current SOL price from our database
+        const solPriceResult = await pool.query(`
+            SELECT current_price 
+            FROM token_platform.tokens 
+            WHERE mint_address = 'So11111111111111111111111111111111111111112'
+            LIMIT 1
+        `);
+
+        const solanaPrice = solPriceResult.rows[0]?.current_price || 0;
+
+        // Calculate USD values
+        const initialPriceUsd = initialPrice * solanaPrice;
+        const virtualSolana = 30; // Fixed virtual SOL amount
+        const initialMarketCapUsd = virtualSolana * solanaPrice;
+
         // First insert the token
         const result = await pool.query(`
             INSERT INTO token_platform.tokens (
@@ -85,8 +100,10 @@ router.post('/tokens', async (req, res) => {
                 decimals,
                 token_type,
                 supply,
+                market_cap_usd,
+                current_price,
                 created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'custom', $14, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'custom', $14, $15, $16, CURRENT_TIMESTAMP)
             RETURNING *
         `, [
             mintAddress,
@@ -102,52 +119,66 @@ router.post('/tokens', async (req, res) => {
             telegramUrl || null,
             curveConfig,
             decimals,
-            totalSupply
+            totalSupply,
+            initialMarketCapUsd,
+            initialPriceUsd
         ]);
 
-        // Verify token was inserted
-        logger.info('Token inserted:', result.rows[0]);
-
-        // Now explicitly record the initial price
-        if (initialPrice && initialPrice > 0) {
+        // Now record the initial price (using initialPriceUsd for the condition)
+        if (initialPriceUsd && initialPriceUsd > 0) {
             logger.info('Recording initial price:', {
                 mintAddress,
-                price: initialPrice,
+                price: initialPriceUsd,
+                marketCapUsd: initialMarketCapUsd,
                 timestamp: new Date()
             });
 
-            // Direct database query for price history
-            await pool.query(`
-                INSERT INTO token_platform.price_history (
-                    time,
-                    mint_address,
-                    price,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
-                ) VALUES (
-                    CURRENT_TIMESTAMP,
-                    $1,
-                    $2,
-                    $2,
-                    $2,
-                    $2,
-                    $2,
-                    0
-                )
-            `, [mintAddress, initialPrice]);
+            try {
+                await pool.query(`
+                    INSERT INTO token_platform.price_history (
+                        time,
+                        mint_address,
+                        price,
+                        open,
+                        high,
+                        low,
+                        close,
+                        volume,
+                        market_cap,
+                        is_buy,
+                        trade_count,
+                        buy_count,
+                        sell_count
+                    ) VALUES (
+                        date_trunc('minute', CURRENT_TIMESTAMP),
+                        $1,
+                        $2,
+                        $2,
+                        $2,
+                        $2,
+                        $2,
+                        0,
+                        $3,
+                        true,
+                        1,
+                        1,
+                        0
+                    )
+                `, [mintAddress, initialPriceUsd, initialMarketCapUsd]);
 
-            // Verify price was recorded
-            const priceVerification = await pool.query(`
-                SELECT * FROM token_platform.price_history
-                WHERE mint_address = $1
-                ORDER BY time DESC
-                LIMIT 1
-            `, [mintAddress]);
-
-            logger.info('Initial price record verified:', priceVerification.rows[0]);
+                logger.info('Successfully inserted initial OHLC data', {
+                    mintAddress,
+                    price: initialPriceUsd,
+                    marketCapUsd: initialMarketCapUsd
+                });
+            } catch (error) {
+                logger.error('Failed to insert initial OHLC data', {
+                    error,
+                    mintAddress,
+                    price: initialPriceUsd
+                });
+                throw error;
+            }
         } else {
             logger.warn('No initial price provided for token:', mintAddress);
         }
@@ -170,7 +201,8 @@ router.post('/tokens', async (req, res) => {
             twitterUrl: token.twitter_url,
             docsUrl: token.docs_url,
             telegramUrl: token.telegram_url,
-            initialPrice: initialPrice
+            currentPrice: initialPriceUsd,
+            marketCapUsd: initialMarketCapUsd
         };
 
         res.status(201).json(response);
@@ -464,7 +496,12 @@ router.get('/prices/:mintAddress/latest', async (req, res) => {
     try {
         const { mintAddress } = req.params;
         const result = await pool.query(`
-            SELECT price 
+            SELECT 
+                time,
+                price,
+                volume,
+                market_cap,
+                is_buy
             FROM token_platform.price_history 
             WHERE mint_address = $1 
             ORDER BY time DESC 
@@ -475,27 +512,36 @@ router.get('/prices/:mintAddress/latest', async (req, res) => {
             return res.status(404).json({ error: 'No price data found' });
         }
 
-        res.json({ price: Number(result.rows[0].price) });
+        const latestPrice = result.rows[0];
+        res.json({
+            time: latestPrice.time,
+            price: latestPrice.price,
+            volume: latestPrice.volume,
+            marketCap: latestPrice.market_cap,
+            isBuy: latestPrice.is_buy
+        });
     } catch (error) {
         logger.error('Error fetching latest price:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-// For TradingView Advanced
+// For TradingView chart
 router.get('/ohlcv/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
-        const { from, to, resolution } = req.query;
-        const candles = await PriceHistoryModel.getOHLCV(
+        const { resolution, from, to } = req.query;
+
+        const data = await PriceHistoryModel.getOHLCV(
             mintAddress,
             resolution as string,
             Number(from),
             Number(to)
         );
-        res.json(candles);
+
+        res.json(data);
     } catch (error) {
-        logger.error('Error fetching OHLCV:', error);
+        console.error('Error in OHLCV endpoint:', error);
         res.status(500).json({ error: 'Failed to fetch OHLCV data' });
     }
 });

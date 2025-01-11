@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
@@ -6,6 +6,7 @@ import WebSocket from 'ws';
 import { WebSocketClient } from '../websocket/types';
 import { TOKEN_PROGRAM_ID, AccountLayout } from '@solana/spl-token';
 import { wsManager } from '../../websocket/WebSocketManager';
+import { pool } from '../../../config/database';
 
 interface BondingCurvePairData {
     mintAddress: string;
@@ -13,6 +14,17 @@ interface BondingCurvePairData {
     tokenVault: string;
     decimals: number;
     volume?: number;
+    isBuy?: boolean;
+}
+
+// Update OHLC interface to only use USD prices
+interface OHLCData {
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+    market_cap: number;
 }
 
 export class BondingCurvePriceFetcher {
@@ -38,8 +50,16 @@ export class BondingCurvePriceFetcher {
     }
 
     static async fetchPrice(pairData: BondingCurvePairData): Promise<void> {
+        logger.info('BondingCurvePriceFetcher.fetchPrice called:', pairData);
+
         const instance = BondingCurvePriceFetcher.getInstance();
         instance.queue.push(pairData);
+
+        logger.info('Queue status after push:', {
+            queueLength: instance.queue.length,
+            batchSize: instance.BATCH_SIZE,
+            isProcessing: instance.isProcessing
+        });
 
         if (instance.queue.length >= instance.BATCH_SIZE && !instance.isProcessing) {
             await instance.processBatch();
@@ -56,13 +76,25 @@ export class BondingCurvePriceFetcher {
 
     private async processBatch(): Promise<void> {
         if (this.isProcessing || this.queue.length === 0) return;
-        this.lastProcessTime = Date.now();
 
         try {
             this.isProcessing = true;
-            const batchToProcess = this.queue.splice(0, this.BATCH_SIZE);
+            const batchToProcess = [...this.queue];
+            this.queue = [];
 
-            // Batch fetch token balances and curve balances
+            const currentSlot = await this.connection.getSlot('finalized');
+            logger.info('Waiting for next slot:', { currentSlot });
+
+            // Wait until we've moved forward at least one slot
+            let newSlot = currentSlot;
+            while (newSlot <= currentSlot) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                newSlot = await this.connection.getSlot('finalized');
+            }
+
+            logger.info('Slot advanced:', { oldSlot: currentSlot, newSlot });
+
+            // Now fetch the updated account states
             const [tokenAccounts, curveBalances] = await Promise.all([
                 this.connection.getMultipleAccountsInfo(
                     batchToProcess.map(p => new PublicKey(p.tokenVault))
@@ -72,11 +104,24 @@ export class BondingCurvePriceFetcher {
                 )
             ]);
 
+            logger.info('Fetched account info:', {
+                tokenAccountsLength: tokenAccounts.length,
+                curveBalancesLength: curveBalances.length,
+                firstTokenAccount: tokenAccounts[0] ? 'present' : 'missing',
+                firstCurveBalance: curveBalances[0] ? 'present' : 'missing'
+            });
+
             // Process each pair
             for (let i = 0; i < batchToProcess.length; i++) {
                 const pair = batchToProcess[i];
                 const tokenAccount = tokenAccounts[i];
                 const curveAccount = curveBalances[i];
+
+                logger.info('Processing pair:', {
+                    mint: pair.mintAddress,
+                    hasTokenAccount: !!tokenAccount?.data,
+                    hasCurveAccount: !!curveAccount
+                });
 
                 if (!tokenAccount?.data || !curveAccount) {
                     logger.error("Missing account data for:", {
@@ -95,7 +140,8 @@ export class BondingCurvePriceFetcher {
                     curveBalance,
                     tokenAmount,
                     pair.decimals,
-                    pair.volume
+                    pair.volume,
+                    pair.isBuy
                 );
             }
 
@@ -116,76 +162,86 @@ export class BondingCurvePriceFetcher {
         solAmount: bigint,
         tokenAmount: bigint,
         decimals: number,
-        volume?: number
+        volume?: number,
+        isBuy?: boolean
     ): Promise<void> {
         try {
-            const totalSolAmount = solAmount + BigInt(this.VIRTUAL_SOL);
-            const price = (Number(totalSolAmount) / 1e9) / (Number(tokenAmount) / (10 ** decimals));
+            // If it's a sell and the token amount is very small (dust), treat it as zero
+            if (isBuy === false && tokenAmount < BigInt(1000)) {
+                tokenAmount = BigInt(0);
+                solAmount = BigInt(0);
+            }
 
-            // Calculate market cap (total SOL in lamports converted to SOL)
-            const marketCap = Number(totalSolAmount) / 1e9;
-
-            logger.debug('Price calculation details', {
-                mintAddress,
-                totalSolAmount: totalSolAmount.toString(),
-                calculatedPrice: price,
-                marketCap,
-                curveSolBalance: Number(solAmount) / 1e9,
-                virtualSol: Number(this.VIRTUAL_SOL) / 1e9,
-                tokenSupply: Number(tokenAmount) / (10 ** decimals),
-                timestamp: new Date().toISOString()
+            logger.info('RAW_VALUES:', {
+                solAmount: solAmount.toString(),
+                tokenAmount: tokenAmount.toString(),
+                decimals,
+                virtualSol: this.VIRTUAL_SOL,
+                LAMPORTS_PER_SOL,
+                isBuy
             });
 
-            if (!isFinite(price) || price <= 0) {
-                logger.error(`Invalid price calculation`, {
-                    mintAddress,
-                    price,
-                    totalSolAmount: totalSolAmount.toString(),
-                    tokenAmount: tokenAmount.toString()
-                });
-                return;
-            }
+            const solPrice = await this.getSolUsdPrice();
+
+            // Convert amounts to numbers and handle decimals
+            const solBalanceInSol = Number(solAmount) / LAMPORTS_PER_SOL;
+            const tokenSupply = Number(tokenAmount) / (10 ** decimals);
+            const virtualSolInSol = this.VIRTUAL_SOL / LAMPORTS_PER_SOL;
+
+            // Log intermediate calculations
+            logger.info('Intermediate calculations:', {
+                solBalanceInSol,
+                tokenSupply,
+                virtualSolInSol,
+                LAMPORTS_PER_SOL
+            });
+
+            const solPerToken = (solBalanceInSol + virtualSolInSol) / tokenSupply;
+            const usdPrice = solPerToken * solPrice;
+            const marketCap = (solBalanceInSol + virtualSolInSol) * solPrice;
+
+            logger.info('Final calculations:', {
+                solPerToken,
+                solPrice,
+                usdPrice,
+                marketCap
+            });
 
             await PriceHistoryModel.recordPrice({
                 mintAddress,
-                price,
-                marketCap,  // Add market cap to price history
-                volume: volume || 0,
-                timestamp: new Date()
+                price: usdPrice,  // Store USD price
+                marketCap,  // USD market cap
+                volume: volume ? volume * solPrice : 0,  // Convert volume to USD
+                timestamp: new Date(),
+                isBuy
             });
 
-            logger.info('Successfully recorded price', {
-                mintAddress,
-                price,
-                marketCap,
-                volume: volume || 0,
-                timestamp: new Date().toISOString()
-            });
-
-            this.emitPriceUpdate({
-                mintAddress,
-                price,
-                volume: volume || 0
-            });
+            wsManager.broadcastPrice(mintAddress, usdPrice);  // Broadcast USD price
         } catch (error) {
-            logger.error(`Error calculating price`, {
-                error,
-                stack: (error as Error).stack,
-                mintAddress,
-                solAmount: solAmount.toString(),
-                tokenAmount: tokenAmount.toString()
-            });
+            logger.error('Error calculating price:', error);
+            throw error;
         }
     }
 
-    private emitPriceUpdate(update: { mintAddress: string; price: number; volume: number; }) {
-        logger.debug('Emitting price update', {
-            ...update,
-            timestamp: Date.now()
-        });
+    private async getSolUsdPrice(): Promise<number> {
+        try {
+            const result = await pool.query(`
+                SELECT current_price
+                FROM token_platform.tokens 
+                WHERE mint_address = 'So11111111111111111111111111111111111111112'
+            `);
 
-        wsManager.broadcastPrice(update.mintAddress, update.price);
+            const price = Number(result.rows[0]?.current_price);
+            if (!price) {
+                logger.warn('No SOL price found, using default');
+                return 187.5; // Fallback to recent price
+            }
 
-        logger.debug('WebSocket clients status', wsManager.getStats());
+            logger.debug('Got SOL price:', { price });
+            return price;
+        } catch (error) {
+            logger.error('Error getting SOL price:', error);
+            return 187.5; // Fallback on error
+        }
     }
 }

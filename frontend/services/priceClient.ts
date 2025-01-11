@@ -131,19 +131,25 @@ class WebSocketClient {
                 this.migrationEventsReceived.set(network, true);
             }
 
-            // Handle price updates as before
-            if (data.type === 'price') {
-                const subscribers = this.subscribers.get(data.mintAddress);
-                if (subscribers) {
-                    const update = {
-                        price: data.price,
-                        time: data.timestamp
-                    };
-                    subscribers.forEach(callback => callback(update));
-                }
+            // Convert timestamp to start of the minute
+            const timestamp = new Date(data.time);
+            timestamp.setSeconds(0, 0); // Reset seconds and milliseconds
+
+            // Ensure the timestamp is for the current or future minute
+            const now = new Date();
+            if (timestamp < now) {
+                timestamp.setMinutes(now.getMinutes());
             }
+
+            const mintAddress = data.mintAddress;
+            const update = {
+                price: Number(data.close),
+                time: new Date(timestamp).getTime()
+            };
+            // Notify subscribers
+            this.subscribers.get(mintAddress)?.forEach(callback => callback(update));
         } catch (error) {
-            console.error('Error handling WebSocket message:', error);
+            console.error('Error handling WebSocket message:', error, event.data);
         }
     }
 
@@ -191,7 +197,7 @@ class WebSocketClient {
 
     async subscribeToPrice(
         mintAddress: string,
-        callback: (update: { price: number; time: number }) => void,
+        callback: (update: { price: number; priceUsd?: number; time: number }) => void,
         network: 'mainnet' | 'devnet' = 'devnet'
     ): Promise<() => void> {
 
@@ -244,32 +250,30 @@ class WebSocketClient {
     }
 
     async getPriceHistory(mintAddress: string): Promise<CandlestickData<Time>[]> {
-        const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
+        const response = await fetch(`${API_BASE_URL}/ohlcv/${mintAddress}?resolution=1&from=${Math.floor(Date.now() / 1000 - 300)}&to=${Math.floor(Date.now() / 1000)}`);
         if (!response.ok) throw new Error('Failed to fetch price history');
 
-        const data: PriceHistoryPoint[] = await response.json();
-        return data.map(point => ({
+        const data = await response.json();
+        return data.map((point: OHLCVPoint) => ({
             time: point.time as Time,
-            open: point.open,
-            high: point.high,
-            low: point.low,
-            close: point.close
+            open: point.open_usd,
+            high: point.high_usd,
+            low: point.low_usd,
+            close: point.close_usd,
+            value: point.price_usd
         }));
     }
 
     async getLatestPrice(mintAddress: string): Promise<number | null> {
         try {
             const response = await fetch(`${API_BASE_URL}/prices/${mintAddress}/latest`);
-
             if (!response.ok) {
-                console.error('Price fetch failed:', response.status, response.statusText);
-                return null;
+                throw new Error('Failed to fetch latest price');
             }
-
             const data = await response.json();
-            return data.price;
+            return data?.price_usd ? Number(data.price_usd) : null;
         } catch (error) {
-            console.error('Error in getLatestPrice:', error);
+            console.error('Error fetching latest price:', error);
             return null;
         }
     }
@@ -354,6 +358,13 @@ class WebSocketClient {
         this.cleanup('devnet');
         WebSocketClient.instance = null;
     }
+
+    public send(message: string): void {
+        const ws = this.wsDevnet || this.wsMainnet;
+        if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(message);
+        }
+    }
 }
 
 interface PriceHistoryPoint {
@@ -370,6 +381,15 @@ interface WebSocketMetrics {
     reconnections: number;
     latency: number[];  // Last 10 message latencies
     lastMessageTime: number;
+}
+
+interface OHLCVPoint {
+    time: string;
+    price_usd: number;
+    open_usd: number;
+    high_usd: number;
+    low_usd: number;
+    close_usd: number;
 }
 
 export const priceClient = {
@@ -402,12 +422,12 @@ export const priceClient = {
 
     getLatestPrice: async (mintAddress: string): Promise<number | null> => {
         try {
-            const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
+            const response = await fetch(`${API_BASE_URL}/prices/${mintAddress}/latest`);
             if (!response.ok) {
-                throw new Error('Failed to fetch price history');
+                throw new Error('Failed to fetch latest price');
             }
-            const history = await response.json();
-            return history.length > 0 ? history[history.length - 1].value : null;
+            const data = await response.json();
+            return data?.price_usd ? Number(data.price_usd) : null;
         } catch (error) {
             console.error('Error fetching latest price:', error);
             return null;
@@ -416,7 +436,7 @@ export const priceClient = {
 
     async subscribeToPrice(
         mintAddress: string,
-        callback: (update: { price: number; time: number }) => void,
+        callback: (update: { price: number; priceUsd?: number; time: number }) => void,
         network: 'mainnet' | 'devnet' = 'devnet'
     ): Promise<() => void> {
         return await this.wsClient.subscribeToPrice(mintAddress, callback, network);
@@ -438,5 +458,9 @@ export const priceClient = {
             console.error('Error fetching DEX token price:', error);
             return null;
         }
+    },
+
+    unsubscribeFromPrice: (mintAddress: string) => {
+        WebSocketClient.getInstance().send(JSON.stringify({ type: 'unsubscribe', mintAddress }));
     }
 };

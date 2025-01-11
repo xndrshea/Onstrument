@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
                     secure: false
                 }
             }
-        }
+        },
+        publicDir: 'public'
     }
 })

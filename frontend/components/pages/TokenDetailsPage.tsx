@@ -20,7 +20,9 @@ const MetricsCard = ({ title, value, change }: { title: string; value: string | 
     <div className="bg-[#232427] p-4 rounded-lg">
         <h3 className="text-gray-400 text-sm mb-1">{title}</h3>
         <div className="flex items-end gap-2">
-            <span className="text-white text-lg font-semibold">{value}</span>
+            <span className="text-white text-lg font-semibold">
+                {typeof value === 'number' ? value.toFixed(4) : value}
+            </span>
             {change !== undefined && (
                 <span className={`text-sm ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {change > 0 ? '+' : ''}{change.toFixed(2)}%
@@ -63,38 +65,52 @@ export function TokenDetailsPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Single WebSocket subscription - only for custom tokens
+    // Modify the WebSocket subscription to handle both price types
     useEffect(() => {
         if (!token?.mintAddress) return;
 
         let cleanup: (() => void) | undefined;
         const setupSubscription = async () => {
+            // For dex tokens and migrated custom tokens, use current_price from database
+            if (token.tokenType === 'dex' || (token.tokenType === 'custom' && token.tokenSource === 'migrated')) {
+                setCurrentPrice(token.currentPrice || null);
+                updateTokenWithPrice(token.currentPrice || 0);
+                return;
+            }
+
+            // For other tokens, use WebSocket subscription
+            const initialPrice = await priceClient.getLatestPrice(token.mintAddress);
+            if (initialPrice !== null) {
+                setCurrentPrice(initialPrice);
+                updateTokenWithPrice(initialPrice);
+            }
+
             cleanup = await priceClient.subscribeToPrice(
                 token.mintAddress,
                 (update) => {
-                    setCurrentPrice(update.price);
-
-                    // Recalculate market cap accounting for decimals
-                    if (token?.supply && token.decimals !== undefined) {
-                        const adjustedSupply = token.supply / Math.pow(10, token.decimals);
-                        const newMarketCap = update.price * adjustedSupply;
-                        setToken(prevToken => prevToken ? {
-                            ...prevToken,
-                            currentPrice: update.price,
-                            marketCapUsd: newMarketCap
-                        } : null);
-                    }
+                    const price = update.price_usd || update.price;
+                    setCurrentPrice(price);
+                    updateTokenWithPrice(price);
                 },
                 token.tokenType === 'dex' ? 'mainnet' : 'devnet'
             );
         };
 
-        setupSubscription();
-
-        return () => {
-            if (cleanup) {
-                cleanup();
+        const updateTokenWithPrice = (price: number) => {
+            if (token?.supply && token.decimals !== undefined) {
+                const adjustedSupply = token.supply / Math.pow(10, token.decimals);
+                const newMarketCap = price * adjustedSupply;
+                setToken(prevToken => prevToken ? {
+                    ...prevToken,
+                    currentPrice: price,
+                    marketCapUsd: newMarketCap
+                } : null);
             }
+        };
+
+        setupSubscription();
+        return () => {
+            if (cleanup) cleanup();
         };
     }, [token?.mintAddress]);
 
@@ -320,7 +336,7 @@ export function TokenDetailsPage() {
                                 />
                                 <MetricsCard
                                     title="Current Price"
-                                    value={`$${Number(token.currentPrice)?.toFixed(6) || 'N/A'}`}
+                                    value={currentPrice ? `$${currentPrice.toFixed(4)}` : 'N/A'}
                                     change={token.priceChange24h}
                                 />
                             </div>

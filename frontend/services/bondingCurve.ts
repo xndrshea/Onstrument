@@ -277,7 +277,7 @@ export class BondingCurve {
         // Build instructions array
         const instructions: TransactionInstruction[] = [];
 
-        // Check if ATA exists
+        // Check if ATA exists and add create instruction if needed
         const ataInfo = await this.connection.getAccountInfo(buyerTokenAccount);
         if (!ataInfo) {
             instructions.push(
@@ -561,7 +561,27 @@ export class BondingCurve {
             });
         }
 
-        const buyerTokenAccount = await this.ensureTokenAccount();
+        const buyerTokenAccount = await getAssociatedTokenAddress(
+            this.mintAddress,
+            this.wallet!.publicKey!
+        );
+
+        // Build instructions array
+        const instructions: TransactionInstruction[] = [];
+
+        // Check if ATA exists and add create instruction if needed
+        const ataInfo = await this.connection.getAccountInfo(buyerTokenAccount);
+        if (!ataInfo) {
+            instructions.push(
+                createAssociatedTokenAccountInstruction(
+                    this.wallet!.publicKey!,  // payer
+                    buyerTokenAccount,        // ata
+                    this.wallet!.publicKey!,  // owner
+                    this.mintAddress          // mint
+                )
+            );
+        }
+
         const rawSolAmount = new BN(params.solAmount * LAMPORTS_PER_SOL);
 
         // Get expected token amount
@@ -598,7 +618,9 @@ export class BondingCurve {
             })
             .instruction();
 
-        return await this.buildAndSendTransaction([buyIx], []);
+        instructions.push(buyIx);
+
+        return await this.buildAndSendTransaction(instructions, []);
     }
 
 }

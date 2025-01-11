@@ -169,11 +169,19 @@ export class BondingCurveProcessor extends BaseProcessor {
         decimals: number
     } | null> {
         try {
+            logger.info('Fetching token info for:', mintAddress);
+
             const result = await pool.query(`
                 SELECT token_vault, curve_address, decimals
                 FROM token_platform.tokens 
                 WHERE mint_address = $1 AND token_type = 'custom'
             `, [mintAddress]);
+
+            logger.info('Token info query result:', {
+                mintAddress,
+                rowCount: result.rowCount,
+                firstRow: result.rows[0]
+            });
 
             if (result.rows.length > 0) {
                 return {
@@ -184,30 +192,54 @@ export class BondingCurveProcessor extends BaseProcessor {
             }
             return null;
         } catch (error) {
-            logger.error('Error fetching token info:', error);
+            logger.error('Error fetching token info:', {
+                error,
+                mintAddress
+            });
             return null;
         }
     }
 
     private async handleBuyEvent(buffer: Buffer) {
         try {
-            const mint = new PublicKey(buffer.subarray(8, 40));
-            const amount = Number(buffer.readBigUInt64LE(40));
-            const solAmount = Number(buffer.readBigUInt64LE(48));
-            const buyer = new PublicKey(buffer.subarray(56, 88));
-            const isSubscribed = buffer.readUInt8(88) === 1;
+            logger.info('Parsing buy event buffer:', {
+                bufferLength: buffer.length,
+                hexData: buffer.toString('hex')
+            });
 
-            // Calculate volume in SOL
-            const volumeInSol = solAmount / LAMPORTS_PER_SOL;
+            const mint = new PublicKey(buffer.subarray(8, 40));
+            logger.info('Parsed mint:', mint.toString());
+
+            const amount = Number(buffer.readBigUInt64LE(40));
+            logger.info('Parsed amount:', amount);
+
+            const solAmount = Number(buffer.readBigUInt64LE(48));
+            logger.info('Parsed solAmount:', solAmount);
+
+            logger.info('Processing buy event:', {
+                mint: mint.toString(),
+                amount,
+                solAmount
+            });
 
             const tokenInfo = await this.getTokenInfo(mint.toString());
+            logger.info('Token info result:', tokenInfo);
+
             if (tokenInfo) {
+                logger.info('Fetching price for buy:', {
+                    mintAddress: mint.toString(),
+                    curveAddress: tokenInfo.curveAddress,
+                    tokenVault: tokenInfo.tokenVault,
+                    volume: solAmount / LAMPORTS_PER_SOL
+                });
+
                 await BondingCurvePriceFetcher.fetchPrice({
                     mintAddress: mint.toString(),
                     curveAddress: tokenInfo.curveAddress,
                     tokenVault: tokenInfo.tokenVault,
                     decimals: tokenInfo.decimals,
-                    volume: volumeInSol
+                    volume: solAmount / LAMPORTS_PER_SOL,
+                    isBuy: true
                 });
             }
         } catch (error) {
@@ -217,23 +249,50 @@ export class BondingCurveProcessor extends BaseProcessor {
 
     private async handleSellEvent(buffer: Buffer) {
         try {
+            logger.info('Parsing sell event buffer:', {
+                bufferLength: buffer.length,
+                hexData: buffer.toString('hex')
+            });
+
             const mint = new PublicKey(buffer.subarray(8, 40));
+            logger.info('Parsed mint:', mint.toString());
+
             const amount = Number(buffer.readBigUInt64LE(40));
+            logger.info('Parsed amount:', amount);
+
             const solAmount = Number(buffer.readBigUInt64LE(48));
+            logger.info('Parsed solAmount:', solAmount);
+
             const seller = new PublicKey(buffer.subarray(56, 88));
+            logger.info('Parsed seller:', seller.toString());
+
             const isSubscribed = buffer.readUInt8(88) === 1;
+            logger.info('Parsed isSubscribed:', isSubscribed);
 
             // Calculate volume in SOL
             const volumeInSol = solAmount / LAMPORTS_PER_SOL;
+            logger.info('Calculated volumeInSol:', volumeInSol);
 
             const tokenInfo = await this.getTokenInfo(mint.toString());
+            logger.info('Token info result:', tokenInfo);
+
             if (tokenInfo) {
+                logger.info('Calling BondingCurvePriceFetcher.fetchPrice with:', {
+                    mintAddress: mint.toString(),
+                    curveAddress: tokenInfo.curveAddress,
+                    tokenVault: tokenInfo.tokenVault,
+                    decimals: tokenInfo.decimals,
+                    volume: volumeInSol,
+                    isBuy: false
+                });
+
                 await BondingCurvePriceFetcher.fetchPrice({
                     mintAddress: mint.toString(),
                     curveAddress: tokenInfo.curveAddress,
                     tokenVault: tokenInfo.tokenVault,
                     decimals: tokenInfo.decimals,
-                    volume: volumeInSol
+                    volume: volumeInSol,
+                    isBuy: false
                 });
             }
         } catch (error) {

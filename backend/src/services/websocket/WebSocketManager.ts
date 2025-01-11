@@ -117,20 +117,25 @@ export class WebSocketManager extends EventEmitter {
     }
 
     broadcastPrice(mintAddress: string, price: number) {
-        this.clients.forEach(client => {
-            if (client.subscriptions.has(mintAddress)) {
-                try {
-                    client.send(JSON.stringify({
-                        type: 'price',
-                        mintAddress,
-                        price,
-                        timestamp: Date.now()
-                    }));
-                } catch (error) {
-                    logger.error(`Failed to send price update to client: ${error}`);
+        const message = {
+            type: 'price',
+            mintAddress,
+            price,
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+            timestamp: Date.now(),
+            time: Date.now(),
+            volume: 0
+        };
+        if (this.wss) {
+            this.wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify(message));
                 }
-            }
-        });
+            });
+        }
     }
 
     broadcastMigration(mintAddress: string) {
