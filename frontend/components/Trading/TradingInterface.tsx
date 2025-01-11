@@ -183,12 +183,14 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     useEffect(() => {
         const updatePrice = async () => {
             try {
-                if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
-                    // Always use bonding curve for unmigrated custom tokens
-                    const initialPrice = await bondingCurve!.getInitialPrice();
+                // Only proceed if we have a bonding curve for custom tokens
+                if (token.tokenType === 'custom' &&
+                    token.curveConfig?.migrationStatus !== 'migrated' &&
+                    bondingCurve) {  // Add this check
+                    const initialPrice = await bondingCurve.getInitialPrice();
                     setSpotPrice(initialPrice);
                     if (onPriceUpdate) onPriceUpdate(initialPrice);
-                } else {
+                } else if (token.tokenType === 'dex' || token.curveConfig?.migrationStatus === 'migrated') {
                     // For DEX tokens and migrated custom tokens, use Jupiter
                     const appropriateConnection = getAppropriateConnection();
                     const quote = await dexService.calculateTradePrice(
@@ -208,13 +210,17 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             }
         };
 
-        // Initial price fetch
-        updatePrice();
+        // Only run updatePrice if we have the necessary dependencies
+        if (connected && publicKey) {
+            updatePrice();
+        }
 
         // Set up WebSocket subscription only for custom tokens
         let cleanupFn: (() => void) | undefined;
 
-        if (token.tokenType === 'custom' && token.curveConfig?.migrationStatus !== 'migrated') {
+        if (token.tokenType === 'custom' &&
+            token.curveConfig?.migrationStatus !== 'migrated' &&
+            bondingCurve) {  // Add this check
             priceClient.subscribeToPrice(
                 token.mintAddress,
                 (update) => {
@@ -232,7 +238,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         return () => {
             if (cleanupFn) cleanupFn();
         };
-    }, [token.mintAddress, token.tokenType, token.curveConfig?.migrationStatus, bondingCurve]);
+    }, [token.mintAddress, token.tokenType, token.curveConfig?.migrationStatus, bondingCurve, connected, publicKey]);
 
     // Price quote updates
     useEffect(() => {

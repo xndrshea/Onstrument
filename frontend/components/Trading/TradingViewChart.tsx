@@ -31,7 +31,7 @@ interface TradingViewChartProps {
 export function TradingViewChart({ token, width = 600, height = 300, currentPrice, onPriceUpdate, chartStyle }: TradingViewChartProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const widgetRef = useRef<any>(null);
-    const loadedDataRef = useRef<boolean>(false);
+    const loadedDataRef = useRef<{ [key: string]: boolean }>({});
     const denominationRef = useRef<string>('USD');
     const [denomination, setDenomination] = useState<'SOL' | 'USD' | 'MCAP'>('USD');
 
@@ -124,9 +124,9 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     },
                     getBars: async (symbolInfo: any, resolution: string, periodParams: any, onHistoryCallback: any) => {
                         try {
-                            // Check if we've already loaded data
-                            if (loadedDataRef.current) {
-                                console.log('Data already loaded, skipping request');
+                            // Check if we've already loaded data for this resolution
+                            if (loadedDataRef.current[resolution]) {
+                                console.log(`Data already loaded for ${resolution}, skipping request`);
                                 onHistoryCallback([], { noData: false });
                                 return;
                             }
@@ -188,10 +188,10 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                                 return barData;
                             }).filter(Boolean);
 
-                            // Mark data as loaded
-                            loadedDataRef.current = true;
+                            // Mark this resolution as loaded
+                            loadedDataRef.current[resolution] = true;
 
-                            console.log('Historical bars:', bars);
+                            console.log(`Historical bars for ${resolution}:`, bars);
                             onHistoryCallback(bars, { noData: bars.length === 0 });
                         } catch (error) {
                             console.error('Error loading bars:', error);
@@ -313,6 +313,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
     // Handle denomination changes without recreating widget
     useEffect(() => {
         if (widgetRef.current) {
+            loadedDataRef.current = {}; // Reset loaded state for all resolutions
             widgetRef.current.chart().resetData();
         }
     }, [denomination]);
