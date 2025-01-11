@@ -82,29 +82,19 @@ export class BondingCurvePriceFetcher {
             const batchToProcess = [...this.queue];
             this.queue = [];
 
-            const currentSlot = await this.connection.getSlot('finalized');
-            logger.info('Waiting for next slot:', { currentSlot });
-
-            // Wait until we've moved forward at least one slot
-            let newSlot = currentSlot;
-            while (newSlot <= currentSlot) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                newSlot = await this.connection.getSlot('finalized');
-            }
-
-            logger.info('Slot advanced:', { oldSlot: currentSlot, newSlot });
-
-            // Now fetch the updated account states
+            // Explicitly use 'confirmed' commitment when fetching account data
             const [tokenAccounts, curveBalances] = await Promise.all([
                 this.connection.getMultipleAccountsInfo(
-                    batchToProcess.map(p => new PublicKey(p.tokenVault))
+                    batchToProcess.map(p => new PublicKey(p.tokenVault)),
+                    { commitment: 'confirmed' }  // Add explicit commitment
                 ),
                 this.connection.getMultipleAccountsInfo(
-                    batchToProcess.map(p => new PublicKey(p.curveAddress))
+                    batchToProcess.map(p => new PublicKey(p.curveAddress)),
+                    { commitment: 'confirmed' }  // Add explicit commitment
                 )
             ]);
 
-            logger.info('Fetched account info:', {
+            logger.info('Fetched account info with confirmed commitment:', {
                 tokenAccountsLength: tokenAccounts.length,
                 curveBalancesLength: curveBalances.length,
                 firstTokenAccount: tokenAccounts[0] ? 'present' : 'missing',
@@ -116,12 +106,6 @@ export class BondingCurvePriceFetcher {
                 const pair = batchToProcess[i];
                 const tokenAccount = tokenAccounts[i];
                 const curveAccount = curveBalances[i];
-
-                logger.info('Processing pair:', {
-                    mint: pair.mintAddress,
-                    hasTokenAccount: !!tokenAccount?.data,
-                    hasCurveAccount: !!curveAccount
-                });
 
                 if (!tokenAccount?.data || !curveAccount) {
                     logger.error("Missing account data for:", {
@@ -149,6 +133,7 @@ export class BondingCurvePriceFetcher {
             logger.error('Error processing bonding curve batch:', error);
         } finally {
             this.isProcessing = false;
+            this.lastProcessTime = Date.now();
 
             // Check if there are more pairs to process
             if (this.queue.length >= this.BATCH_SIZE) {

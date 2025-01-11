@@ -138,7 +138,6 @@ router.post('/tokens', async (req, res) => {
                     INSERT INTO token_platform.price_history (
                         time,
                         mint_address,
-                        price,
                         open,
                         high,
                         low,
@@ -152,7 +151,6 @@ router.post('/tokens', async (req, res) => {
                     ) VALUES (
                         date_trunc('minute', CURRENT_TIMESTAMP),
                         $1,
-                        $2,
                         $2,
                         $2,
                         $2,
@@ -498,7 +496,7 @@ router.get('/prices/:mintAddress/latest', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 time,
-                price,
+                close as price,
                 volume,
                 market_cap,
                 is_buy

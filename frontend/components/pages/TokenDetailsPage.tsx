@@ -78,21 +78,27 @@ export function TokenDetailsPage() {
                 return;
             }
 
-            // For other tokens, use WebSocket subscription
-            const initialPrice = await priceClient.getLatestPrice(token.mintAddress);
-            if (initialPrice !== null) {
-                setCurrentPrice(initialPrice);
-                updateTokenWithPrice(initialPrice);
+            // For custom tokens, get initial price from price history
+            try {
+                const history = await priceClient.getPriceHistory(token.mintAddress);
+                if (history?.length) {
+                    const lastPrice = history[history.length - 1].close;
+                    setCurrentPrice(lastPrice);
+                    updateTokenWithPrice(lastPrice);
+                }
+            } catch (error) {
+                console.error('Error fetching initial price:', error);
             }
 
+            // Set up WebSocket subscription for real-time updates
             cleanup = await priceClient.subscribeToPrice(
                 token.mintAddress,
                 (update) => {
-                    const price = update.price_usd || update.price;
+                    const price = update.price;
                     setCurrentPrice(price);
                     updateTokenWithPrice(price);
                 },
-                token.tokenType === 'dex' ? 'mainnet' : 'devnet'
+                token.tokenType === 'custom' ? 'devnet' : 'mainnet'
             );
         };
 

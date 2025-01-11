@@ -46,7 +46,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         script.onload = () => {
             if (!window.TradingView) return;
 
-            widgetRef.current = new window.TradingView.widget({
+            widgetRef.current = new (window as any).TradingView.widget({
                 container: containerRef.current,
                 width,
                 height,
@@ -85,7 +85,10 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     "mainSeriesProperties.candleStyle.borderUpColor": "#32c48d",
                     "mainSeriesProperties.candleStyle.borderDownColor": "#ff4976",
                     "mainSeriesProperties.candleStyle.wickUpColor": "#32c48d",
-                    "mainSeriesProperties.candleStyle.wickDownColor": "#ff4976"
+                    "mainSeriesProperties.candleStyle.wickDownColor": "#ff4976",
+                    "mainSeriesProperties.candleStyle.drawWick": true,
+                    "mainSeriesProperties.candleStyle.drawBorder": true,
+                    "mainSeriesProperties.candleStyle.barColorsOnPrevClose": true
                 },
                 studies_overrides: {
                     "volume.volume.color.0": "#ff4976",
@@ -109,7 +112,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                                 timezone: 'Etc/UTC',
                                 exchange: 'Onstrument',
                                 minmov: 1,
-                                pricescale: 100000,
+                                pricescale: 10000000,
                                 has_intraday: true,
                                 visible_plots_set: 'ohlcv',
                                 has_weekly_and_monthly: true,
@@ -122,22 +125,13 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     getBars: async (symbolInfo: any, resolution: string, periodParams: any, onHistoryCallback: any) => {
                         try {
                             const { from, to } = periodParams;
-                            console.log('TradingView requesting bars:', { from, to, resolution, token: token.mintAddress });
-
-                            // Reset loaded flag when denomination changes
-                            if (denominationRef.current !== denomination) {
-                                loadedDataRef.current = false;
-                                denominationRef.current = denomination;
-                            }
+                            console.log('Loading historical bars:', { from, to, resolution });
 
                             // Add delay between requests
                             await new Promise(resolve => setTimeout(resolve, 300));
 
                             const url = `/api/ohlcv/${token.mintAddress}?resolution=${resolution}&from=${from}&to=${to}&denomination=${denomination}`;
-                            console.log('Fetching from URL:', url);
-
                             const response = await fetch(url);
-                            console.log('Response status:', response.status);
 
                             if (!response.ok) {
                                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -145,30 +139,47 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
 
                             const data = await response.json();
 
-                            // Log historical bars
-                            console.log('Historical OHLCV data:', data.map((bar: any) => ({
-                                time: bar.time * 1000,
-                                open: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.open),
-                                high: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.high),
-                                low: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.low),
-                                close: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.close),
-                                volume: Number(bar.volume)
-                            })));
-
                             // Process the bars
-                            const bars = data.map((bar: any) => ({
-                                time: Number(bar.time) * 1000,
-                                open: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.open),
-                                high: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.high),
-                                low: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.low),
-                                close: denomination === 'MCAP' ? Number(bar.market_cap) : Number(bar.close),
-                                volume: Number(bar.volume)
-                            }));
+                            const bars = data.map((bar: any, index: number, array: any[]) => {
+                                const prevBar = index > 0 ? array[index - 1] : null;
 
-                            if (bars.length > 0) {
-                                loadedDataRef.current = true;
-                            }
+                                // If there's only one price point for this bar
+                                if (bar.open === bar.close && bar.high === bar.low) {
+                                    const price = Number(bar.close);
+                                    return {
+                                        time: Number(bar.time) * 1000,
+                                        open: prevBar ? Number(prevBar.close) : price,
+                                        high: Math.max(price, prevBar ? Number(prevBar.close) : price),
+                                        low: Math.min(price, prevBar ? Number(prevBar.close) : price),
+                                        close: price,
+                                        volume: Number(bar.volume || 0),
+                                        isBarClosed: true,
+                                        isLastBar: index === data.length - 1
+                                    };
+                                }
 
+                                // Ensure all price values are converted to numbers
+                                const barData = {
+                                    time: Number(bar.time) * 1000,
+                                    open: Number(bar.open),
+                                    high: Number(bar.high),
+                                    low: Number(bar.low),
+                                    close: Number(bar.close),
+                                    volume: Number(bar.volume || 0),
+                                    isBarClosed: true,
+                                    isLastBar: index === data.length - 1
+                                };
+
+                                // Validate the data
+                                if (isNaN(barData.open) || isNaN(barData.high) || isNaN(barData.low) || isNaN(barData.close)) {
+                                    console.warn('Invalid price data detected:', bar);
+                                    return null;
+                                }
+
+                                return barData;
+                            }).filter(Boolean); // Remove any null values
+
+                            console.log('Historical bars:', bars);
                             onHistoryCallback(bars, { noData: bars.length === 0 });
                         } catch (error) {
                             console.error('Error loading bars:', error);
@@ -178,34 +189,43 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     subscribeBars: (symbolInfo: any, resolution: string, onRealtimeCallback: any) => {
                         const network = token.tokenType === 'dex' ? 'mainnet' : 'devnet';
                         let currentBar: any = null;
+                        let lastClose: number | null = null;
 
                         priceClient.subscribeToPrice(
                             token.mintAddress,
-                            (update: { price: number; time: number; volume?: number; marketCap?: number }) => {
-                                const price = denomination === 'MCAP' ?
-                                    Number(update.marketCap || 0) :
-                                    Number(update.price || 0);
-
+                            (update: { price: number; time: number; isSell?: boolean }) => {
+                                const price = Number(update.price || 0);
                                 const timestamp = update.time * 1000;
                                 const resolutionMs = getResolutionInMs(resolution);
                                 const barStartTime = Math.floor(timestamp / resolutionMs) * resolutionMs;
 
+                                if (currentBar && barStartTime < currentBar.time) {
+                                    console.warn('Received outdated timestamp, skipping update');
+                                    return;
+                                }
+
                                 if (!currentBar || timestamp >= currentBar.time + resolutionMs) {
-                                    // Create new bar with the current price as open
+                                    // If we have a current bar, close it
+                                    if (currentBar) {
+                                        lastClose = currentBar.close;
+                                        onRealtimeCallback({ ...currentBar, isBarClosed: true });
+                                    }
+
+                                    // Start new bar
                                     currentBar = {
                                         time: barStartTime,
-                                        open: price,  // Use current price as open, not lastClose
+                                        open: lastClose || price,
                                         high: price,
                                         low: price,
                                         close: price,
-                                        volume: Number(update.volume || 0)
+                                        volume: 0,
+                                        isBarClosed: false
                                     };
                                 } else {
-                                    // Update existing bar
+                                    // Update current bar
                                     currentBar.high = Math.max(currentBar.high, price);
                                     currentBar.low = Math.min(currentBar.low, price);
                                     currentBar.close = price;
-                                    currentBar.volume += Number(update.volume || 0);
                                 }
 
                                 onRealtimeCallback(currentBar);
@@ -216,10 +236,17 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                         return () => priceClient.unsubscribeFromPrice(token.mintAddress);
                     },
                     unsubscribeBars: () => { }
-                }
+                },
+                price_scale: {
+                    auto_scale: false,
+                    percentage: false,
+                    scale_margin_top: 2.0,
+                    scale_margin_bottom: 0.5,
+                },
+                auto_scale: false,
+                scale_mode: 'Normal',
             });
 
-            // Wait for widget to be ready
             widgetRef.current.onChartReady(() => {
                 console.log('Chart is ready');
                 try {

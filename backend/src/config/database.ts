@@ -163,7 +163,6 @@ export async function initializeDatabase() {
             CREATE TABLE IF NOT EXISTS token_platform.price_history (
                 time TIMESTAMPTZ NOT NULL,
                 mint_address VARCHAR(255) NOT NULL,
-                price NUMERIC(78,36) NOT NULL,
                 open NUMERIC(78,36) NOT NULL,
                 high NUMERIC(78,36) NOT NULL,
                 low NUMERIC(78,36) NOT NULL,
@@ -224,18 +223,23 @@ export async function initializeDatabase() {
 
         // Create materialized views outside of transaction
         await client.query(`
+            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1m CASCADE;
+            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1h CASCADE;
+            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1d CASCADE;
+        `);
+
+        await client.query(`
             CREATE MATERIALIZED VIEW IF NOT EXISTS token_platform.price_history_1m
             WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
             SELECT 
                 time_bucket('1 minute', time) as bucket,
                 mint_address,
-                first(price, time) as price,
                 first(open, time) as open,
                 max(high) as high,
                 min(low) as low,
                 last(close, time) as close,
                 sum(volume) as volume,
-                sum(market_cap) as market_cap,
+                last(market_cap, time) as market_cap,
                 bool_or(is_buy) as is_buy,
                 sum(trade_count) as trade_count,
                 sum(buy_count) as buy_count,
@@ -250,13 +254,12 @@ export async function initializeDatabase() {
             SELECT 
                 time_bucket('1 hour', time) as bucket,
                 mint_address,
-                first(price, time) as price,
                 first(open, time) as open,
                 max(high) as high,
                 min(low) as low,
                 last(close, time) as close,
                 sum(volume) as volume,
-                sum(market_cap) as market_cap,
+                last(market_cap, time) as market_cap,
                 bool_or(is_buy) as is_buy,
                 sum(trade_count) as trade_count,
                 sum(buy_count) as buy_count,
@@ -271,13 +274,12 @@ export async function initializeDatabase() {
             SELECT 
                 time_bucket('1 day', time) as bucket,
                 mint_address,
-                first(price, time) as price,
                 first(open, time) as open,
                 max(high) as high,
                 min(low) as low,
                 last(close, time) as close,
                 sum(volume) as volume,
-                sum(market_cap) as market_cap,
+                last(market_cap, time) as market_cap,
                 bool_or(is_buy) as is_buy,
                 sum(trade_count) as trade_count,
                 sum(buy_count) as buy_count,

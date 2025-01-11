@@ -131,25 +131,17 @@ class WebSocketClient {
                 this.migrationEventsReceived.set(network, true);
             }
 
-            // Convert timestamp to start of the minute
-            const timestamp = new Date(data.time);
-            timestamp.setSeconds(0, 0); // Reset seconds and milliseconds
-
-            // Ensure the timestamp is for the current or future minute
-            const now = new Date();
-            if (timestamp < now) {
-                timestamp.setMinutes(now.getMinutes());
-            }
-
             const mintAddress = data.mintAddress;
             const update = {
-                price: Number(data.close),
-                time: new Date(timestamp).getTime()
+                price: Number(data.close || data.price),
+                time: Math.floor(Date.now() / 1000), // Current time in seconds
+                isSell: data.type === 'sell'
             };
+
             // Notify subscribers
             this.subscribers.get(mintAddress)?.forEach(callback => callback(update));
         } catch (error) {
-            console.error('Error handling WebSocket message:', error, event.data);
+            console.error('Error handling WebSocket message:', error);
         }
     }
 
@@ -256,11 +248,11 @@ class WebSocketClient {
         const data = await response.json();
         return data.map((point: OHLCVPoint) => ({
             time: point.time as Time,
-            open: point.open_usd,
-            high: point.high_usd,
-            low: point.low_usd,
-            close: point.close_usd,
-            value: point.price_usd
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+            value: point.close
         }));
     }
 
@@ -385,11 +377,10 @@ interface WebSocketMetrics {
 
 interface OHLCVPoint {
     time: string;
-    price_usd: number;
-    open_usd: number;
-    high_usd: number;
-    low_usd: number;
-    close_usd: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
 }
 
 export const priceClient = {

@@ -32,32 +32,53 @@ export class PriceHistoryModel {
         toTimestamp: number
     ) {
         try {
+            const viewName = resolution === 'D' ? 'price_history_1d' :
+                (parseInt(resolution) >= 60 ? 'price_history_1h' :
+                    'price_history_1m');
+
+            // Cast to float8 (double precision) for the chart display
             const query = `
                 SELECT 
-                    EXTRACT(EPOCH FROM time_bucket($4::interval, time))::bigint as time,
-                    (array_agg(price ORDER BY time ASC))[1] as open,
-                    MAX(price) as high,
-                    MIN(price) as low,
-                    (array_agg(price ORDER BY time DESC))[1] as close,
-                    SUM(volume) as volume,
-                    MAX(market_cap) as market_cap
-                FROM token_platform.price_history
+                    EXTRACT(EPOCH FROM bucket)::bigint as time,
+                    open::float8 as open,
+                    high::float8 as high,
+                    low::float8 as low,
+                    close::float8 as close,
+                    volume::float8 as volume,
+                    market_cap::float8 as market_cap
+                FROM token_platform.${viewName}
                 WHERE mint_address = $1
-                AND time BETWEEN to_timestamp($2) AND to_timestamp($3)
-                GROUP BY time_bucket($4::interval, time)
-                ORDER BY time ASC;
+                AND bucket BETWEEN to_timestamp($2) AND to_timestamp($3)
+                ORDER BY bucket ASC;
             `;
 
-            const interval = this.getTimeScaleInterval(resolution);
             const result = await pool.query(query, [
                 tokenMintAddress,
                 fromTimestamp,
-                toTimestamp,
-                interval
+                toTimestamp
             ]);
 
-            // Return Unix timestamps directly
-            return result.rows;
+            // Debug log the raw data
+            logger.debug('Raw OHLCV data from DB:', {
+                viewName,
+                firstRow: result.rows[0],
+                types: result.rows[0] ? Object.entries(result.rows[0]).map(([key, value]) =>
+                    `${key}: ${typeof value}`
+                ) : []
+            });
+
+            // Force number conversion
+            const processedRows = result.rows.map(row => ({
+                time: Number(row.time),
+                open: Number(row.open),
+                high: Number(row.high),
+                low: Number(row.low),
+                close: Number(row.close),
+                volume: Number(row.volume),
+                market_cap: Number(row.market_cap)
+            }));
+
+            return processedRows;
         } catch (error) {
             logger.error('Error in getOHLCV:', error);
             throw error;
@@ -84,7 +105,7 @@ export class PriceHistoryModel {
     // This function runs after every trade to save the new price
     static async recordPrice(update: {
         mintAddress: string;
-        price: number;
+        price: number;  // This will be used for all OHLC values if creating new record
         marketCap?: number;
         volume?: number;
         timestamp?: Date;
@@ -114,25 +135,38 @@ export class PriceHistoryModel {
                 RETURNING *
             `, [mintAddress, currentMinute, price, volume, marketCap, isBuy]);
 
-            // If no row was updated, insert a new one
-            if (result.rowCount === 0) {
+            // If no existing record for this minute, create a new one
+            if (result.rows.length === 0) {
                 await pool.query(`
                     INSERT INTO token_platform.price_history (
-                        time, mint_address,
-                        price, open, high, low, close,
-                        volume, market_cap, is_buy,
-                        trade_count, buy_count, sell_count
+                        time,
+                        mint_address,
+                        open,
+                        high,
+                        low,
+                        close,
+                        volume,
+                        market_cap,
+                        is_buy,
+                        trade_count,
+                        buy_count,
+                        sell_count
                     ) VALUES (
-                        $1, $2,
-                        $3, $3, $3, $3, $3,
-                        $4, $5, $6,
+                        $1,
+                        $2,
+                        $3,
+                        $3,
+                        $3,
+                        $3,
+                        $4,
+                        $5,
+                        $6,
                         1,
                         CASE WHEN $6 THEN 1 ELSE 0 END,
                         CASE WHEN $6 THEN 0 ELSE 1 END
                     )
                 `, [currentMinute, mintAddress, price, volume, marketCap, isBuy]);
             }
-
         } catch (error) {
             logger.error('Error recording price:', error);
             throw error;
@@ -232,8 +266,8 @@ export class PriceHistoryModel {
             const query = `
                 SELECT 
                     EXTRACT(EPOCH FROM time)::bigint as time,
-                    price,
-                    price_usd,
+                    close as price,
+                    close as price_usd,
                     market_cap
                 FROM token_platform.price_history
                 WHERE mint_address = $1

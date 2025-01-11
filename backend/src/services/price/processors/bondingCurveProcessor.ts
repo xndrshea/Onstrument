@@ -124,9 +124,36 @@ export class BondingCurveProcessor extends BaseProcessor {
         }
     }
 
-    private handleMigrationEvent(buffer: Buffer) {
+    private async waitForNextBlock(): Promise<number> {
+        const currentSlot = await this.connection.getSlot('finalized');
+        logger.info('Waiting for next block, current slot:', currentSlot);
+
+        let newSlot = currentSlot;
+        let attempts = 0;
+        while (newSlot <= currentSlot) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            newSlot = await this.connection.getSlot('finalized');
+            attempts++;
+            logger.info('Block check attempt:', {
+                attempt: attempts,
+                currentSlot,
+                newSlot,
+                difference: newSlot - currentSlot
+            });
+        }
+
+        logger.info('Block confirmation complete:', {
+            startingSlot: currentSlot,
+            endingSlot: newSlot,
+            slotDifference: newSlot - currentSlot,
+            attempts
+        });
+        return newSlot;
+    }
+
+    private async handleMigrationEvent(buffer: Buffer) {
         try {
-            // Skip 8-byte discriminator
+            // Parse event data
             const mint = new PublicKey(buffer.subarray(8, 40));
             const realSolAmount = Number(buffer.readBigUInt64LE(40));
             const virtualSolAmount = Number(buffer.readBigUInt64LE(48));
@@ -135,18 +162,11 @@ export class BondingCurveProcessor extends BaseProcessor {
             const developer = new PublicKey(buffer.subarray(72, 104));
             const isSubscribed = buffer.readUInt8(104) === 1;
 
-            logger.info('Decoded MigrationEvent:', {
-                mint: mint.toString(),
-                realSolAmount,
-                virtualSolAmount,
-                tokenAmount,
-                effectivePrice,
-                developer: developer.toString(),
-                isSubscribed
-            });
+            // Wait for next block
+            await this.waitForNextBlock();
 
             // Forward to MigrationService
-            this.migrationService.handleMigrationEvent({
+            await this.migrationService.handleMigrationEvent({
                 mint: mint.toString(),
                 realSolAmount,
                 virtualSolAmount,
@@ -154,8 +174,6 @@ export class BondingCurveProcessor extends BaseProcessor {
                 effectivePrice,
                 developer: developer.toString(),
                 isSubscribed
-            }).catch(error => {
-                logger.error('Error in MigrationService.handleMigrationEvent:', error);
             });
 
         } catch (error) {
@@ -202,19 +220,10 @@ export class BondingCurveProcessor extends BaseProcessor {
 
     private async handleBuyEvent(buffer: Buffer) {
         try {
-            logger.info('Parsing buy event buffer:', {
-                bufferLength: buffer.length,
-                hexData: buffer.toString('hex')
-            });
-
+            // Parse event data
             const mint = new PublicKey(buffer.subarray(8, 40));
-            logger.info('Parsed mint:', mint.toString());
-
             const amount = Number(buffer.readBigUInt64LE(40));
-            logger.info('Parsed amount:', amount);
-
             const solAmount = Number(buffer.readBigUInt64LE(48));
-            logger.info('Parsed solAmount:', solAmount);
 
             logger.info('Processing buy event:', {
                 mint: mint.toString(),
@@ -222,17 +231,11 @@ export class BondingCurveProcessor extends BaseProcessor {
                 solAmount
             });
 
+            // Wait for next block
+            await this.waitForNextBlock();
+
             const tokenInfo = await this.getTokenInfo(mint.toString());
-            logger.info('Token info result:', tokenInfo);
-
             if (tokenInfo) {
-                logger.info('Fetching price for buy:', {
-                    mintAddress: mint.toString(),
-                    curveAddress: tokenInfo.curveAddress,
-                    tokenVault: tokenInfo.tokenVault,
-                    volume: solAmount / LAMPORTS_PER_SOL
-                });
-
                 await BondingCurvePriceFetcher.fetchPrice({
                     mintAddress: mint.toString(),
                     curveAddress: tokenInfo.curveAddress,
@@ -249,49 +252,32 @@ export class BondingCurveProcessor extends BaseProcessor {
 
     private async handleSellEvent(buffer: Buffer) {
         try {
-            logger.info('Parsing sell event buffer:', {
-                bufferLength: buffer.length,
-                hexData: buffer.toString('hex')
+            // Parse event data
+            const mint = new PublicKey(buffer.subarray(8, 40));
+            const amount = Number(buffer.readBigUInt64LE(40));
+            const solAmount = Number(buffer.readBigUInt64LE(48));
+            const seller = new PublicKey(buffer.subarray(56, 88));
+            const isSubscribed = buffer.readUInt8(88) === 1;
+
+            logger.info('Processing sell event:', {
+                mint: mint.toString(),
+                amount,
+                solAmount,
+                seller: seller.toString(),
+                isSubscribed
             });
 
-            const mint = new PublicKey(buffer.subarray(8, 40));
-            logger.info('Parsed mint:', mint.toString());
-
-            const amount = Number(buffer.readBigUInt64LE(40));
-            logger.info('Parsed amount:', amount);
-
-            const solAmount = Number(buffer.readBigUInt64LE(48));
-            logger.info('Parsed solAmount:', solAmount);
-
-            const seller = new PublicKey(buffer.subarray(56, 88));
-            logger.info('Parsed seller:', seller.toString());
-
-            const isSubscribed = buffer.readUInt8(88) === 1;
-            logger.info('Parsed isSubscribed:', isSubscribed);
-
-            // Calculate volume in SOL
-            const volumeInSol = solAmount / LAMPORTS_PER_SOL;
-            logger.info('Calculated volumeInSol:', volumeInSol);
+            // Wait for next block
+            await this.waitForNextBlock();
 
             const tokenInfo = await this.getTokenInfo(mint.toString());
-            logger.info('Token info result:', tokenInfo);
-
             if (tokenInfo) {
-                logger.info('Calling BondingCurvePriceFetcher.fetchPrice with:', {
-                    mintAddress: mint.toString(),
-                    curveAddress: tokenInfo.curveAddress,
-                    tokenVault: tokenInfo.tokenVault,
-                    decimals: tokenInfo.decimals,
-                    volume: volumeInSol,
-                    isBuy: false
-                });
-
                 await BondingCurvePriceFetcher.fetchPrice({
                     mintAddress: mint.toString(),
                     curveAddress: tokenInfo.curveAddress,
                     tokenVault: tokenInfo.tokenVault,
                     decimals: tokenInfo.decimals,
-                    volume: volumeInSol,
+                    volume: solAmount / LAMPORTS_PER_SOL,
                     isBuy: false
                 });
             }
