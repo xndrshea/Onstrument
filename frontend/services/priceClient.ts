@@ -135,7 +135,8 @@ class WebSocketClient {
             const update = {
                 price: Number(data.close || data.price),
                 time: Math.floor(Date.now() / 1000), // Current time in seconds
-                isSell: data.type === 'sell'
+                isSell: data.type === 'sell',
+                volume: Number(data.volume || 0)
             };
 
             // Notify subscribers
@@ -189,7 +190,7 @@ class WebSocketClient {
 
     async subscribeToPrice(
         mintAddress: string,
-        callback: (update: { price: number; priceUsd?: number; time: number }) => void,
+        callback: (update: { price: number; time: number; isSell?: boolean; volume?: number }) => void,
         network: 'mainnet' | 'devnet' = 'devnet'
     ): Promise<() => void> {
 
@@ -427,7 +428,7 @@ export const priceClient = {
 
     async subscribeToPrice(
         mintAddress: string,
-        callback: (update: { price: number; priceUsd?: number; time: number }) => void,
+        callback: (update: { price: number; time: number; isSell?: boolean; volume?: number }) => void,
         network: 'mainnet' | 'devnet' = 'devnet'
     ): Promise<() => void> {
         return await this.wsClient.subscribeToPrice(mintAddress, callback, network);

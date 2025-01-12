@@ -50,16 +50,12 @@ export class BondingCurvePriceFetcher {
     }
 
     static async fetchPrice(pairData: BondingCurvePairData): Promise<void> {
-        logger.info('BondingCurvePriceFetcher.fetchPrice called:', pairData);
 
         const instance = BondingCurvePriceFetcher.getInstance();
         instance.queue.push(pairData);
 
-        logger.info('Queue status after push:', {
-            queueLength: instance.queue.length,
-            batchSize: instance.BATCH_SIZE,
-            isProcessing: instance.isProcessing
-        });
+        console.log(pairData);
+
 
         if (instance.queue.length >= instance.BATCH_SIZE && !instance.isProcessing) {
             await instance.processBatch();
@@ -82,6 +78,8 @@ export class BondingCurvePriceFetcher {
             const batchToProcess = [...this.queue];
             this.queue = [];
 
+
+
             // Explicitly use 'confirmed' commitment when fetching account data
             const [tokenAccounts, curveBalances] = await Promise.all([
                 this.connection.getMultipleAccountsInfo(
@@ -94,25 +92,16 @@ export class BondingCurvePriceFetcher {
                 )
             ]);
 
-            logger.info('Fetched account info with confirmed commitment:', {
-                tokenAccountsLength: tokenAccounts.length,
-                curveBalancesLength: curveBalances.length,
-                firstTokenAccount: tokenAccounts[0] ? 'present' : 'missing',
-                firstCurveBalance: curveBalances[0] ? 'present' : 'missing'
-            });
 
             // Process each pair
             for (let i = 0; i < batchToProcess.length; i++) {
                 const pair = batchToProcess[i];
+
+
                 const tokenAccount = tokenAccounts[i];
                 const curveAccount = curveBalances[i];
 
                 if (!tokenAccount?.data || !curveAccount) {
-                    logger.error("Missing account data for:", {
-                        mint: pair.mintAddress,
-                        vault: pair.tokenVault,
-                        curve: pair.curveAddress
-                    });
                     continue;
                 }
 
@@ -151,57 +140,47 @@ export class BondingCurvePriceFetcher {
         isBuy?: boolean
     ): Promise<void> {
         try {
+
+
             // If it's a sell and the token amount is very small (dust), treat it as zero
             if (isBuy === false && tokenAmount < BigInt(1000)) {
                 tokenAmount = BigInt(0);
                 solAmount = BigInt(0);
             }
 
-            logger.info('RAW_VALUES:', {
-                solAmount: solAmount.toString(),
-                tokenAmount: tokenAmount.toString(),
-                decimals,
-                virtualSol: this.VIRTUAL_SOL,
-                LAMPORTS_PER_SOL,
-                isBuy
-            });
+
 
             const solPrice = await this.getSolUsdPrice();
+            const volumeUsd = volume ? volume * solPrice : 0;
+
+
+
 
             // Convert amounts to numbers and handle decimals
             const solBalanceInSol = Number(solAmount) / LAMPORTS_PER_SOL;
             const tokenSupply = Number(tokenAmount) / (10 ** decimals);
             const virtualSolInSol = this.VIRTUAL_SOL / LAMPORTS_PER_SOL;
 
-            // Log intermediate calculations
-            logger.info('Intermediate calculations:', {
-                solBalanceInSol,
-                tokenSupply,
-                virtualSolInSol,
-                LAMPORTS_PER_SOL
-            });
+
 
             const solPerToken = (solBalanceInSol + virtualSolInSol) / tokenSupply;
             const usdPrice = solPerToken * solPrice;
             const marketCap = (solBalanceInSol + virtualSolInSol) * solPrice;
 
-            logger.info('Final calculations:', {
-                solPerToken,
-                solPrice,
-                usdPrice,
-                marketCap
-            });
+
 
             await PriceHistoryModel.recordPrice({
                 mintAddress,
-                price: usdPrice,  // Store USD price
-                marketCap,  // USD market cap
-                volume: volume ? volume * solPrice : 0,  // Convert volume to USD
+                price: usdPrice,
+                marketCap,
+                volume: volumeUsd,
                 timestamp: new Date(),
                 isBuy
             });
 
-            wsManager.broadcastPrice(mintAddress, usdPrice);  // Broadcast USD price
+
+
+            wsManager.broadcastPrice(mintAddress, usdPrice, volumeUsd);
         } catch (error) {
             logger.error('Error calculating price:', error);
             throw error;

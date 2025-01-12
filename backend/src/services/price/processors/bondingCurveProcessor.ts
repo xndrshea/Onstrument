@@ -225,11 +225,7 @@ export class BondingCurveProcessor extends BaseProcessor {
             const amount = Number(buffer.readBigUInt64LE(40));
             const solAmount = Number(buffer.readBigUInt64LE(48));
 
-            logger.info('Processing buy event:', {
-                mint: mint.toString(),
-                amount,
-                solAmount
-            });
+
 
             // Wait for next block
             await this.waitForNextBlock();
@@ -259,13 +255,7 @@ export class BondingCurveProcessor extends BaseProcessor {
             const seller = new PublicKey(buffer.subarray(56, 88));
             const isSubscribed = buffer.readUInt8(88) === 1;
 
-            logger.info('Processing sell event:', {
-                mint: mint.toString(),
-                amount,
-                solAmount,
-                seller: seller.toString(),
-                isSubscribed
-            });
+
 
             // Wait for next block
             await this.waitForNextBlock();
