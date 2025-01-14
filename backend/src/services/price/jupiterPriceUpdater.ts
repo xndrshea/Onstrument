@@ -75,7 +75,7 @@ export class JupiterPriceUpdater {
                     mint_address,
                     supply,
                     decimals
-                FROM token_platform.tokens 
+                FROM onstrument.tokens 
                 WHERE token_type = 'dex'
                 AND mint_address != 'So11111111111111111111111111111111111111112'
             `);
@@ -125,7 +125,7 @@ export class JupiterPriceUpdater {
 
             try {
                 await pool.query(`
-                    UPDATE token_platform.tokens 
+                    UPDATE onstrument.tokens 
                     SET 
                         current_price = $2,
                         market_cap_usd = $3,

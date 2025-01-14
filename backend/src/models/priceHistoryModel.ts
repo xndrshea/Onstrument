@@ -46,7 +46,7 @@ export class PriceHistoryModel {
                     close::float8 as close,
                     volume::float8 as volume,
                     market_cap::float8 as market_cap
-                FROM token_platform.${viewName}
+                FROM onstrument.${viewName}
                 WHERE mint_address = $1
                 AND bucket BETWEEN to_timestamp($2) AND to_timestamp($3)
                 ORDER BY bucket ASC;
@@ -120,7 +120,7 @@ export class PriceHistoryModel {
 
             // First try to update existing minute's data
             const result = await pool.query(`
-                UPDATE token_platform.price_history 
+                UPDATE onstrument.price_history 
                 SET 
                     high = GREATEST(high, $3),
                     low = LEAST(low, $3),
@@ -138,7 +138,7 @@ export class PriceHistoryModel {
             // If no existing record for this minute, create a new one
             if (result.rows.length === 0) {
                 await pool.query(`
-                    INSERT INTO token_platform.price_history (
+                    INSERT INTO onstrument.price_history (
                         time,
                         mint_address,
                         open,
@@ -185,7 +185,7 @@ export class PriceHistoryModel {
                     close,
                     volume,
                     market_cap
-                FROM token_platform.price_history
+                FROM onstrument.price_history
                 WHERE mint_address = $1
                 ORDER BY time ASC
             `;
@@ -212,43 +212,43 @@ export class PriceHistoryModel {
             const query = {
                 '5m': `
                     SELECT SUM(volume) as total_volume
-                    FROM token_platform.price_history_1m
+                    FROM onstrument.price_history_1m
                     WHERE mint_address = $1 
                     AND bucket > NOW() - INTERVAL '5 minutes'
                 `,
                 '30m': `
                     SELECT SUM(volume) as total_volume
-                    FROM token_platform.price_history_1m
+                    FROM onstrument.price_history_1m
                     WHERE mint_address = $1 
                     AND bucket > NOW() - INTERVAL '30 minutes'
                 `,
                 '1h': `
                     SELECT SUM(volume) as total_volume
-                    FROM token_platform.price_history_1h
+                    FROM onstrument.price_history_1h
                     WHERE mint_address = $1 
                     AND bucket > NOW() - INTERVAL '1 hour'
                 `,
                 '4h': `
                     SELECT SUM(volume) as total_volume
-                    FROM token_platform.price_history_1h
+                    FROM onstrument.price_history_1h
                     WHERE mint_address = $1 
                     AND bucket > NOW() - INTERVAL '4 hours'
                 `,
                 '12h': `
                     SELECT SUM(volume) as total_volume
-                    FROM token_platform.price_history_1h
+                    FROM onstrument.price_history_1h
                     WHERE mint_address = $1 
                     AND bucket > NOW() - INTERVAL '12 hours'
                 `,
                 '24h': `
                     SELECT SUM(volume) as total_volume
-                    FROM token_platform.price_history_1d
+                    FROM onstrument.price_history_1d
                     WHERE mint_address = $1 
                     AND bucket > NOW() - INTERVAL '24 hours'
                 `,
                 'all': `
                     SELECT SUM(volume) as total_volume
-                    FROM token_platform.price_history
+                    FROM onstrument.price_history
                     WHERE mint_address = $1
                 `
             }[period];
@@ -269,7 +269,7 @@ export class PriceHistoryModel {
                     close as price,
                     close as price_usd,
                     market_cap
-                FROM token_platform.price_history
+                FROM onstrument.price_history
                 WHERE mint_address = $1
                 ORDER BY time DESC
                 LIMIT 1

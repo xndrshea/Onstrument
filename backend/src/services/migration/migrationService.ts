@@ -62,7 +62,7 @@ export class MigrationService {
             // 1. Update the "migrationStatus" in the DB to "migrated"
             await pool.query(
                 `
-                UPDATE token_platform.tokens
+                UPDATE onstrument.tokens
                 SET 
                     curve_config = jsonb_set(
                         curve_config::jsonb,

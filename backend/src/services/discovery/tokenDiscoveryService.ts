@@ -214,7 +214,7 @@ export class TokenDiscoveryService {
     private async ensureTokenMetadata(mintAddress: string): Promise<void> {
         try {
             await pool.query(
-                `INSERT INTO token_platform.tokens 
+                `INSERT INTO onstrument.tokens 
                 (mint_address, metadata_status, created_at, last_metadata_fetch, token_type) 
                 VALUES ($1, 'pending', NOW(), NOW(), 'dex')
                 ON CONFLICT (mint_address) 
@@ -229,7 +229,7 @@ export class TokenDiscoveryService {
 
             // Queue metadata update if not already fetched
             const result = await pool.query(
-                'SELECT metadata_status FROM token_platform.tokens WHERE mint_address = $1',
+                'SELECT metadata_status FROM onstrument.tokens WHERE mint_address = $1',
                 [mintAddress]
             );
 
@@ -480,7 +480,7 @@ export class TokenDiscoveryService {
     private async upsertToken(data: TokenUpsertData): Promise<void> {
         try {
             const query = `
-                INSERT INTO token_platform.tokens (
+                INSERT INTO onstrument.tokens (
                     mint_address,
                     token_type,
                     current_price,
@@ -632,7 +632,7 @@ export class TokenDiscoveryService {
 
         try {
             await client.query(`
-                UPDATE token_platform.tokens 
+                UPDATE onstrument.tokens 
                 SET 
                     current_price = $1,
                     volume_24h = $2,
@@ -691,7 +691,7 @@ export class TokenDiscoveryService {
             const addresses = Object.keys(prices.data);
             const tokenQuery = `
                 SELECT mint_address, supply, decimals 
-                FROM token_platform.tokens 
+                FROM onstrument.tokens 
                 WHERE mint_address = ANY($1)
             `;
             const tokenData = await this.client.query(tokenQuery, [addresses]);
@@ -715,7 +715,7 @@ export class TokenDiscoveryService {
             // Process updates sequentially
             for (const update of updates) {
                 const query = `
-                    UPDATE token_platform.tokens 
+                    UPDATE onstrument.tokens 
                     SET 
                         current_price = $2,
                         market_cap_usd = $3,

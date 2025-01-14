@@ -191,7 +191,7 @@ export class BondingCurveProcessor extends BaseProcessor {
 
             const result = await pool.query(`
                 SELECT token_vault, curve_address, decimals
-                FROM token_platform.tokens 
+                FROM onstrument.tokens 
                 WHERE mint_address = $1 AND token_type = 'custom'
             `, [mintAddress]);
 

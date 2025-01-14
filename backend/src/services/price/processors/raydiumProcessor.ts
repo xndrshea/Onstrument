@@ -208,7 +208,7 @@ export class RaydiumProcessor extends BaseProcessor {
     private async ensureTokenExists(mintAddress: string, decimals: number): Promise<boolean> {
         try {
             await pool.query(
-                `INSERT INTO token_platform.tokens (
+                `INSERT INTO onstrument.tokens (
                     mint_address,
                     decimals,
                     metadata_status,
@@ -219,16 +219,16 @@ export class RaydiumProcessor extends BaseProcessor {
                 ON CONFLICT (mint_address) 
                 DO UPDATE SET 
                     metadata_status = CASE 
-                        WHEN token_platform.tokens.metadata_status IS NULL 
+                        WHEN onstrument.tokens.metadata_status IS NULL 
                         THEN 'pending' 
-                        ELSE token_platform.tokens.metadata_status 
+                        ELSE onstrument.tokens.metadata_status 
                     END`,
                 [mintAddress, decimals]
             );
 
             // Queue metadata update
             const result = await pool.query(
-                `SELECT metadata_status FROM token_platform.tokens WHERE mint_address = $1`,
+                `SELECT metadata_status FROM onstrument.tokens WHERE mint_address = $1`,
                 [mintAddress]
             );
 

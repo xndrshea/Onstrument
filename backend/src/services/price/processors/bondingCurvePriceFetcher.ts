@@ -191,7 +191,7 @@ export class BondingCurvePriceFetcher {
         try {
             const result = await pool.query(`
                 SELECT current_price
-                FROM token_platform.tokens 
+                FROM onstrument.tokens 
                 WHERE mint_address = 'So11111111111111111111111111111111111111112'
             `);
 

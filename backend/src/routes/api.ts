@@ -70,7 +70,7 @@ router.post('/tokens', async (req, res) => {
         // Get current SOL price from our database
         const solPriceResult = await pool.query(`
             SELECT current_price 
-            FROM token_platform.tokens 
+            FROM onstrument.tokens 
             WHERE mint_address = 'So11111111111111111111111111111111111111112'
             LIMIT 1
         `);
@@ -84,7 +84,7 @@ router.post('/tokens', async (req, res) => {
 
         // First insert the token
         const result = await pool.query(`
-            INSERT INTO token_platform.tokens (
+            INSERT INTO onstrument.tokens (
                 mint_address,
                 curve_address,
                 token_vault,
@@ -135,7 +135,7 @@ router.post('/tokens', async (req, res) => {
 
             try {
                 await pool.query(`
-                    INSERT INTO token_platform.price_history (
+                    INSERT INTO onstrument.price_history (
                         time,
                         mint_address,
                         open,
@@ -241,7 +241,7 @@ router.get('/tokens', async (req, res) => {
         const volumeSelect = !['newest', 'oldest', 'marketCap'].includes(sortBy)
             ? `, COALESCE(
                     (SELECT SUM(volume) 
-                     FROM token_platform.price_history 
+                     FROM onstrument.price_history 
                      WHERE mint_address = t.mint_address 
                      ${volumeInterval ? `AND time > NOW() - ${volumeInterval}` : ''}
                     ),
@@ -264,7 +264,7 @@ router.get('/tokens', async (req, res) => {
                 t.*,
                 t.market_cap_usd
                 ${volumeSelect}
-            FROM token_platform.tokens t
+            FROM onstrument.tokens t
             WHERE token_type = 'custom'
             ${orderByClause}
         `);
@@ -334,7 +334,7 @@ router.get('/market/tokens', async (req, res) => {
 
         // Get total count
         const countResult = await pool.query(`
-            SELECT COUNT(*) FROM token_platform.tokens t ${typeWhere}
+            SELECT COUNT(*) FROM onstrument.tokens t ${typeWhere}
         `);
         const totalCount = parseInt(countResult.rows[0].count);
 
@@ -359,7 +359,7 @@ router.get('/market/tokens', async (req, res) => {
                 t.price_change_7d,
                 t.created_at
                 ${additionalSelect}
-            FROM token_platform.tokens t
+            FROM onstrument.tokens t
             WHERE t.token_type = 'dex'
             AND t.name IS NOT NULL 
             AND t.name != ''
@@ -409,7 +409,7 @@ router.get('/tokens/:mintAddress', async (req, res) => {
         const { mintAddress } = req.params;
 
         const query = `
-            SELECT * FROM token_platform.tokens 
+            SELECT * FROM onstrument.tokens 
             WHERE mint_address = $1
         `;
 
@@ -451,7 +451,7 @@ router.get('/search/tokens', async (req, res) => {
                 token_type,
                 verified,
                 image_url
-            FROM token_platform.tokens 
+            FROM onstrument.tokens 
             WHERE 
                 (LOWER(name) LIKE LOWER($1) OR 
                 LOWER(symbol) LIKE LOWER($1) OR 
@@ -500,7 +500,7 @@ router.get('/prices/:mintAddress/latest', async (req, res) => {
                 volume,
                 market_cap,
                 is_buy
-            FROM token_platform.price_history 
+            FROM onstrument.price_history 
             WHERE mint_address = $1 
             ORDER BY time DESC 
             LIMIT 1
@@ -559,7 +559,7 @@ router.get('/trades/:mintAddress', async (req, res) => {
                 total,
                 price,
                 timestamp
-            FROM token_platform.trades 
+            FROM onstrument.trades 
             WHERE token_address = $1 
             ORDER BY timestamp DESC 
             LIMIT $2
@@ -590,7 +590,7 @@ router.get('/tokens/custom/:mintAddress', async (req, res) => {
         logger.info(`Fetching custom token: ${mintAddress}`);
 
         const result = await pool.query(`
-            SELECT * FROM token_platform.custom_tokens
+            SELECT * FROM onstrument.custom_tokens
             WHERE mint_address = $1
         `, [mintAddress]);
 
@@ -635,18 +635,18 @@ router.get('/market/tokens/:mintAddress', async (req, res) => {
                 t.curve_config,
                 COALESCE(t.attributes, '{}') as attributes,
                 COALESCE(
-                    (SELECT price FROM token_platform.price_history 
+                    (SELECT price FROM onstrument.price_history 
                      WHERE mint_address = t.mint_address 
                      ORDER BY time DESC LIMIT 1),
                     0
                 ) as current_price,
                 COALESCE(
-                    (SELECT SUM(volume) FROM token_platform.price_history 
+                    (SELECT SUM(volume) FROM onstrument.price_history 
                      WHERE mint_address = t.mint_address 
                      AND time > NOW() - INTERVAL '24 hours'),
                     0
                 ) as volume_24h
-            FROM token_platform.tokens t
+            FROM onstrument.tokens t
             WHERE t.mint_address = $1
         `, [mintAddress]);
 
@@ -682,7 +682,7 @@ router.get('/pools/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
         const result = await pool.query(`
-            SELECT * FROM token_platform.raydium_pools 
+            SELECT * FROM onstrument.raydium_pools 
             WHERE base_mint = $1 OR quote_mint = $1
             ORDER BY created_at DESC
         `, [mintAddress]);
@@ -699,7 +699,7 @@ router.post('/users', async (req, res) => {
         const { walletAddress } = req.body;
 
         const result = await pool.query(`
-            INSERT INTO token_platform.users (wallet_address)
+            INSERT INTO onstrument.users (wallet_address)
             VALUES ($1)
             ON CONFLICT (wallet_address) 
             DO UPDATE SET last_seen = CURRENT_TIMESTAMP
@@ -719,7 +719,7 @@ router.get('/users/:walletAddress', async (req, res) => {
 
         const result = await pool.query(`
             SELECT user_id, wallet_address, is_subscribed, subscription_expires_at, created_at, last_seen
-            FROM token_platform.users
+            FROM onstrument.users
             WHERE wallet_address = $1
         `, [walletAddress]);
 
@@ -739,7 +739,7 @@ router.post('/users/:walletAddress/toggle-subscription', async (req, res) => {
         const { walletAddress } = req.params;
 
         const result = await pool.query(`
-            UPDATE token_platform.users 
+            UPDATE onstrument.users 
             SET 
                 is_subscribed = NOT is_subscribed,
                 subscription_expires_at = CASE 
@@ -768,7 +768,7 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
 
         // First get the user_id
         const userResult = await pool.query(`
-            SELECT user_id FROM token_platform.users 
+            SELECT user_id FROM onstrument.users 
             WHERE wallet_address = $1
         `, [walletAddress]);
 
@@ -780,7 +780,7 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
 
         // Update trading stats
         await pool.query(`
-            INSERT INTO token_platform.user_trading_stats (
+            INSERT INTO onstrument.user_trading_stats (
                 user_id, 
                 mint_address, 
                 total_trades,
@@ -793,12 +793,12 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
             VALUES ($1, $2, 1, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (user_id, mint_address) DO UPDATE
             SET 
-                total_trades = token_platform.user_trading_stats.total_trades + 1,
-                total_volume = token_platform.user_trading_stats.total_volume + $3,
-                total_buy_volume = token_platform.user_trading_stats.total_buy_volume + $4,
-                total_sell_volume = token_platform.user_trading_stats.total_sell_volume + $5,
+                total_trades = onstrument.user_trading_stats.total_trades + 1,
+                total_volume = onstrument.user_trading_stats.total_volume + $3,
+                total_buy_volume = onstrument.user_trading_stats.total_buy_volume + $4,
+                total_sell_volume = onstrument.user_trading_stats.total_sell_volume + $5,
                 last_trade_at = CURRENT_TIMESTAMP,
-                first_trade_at = COALESCE(token_platform.user_trading_stats.first_trade_at, CURRENT_TIMESTAMP)
+                first_trade_at = COALESCE(onstrument.user_trading_stats.first_trade_at, CURRENT_TIMESTAMP)
         `, [
             userId,
             mintAddress,
@@ -821,9 +821,9 @@ router.get('/users/:walletAddress/trading-stats', async (req, res) => {
 
         const userResult = await pool.query(`
             SELECT uts.*, t.symbol, t.name
-            FROM token_platform.users u
-            JOIN token_platform.user_trading_stats uts ON u.user_id = uts.user_id
-            JOIN token_platform.tokens t ON uts.mint_address = t.mint_address
+            FROM onstrument.users u
+            JOIN onstrument.user_trading_stats uts ON u.user_id = uts.user_id
+            JOIN onstrument.tokens t ON uts.mint_address = t.mint_address
             WHERE u.wallet_address = $1
             ${mintAddress ? 'AND uts.mint_address = $2' : ''}
             ORDER BY uts.last_trade_at DESC
