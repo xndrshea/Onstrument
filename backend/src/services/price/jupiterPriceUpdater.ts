@@ -135,12 +135,6 @@ export class JupiterPriceUpdater {
 
                 // Broadcast the price update
                 wsManager.broadcastPrice(token.mint_address, price);
-
-                logger.debug('Updated price for token:', {
-                    mintAddress: token.mint_address,
-                    price,
-                    marketCap
-                });
             } catch (error) {
                 logger.error('Error updating token price:', {
                     mintAddress: token.mint_address,

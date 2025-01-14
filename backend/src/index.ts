@@ -1,6 +1,10 @@
+declare global {
+    var wss: WebSocket.Server;
+}
+
 import { createApp } from './app'
 import { logger } from './utils/logger'
-import { initializeDatabase } from './config/database'
+import { checkDatabaseSetup } from './config/database'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { Server } from 'http'
 import WebSocket from 'ws'
@@ -12,7 +16,9 @@ const PORT = process.env.PORT || 3001
 async function startServer() {
     try {
         logger.info('Starting server initialization...')
-        await initializeDatabase()
+
+        // Check and initialize database if needed
+        await checkDatabaseSetup()
 
         const app = createApp()
         const server = new Server(app)

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: solana-token-launchpad-api
+    name: onstrument-api
     env: node
     buildCommand: npm install && npm run build:server
     startCommand: npm start
@@ -8,4 +8,4 @@ services:
       - key: PORT
         value: 3001
       - key: ALLOWED_ORIGINS
-        value: https://your-frontend-url.com 
+        value: https://onstrument.com 

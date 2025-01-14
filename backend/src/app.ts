@@ -12,7 +12,10 @@ import { JupiterPriceUpdater } from './services/price/jupiterPriceUpdater'
 import { wsManager } from './services/websocket/WebSocketManager'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 
-dotenv.config()
+// Load environment-specific config
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local'
+dotenv.config({ path: envFile })
+logger.info(`Running in ${process.env.NODE_ENV || 'development'} environment`)
 
 export function createApp() {
     const app = express()

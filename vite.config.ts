@@ -3,13 +3,13 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig(({ mode }) => {
-    // Load env files from project root
-    process.env = { ...process.env, ...loadEnv(mode, process.cwd()) }
+    const envFile = mode === 'production' ? '.env.production' : '.env.local'
+    process.env = { ...process.env, ...loadEnv(mode, process.cwd(), envFile) }
 
     return {
         root: './frontend',
         plugins: [react()],
-        envDir: './', // Look for .env in project root
+        envDir: './',
         server: {
             port: 3000,
             proxy: {

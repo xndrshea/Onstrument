@@ -1,7 +1,12 @@
 import { Connection, clusterApiUrl } from '@solana/web3.js';
 
+const isProduction = import.meta.env.MODE === 'production';
+
 // Environment-specific configurations
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+export const API_URL = isProduction
+    ? import.meta.env.VITE_API_URL
+    : 'http://localhost:3001';
+
 export const API_BASE_URL = `${API_URL}/api`;
 export const MAINNET_API_BASE_URL = `${API_URL}/api`;
 
@@ -15,8 +20,8 @@ export const mainnetConnection = new Connection(
 export const DEVNET_URL = clusterApiUrl('devnet');
 export const devnetConnection = new Connection(DEVNET_URL);
 
-// Default connection for wallet adapter
-export const defaultConnection = devnetConnection;
+// Default connection based on environment
+export const defaultConnection = isProduction ? mainnetConnection : devnetConnection;
 
 // Constants
 export const BONDING_CURVE_PROGRAM_ID = 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw';
@@ -25,5 +30,6 @@ export const BONDING_CURVE_PROGRAM_ID = 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVE
 export const config = {
     HELIUS_RPC_URL: import.meta.env.VITE_HELIUS_RPC_URL,
     API_BASE_URL: API_URL,
-    BONDING_CURVE_PROGRAM_ID: 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw'
+    BONDING_CURVE_PROGRAM_ID: 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw',
+    isProduction
 };
