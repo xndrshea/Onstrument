@@ -22,9 +22,9 @@ export function TokenomicsRoadmap() {
                     <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
                         {[
                             "Onstrument Bonding Curves",
-                            "Solana & Ethereum Tokens",
+                            "Solana Tokens",
                             "Telegram Bots",
-                            "AI Agents",
+                            "Onstrument News Terminal",
                             "All Future Products"
                         ].map((source) => (
                             <div key={source} className="bg-blue-500/5 rounded-lg p-4 border border-blue-500/20 hover:border-violet-500/40 hover:bg-violet-500/10 transition-all duration-300">
