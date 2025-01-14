@@ -5,10 +5,11 @@ import { logger } from '../utils/logger'
 dotenv.config()
 
 const pool = new Pool({
-    user: 'alexandershea',
-    host: 'localhost',
-    database: 'token_platform',
-    port: 5432,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
+    port: parseInt(process.env.DB_PORT || '5432'),
     max: 20,
     min: 4,
     idleTimeoutMillis: 30000,
@@ -31,13 +32,13 @@ export async function initializeDatabase() {
     try {
         // First transaction: Create schema, extensions, and base tables
         await client.query('BEGIN')
-        await client.query('CREATE SCHEMA IF NOT EXISTS token_platform')
+        await client.query('CREATE SCHEMA IF NOT EXISTS onstrument')
         await client.query('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE')
         await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
         // Consolidated tokens table creation
         await client.query(`
-            CREATE TABLE IF NOT EXISTS token_platform.tokens (
+            CREATE TABLE IF NOT EXISTS onstrument.tokens (
                 mint_address VARCHAR(255) PRIMARY KEY,
                 name VARCHAR(255),
                 symbol VARCHAR(20),
@@ -118,17 +119,17 @@ export async function initializeDatabase() {
                 CONSTRAINT valid_token_source CHECK (token_source IN ('custom', 'raydium', 'geckoterminal'))
             );
 
-            CREATE INDEX IF NOT EXISTS idx_tokens_type ON token_platform.tokens(token_type);
-            CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON token_platform.tokens(symbol);
-            CREATE INDEX IF NOT EXISTS idx_tokens_verified ON token_platform.tokens(verified);
-            CREATE INDEX IF NOT EXISTS idx_tokens_metadata_status ON token_platform.tokens(metadata_status);
-            CREATE INDEX IF NOT EXISTS idx_tokens_token_vault ON token_platform.tokens(token_vault);
-            CREATE INDEX IF NOT EXISTS idx_tokens_source ON token_platform.tokens(token_source);
+            CREATE INDEX IF NOT EXISTS idx_tokens_type ON onstrument.tokens(token_type);
+            CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON onstrument.tokens(symbol);
+            CREATE INDEX IF NOT EXISTS idx_tokens_verified ON onstrument.tokens(verified);
+            CREATE INDEX IF NOT EXISTS idx_tokens_metadata_status ON onstrument.tokens(metadata_status);
+            CREATE INDEX IF NOT EXISTS idx_tokens_token_vault ON onstrument.tokens(token_vault);
+            CREATE INDEX IF NOT EXISTS idx_tokens_source ON onstrument.tokens(token_source);
         `);
 
         // Create users table
         await client.query(`
-            CREATE TABLE IF NOT EXISTS token_platform.users (
+            CREATE TABLE IF NOT EXISTS onstrument.users (
                 user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 wallet_address TEXT UNIQUE NOT NULL,
                 is_subscribed BOOLEAN DEFAULT false,
@@ -137,14 +138,14 @@ export async function initializeDatabase() {
                 last_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
 
-            CREATE INDEX IF NOT EXISTS idx_users_wallet ON token_platform.users(wallet_address);
+            CREATE INDEX IF NOT EXISTS idx_users_wallet ON onstrument.users(wallet_address);
         `);
 
         // Create user_trading_stats table
         await client.query(`
-            CREATE TABLE IF NOT EXISTS token_platform.user_trading_stats (
-                user_id UUID REFERENCES token_platform.users(user_id),
-                mint_address VARCHAR(255) REFERENCES token_platform.tokens(mint_address),
+            CREATE TABLE IF NOT EXISTS onstrument.user_trading_stats (
+                user_id UUID REFERENCES onstrument.users(user_id),
+                mint_address VARCHAR(255) REFERENCES onstrument.tokens(mint_address),
                 total_trades INTEGER DEFAULT 0,
                 total_volume NUMERIC(78,36) DEFAULT 0,
                 total_buy_volume NUMERIC(78,36) DEFAULT 0,
@@ -154,13 +155,13 @@ export async function initializeDatabase() {
                 PRIMARY KEY (user_id, mint_address)
             );
 
-            CREATE INDEX IF NOT EXISTS idx_user_trading_stats_user ON token_platform.user_trading_stats(user_id);
-            CREATE INDEX IF NOT EXISTS idx_user_trading_stats_mint ON token_platform.user_trading_stats(mint_address);
+            CREATE INDEX IF NOT EXISTS idx_user_trading_stats_user ON onstrument.user_trading_stats(user_id);
+            CREATE INDEX IF NOT EXISTS idx_user_trading_stats_mint ON onstrument.user_trading_stats(mint_address);
         `);
 
         // Create price_history table
         await client.query(`
-            CREATE TABLE IF NOT EXISTS token_platform.price_history (
+            CREATE TABLE IF NOT EXISTS onstrument.price_history (
                 time TIMESTAMPTZ NOT NULL,
                 mint_address VARCHAR(255) NOT NULL,
                 open NUMERIC(78,36) NOT NULL,
@@ -180,7 +181,7 @@ export async function initializeDatabase() {
         // Convert to hypertable
         await client.query(`
             SELECT create_hypertable(
-                'token_platform.price_history',
+                'onstrument.price_history',
                 'time',
                 partitioning_column => 'mint_address',
                 number_partitions => 4,
@@ -191,7 +192,7 @@ export async function initializeDatabase() {
 
         // Create trades table
         await client.query(`
-            CREATE TABLE IF NOT EXISTS token_platform.trades (
+            CREATE TABLE IF NOT EXISTS onstrument.trades (
                 time TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 signature TEXT NOT NULL,
                 token_address TEXT NOT NULL,
@@ -206,13 +207,13 @@ export async function initializeDatabase() {
             );
 
             CREATE INDEX IF NOT EXISTS idx_trades_token_time 
-            ON token_platform.trades (token_address, time DESC);
+            ON onstrument.trades (token_address, time DESC);
         `);
 
         // Convert trades to hypertable
         await client.query(`
             SELECT create_hypertable(
-                'token_platform.trades',
+                'onstrument.trades',
                 'time',
                 if_not_exists => TRUE,
                 chunk_time_interval => INTERVAL '1 day'
@@ -223,13 +224,13 @@ export async function initializeDatabase() {
 
         // Create materialized views outside of transaction
         await client.query(`
-            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1m CASCADE;
-            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1h CASCADE;
-            DROP MATERIALIZED VIEW IF EXISTS token_platform.price_history_1d CASCADE;
+            DROP MATERIALIZED VIEW IF EXISTS onstrument.price_history_1m CASCADE;
+            DROP MATERIALIZED VIEW IF EXISTS onstrument.price_history_1h CASCADE;
+            DROP MATERIALIZED VIEW IF EXISTS onstrument.price_history_1d CASCADE;
         `);
 
         await client.query(`
-            CREATE MATERIALIZED VIEW IF NOT EXISTS token_platform.price_history_1m
+            CREATE MATERIALIZED VIEW IF NOT EXISTS onstrument.price_history_1m
             WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
             SELECT 
                 time_bucket('1 minute', time) as bucket,
@@ -244,12 +245,12 @@ export async function initializeDatabase() {
                 sum(trade_count) as trade_count,
                 sum(buy_count) as buy_count,
                 sum(sell_count) as sell_count
-            FROM token_platform.price_history
+            FROM onstrument.price_history
             GROUP BY bucket, mint_address;
         `);
 
         await client.query(`
-            CREATE MATERIALIZED VIEW IF NOT EXISTS token_platform.price_history_1h
+            CREATE MATERIALIZED VIEW IF NOT EXISTS onstrument.price_history_1h
             WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
             SELECT 
                 time_bucket('1 hour', time) as bucket,
@@ -264,12 +265,12 @@ export async function initializeDatabase() {
                 sum(trade_count) as trade_count,
                 sum(buy_count) as buy_count,
                 sum(sell_count) as sell_count
-            FROM token_platform.price_history
+            FROM onstrument.price_history
             GROUP BY bucket, mint_address;
         `);
 
         await client.query(`
-            CREATE MATERIALIZED VIEW IF NOT EXISTS token_platform.price_history_1d
+            CREATE MATERIALIZED VIEW IF NOT EXISTS onstrument.price_history_1d
             WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
             SELECT 
                 time_bucket('1 day', time) as bucket,
@@ -284,25 +285,25 @@ export async function initializeDatabase() {
                 sum(trade_count) as trade_count,
                 sum(buy_count) as buy_count,
                 sum(sell_count) as sell_count
-            FROM token_platform.price_history
+            FROM onstrument.price_history
             GROUP BY bucket, mint_address;
         `);
 
         // Add refresh policies
         await client.query(`
-            SELECT add_continuous_aggregate_policy('token_platform.price_history_1m',
+            SELECT add_continuous_aggregate_policy('onstrument.price_history_1m',
                 start_offset => INTERVAL '1 hour',
                 end_offset => INTERVAL '1 minute',
                 schedule_interval => INTERVAL '1 minute',
                 if_not_exists => TRUE);
 
-            SELECT add_continuous_aggregate_policy('token_platform.price_history_1h',
+            SELECT add_continuous_aggregate_policy('onstrument.price_history_1h',
                 start_offset => INTERVAL '1 day',
                 end_offset => INTERVAL '1 hour',
                 schedule_interval => INTERVAL '1 hour',
                 if_not_exists => TRUE);
 
-            SELECT add_continuous_aggregate_policy('token_platform.price_history_1d',
+            SELECT add_continuous_aggregate_policy('onstrument.price_history_1d',
                 start_offset => INTERVAL '7 days',
                 end_offset => INTERVAL '1 day',
                 schedule_interval => INTERVAL '1 day',
