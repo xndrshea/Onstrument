@@ -6,16 +6,16 @@ import { logger } from '../utils/logger'
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local'
 dotenv.config({ path: envFile })
 
-// Create connection pool
+// Create connection pool with environment-specific SSL config
 const pool = new Pool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     host: process.env.DB_HOST,
     database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT || '5432'),
-    ssl: {
+    ssl: process.env.NODE_ENV === 'production' ? {
         rejectUnauthorized: true
-    },
+    } : false,
     max: 20,
     min: 4,
     idleTimeoutMillis: 30000,
