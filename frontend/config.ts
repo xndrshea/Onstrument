@@ -12,7 +12,7 @@ export const MAINNET_API_BASE_URL = `${API_URL}/api`;
 
 // Use Helius for all mainnet connections with commitment
 export const mainnetConnection = new Connection(
-    import.meta.env.VITE_HELIUS_RPC_URL || 'https://rpc.helius.xyz/?api-key=YOUR_API_KEY',
+    import.meta.env.VITE_HELIUS_RPC_URL,
     { commitment: 'confirmed' }
 );
 
@@ -23,13 +23,9 @@ export const devnetConnection = new Connection(DEVNET_URL);
 // Default connection based on environment
 export const defaultConnection = isProduction ? mainnetConnection : devnetConnection;
 
-// Constants
-export const BONDING_CURVE_PROGRAM_ID = 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw';
-
-// Add config object export
+// Config object export
 export const config = {
     HELIUS_RPC_URL: import.meta.env.VITE_HELIUS_RPC_URL,
     API_BASE_URL: API_URL,
-    BONDING_CURVE_PROGRAM_ID: 'DCdi7f8kPoeYRciGUnVCrdaZqrFP5HhMqJUhBVEsXSCw',
     isProduction
 };
