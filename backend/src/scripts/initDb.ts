@@ -3,6 +3,16 @@ import dotenv from 'dotenv'
 import { logger } from '../utils/logger'
 import { verifyEnvironmentVariables } from '../utils/configCheck'
 
+console.log('Env file:', process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local');
+console.log('DB Config:', {
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT,
+    // Check if password exists (don't log it)
+    hasPassword: !!process.env.DB_PASSWORD
+});
+
 export async function initializeDatabase() {
     // Load environment variables
     const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local'
@@ -13,20 +23,35 @@ export async function initializeDatabase() {
         process.exit(1)
     }
 
+    const password = encodeURIComponent(process.env.DB_PASSWORD || '');
+    const host = 'krr5hnzkou.dt2nm2kjqv.tsdb.cloud.timescale.com';
+    const connectionString = `postgres://tsdbadmin:${password}@${host}:31509/tsdb?sslmode=require`;
+
     const client = new Client({
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        host: process.env.DB_HOST,
-        database: process.env.DB_NAME,
-        port: parseInt(process.env.DB_PORT || '5432')
-    })
+        connectionString,
+        ssl: {
+            rejectUnauthorized: true
+        }
+    });
+
+    // Debug (safe to show encoded URL)
+    console.log('Using connection string:', connectionString);
+
+    // Add debug
+    console.log('Password type:', typeof process.env.DB_PASSWORD);
+    console.log('Password length:', process.env.DB_PASSWORD?.length);
+
+    console.log('Raw password:', process.env.DB_PASSWORD);
+    console.log('Password chars:', process.env.DB_PASSWORD?.split('').map(c => c.charCodeAt(0)));
 
     try {
         await client.connect()
-        logger.info('Connected to database')
+        console.log('Connected to database')
+
+        await client.query('BEGIN')
+        console.log('Started transaction')
 
         // First transaction: Create schema, extensions, and base tables
-        await client.query('BEGIN')
         await client.query('CREATE SCHEMA IF NOT EXISTS onstrument')
         await client.query('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE')
         await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
@@ -306,11 +331,12 @@ export async function initializeDatabase() {
                 if_not_exists => TRUE);
         `);
 
+        console.log('Finished all queries')
         logger.info('Database initialized successfully')
         process.exit(0)
     } catch (error) {
-        logger.error('Failed to initialize database:', error)
-        process.exit(1)
+        console.error('Error:', error)
+        throw error
     } finally {
         await client.end()
     }
@@ -319,4 +345,11 @@ export async function initializeDatabase() {
 // Only run if called directly
 if (require.main === module) {
     initializeDatabase()
+        .then(() => {
+            console.log('Database initialization complete');
+        })
+        .catch(error => {
+            console.error('Failed to initialize database:', error);
+            process.exit(1);
+        });
 } 
