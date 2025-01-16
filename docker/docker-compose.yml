@@ -1,6 +1,18 @@
-version: '3.8'
-
 services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_DOCKER=true
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
   backend:
     build:
       context: ..
@@ -9,23 +21,15 @@ services:
       - "3001:3001"
     environment:
       - NODE_ENV=development
+      - DB_HOST=host.docker.internal
+      - MIGRATION_ADMIN_KEYPAIR_PATH=/root/.config/solana/migration-admin.json
     env_file:
       - ../.env.local
     volumes:
-      - ../backend:/app/backend
-      - /app/backend/node_modules
+      - ~/.config/solana:/root/.config/solana
+    networks:
+      - app-network
 
-  # Local development database
-  timescaledb:
-    image: timescale/timescaledb:latest-pg14
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_HOST_AUTH_METHOD=trust
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_DB=${DB_NAME}
-    volumes:
-      - timescaledb_data:/var/lib/postgresql/data
-
-volumes:
-  timescaledb_data:
+networks:
+  app-network:
+    driver: bridge
