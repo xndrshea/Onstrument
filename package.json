@@ -14,10 +14,15 @@
         "deploy": "anchor deploy --provider.cluster localnet",
         "test": "anchor test --provider.cluster localnet",
         "calculate-market-caps": "tsc scripts/calculateMissingMarketCaps.ts && node scripts/calculateMissingMarketCaps.js",
-        "dev:backend-test": "ts-node-dev --respawn --transpile-only backend/src/index.ts"
+        "dev:backend-test": "ts-node-dev --respawn --transpile-only backend/src/index.ts",
+        "test:aws": "ts-node scripts/testAwsAccess.ts",
+        "test:aws:local": "ts-node scripts/testAwsAccess.ts local",
+        "test:aws:prod": "ts-node scripts/testAwsAccess.ts prod"
     },
     "dependencies": {
         "@aws-sdk/client-ssm": "^3.726.1",
+        "@aws-sdk/client-sts": "^3.726.1",
+        "@aws-sdk/credential-providers": "^3.729.0",
         "@chakra-ui/icons": "^2.2.4",
         "@chakra-ui/react": "^3.2.0",
         "@coral-xyz/anchor": "^0.30.1",
