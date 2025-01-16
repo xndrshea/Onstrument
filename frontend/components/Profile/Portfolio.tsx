@@ -2,11 +2,7 @@ import { useEffect, useState } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { useNavigate } from 'react-router-dom';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
-
-// Get the URLs from environment variables
-const HELIUS_RPC_URL = import.meta.env.VITE_HELIUS_RPC_URL;
-// Construct devnet URL by replacing the domain
-const HELIUS_DEVNET_RPC_URL = HELIUS_RPC_URL.replace('rpc.helius.xyz', 'devnet.helius-rpc.com');
+import { API_BASE_URL } from '../../config';
 
 interface Asset {
     interface: string;
@@ -54,47 +50,18 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
         const fetchAssets = async () => {
             try {
                 const isDevnet = connection.rpcEndpoint.includes('devnet');
-                const heliusUrl = isDevnet ? HELIUS_DEVNET_RPC_URL : HELIUS_RPC_URL;
 
-                const requestBody = {
-                    jsonrpc: '2.0',
-                    id: 'my-id',
-                    method: 'getAssetsByOwner',
-                    params: {
-                        ownerAddress: walletAddress,
-                        page: 1, // Add pagination
-                        limit: 1000, // Increase limit to make sure we get all assets
-                        displayOptions: {
-                            showFungible: true, // Make sure we show fungible tokens too
-                        },
-                    },
-                };
-
-
-                const response = await fetch(heliusUrl, {
+                const response = await fetch(`${API_BASE_URL}/helius/assets`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ walletAddress, isDevnet })
                 });
 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('API Error Response:', errorText);
-                    throw new Error(`API error: ${response.status} ${response.statusText}`);
+                    throw new Error(`API error: ${response.status}`);
                 }
 
                 const data = await response.json();
-
-                if (data.error) {
-                    throw new Error(data.error.message || 'Unknown API error');
-                }
-
-                if (!data.result?.items) {
-                    throw new Error('Invalid response format');
-                }
-
                 setAssets(data.result.items);
             } catch (err) {
                 console.error('Portfolio fetch error:', err);
@@ -104,9 +71,7 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
             }
         };
 
-        if (walletAddress) {
-            fetchAssets();
-        }
+        fetchAssets();
     }, [walletAddress, connection.rpcEndpoint]);
 
     if (isLoading) {

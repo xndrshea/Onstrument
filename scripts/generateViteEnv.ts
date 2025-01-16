@@ -2,6 +2,7 @@ import { SSMClient, GetParametersByPathCommand } from '@aws-sdk/client-ssm';
 import fs from 'fs';
 
 async function generateViteEnv() {
+    console.log('Starting parameter fetch...');
     const ssm = new SSMClient({ region: 'us-east-1' });
 
     try {
@@ -10,6 +11,8 @@ async function generateViteEnv() {
             WithDecryption: true,
             Recursive: true
         }));
+
+        console.log('Parameters fetched:', response.Parameters?.length);
 
         if (!response.Parameters) {
             throw new Error('No parameters found');
@@ -24,7 +27,11 @@ async function generateViteEnv() {
             })
             .join('\n');
 
-        // Write to .env file in frontend directory
+        console.log('Writing to frontend/.env...');
+        // Create frontend directory if it doesn't exist
+        if (!fs.existsSync('frontend')) {
+            fs.mkdirSync('frontend');
+        }
         fs.writeFileSync('frontend/.env', envContent);
         console.log('Generated Vite environment file');
     } catch (error) {

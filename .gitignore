@@ -11,3 +11,6 @@ dist
 !/target/types
 /target/debug/
 /target/release/
+
+frontend/.env
+.env.*

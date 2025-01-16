@@ -1,6 +1,7 @@
 export const config = {
     HELIUS_RPC_URL: `https://rpc.helius.xyz/?api-key=${process.env.HELIUS_API_KEY}`,
     HELIUS_API_KEY: process.env.HELIUS_API_KEY || '',
+    PINATA_JWT: process.env.PINATA_JWT || '',
     HELIUS_MAINNET_WEBSOCKET_URL: `wss://rpc.helius.xyz/?api-key=${process.env.HELIUS_API_KEY}`,
     HELIUS_DEVNET_WEBSOCKET_URL: `wss://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`,
     HELIUS_DEVNET_RPC_URL: `https://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`,

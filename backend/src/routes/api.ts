@@ -7,8 +7,14 @@ import rateLimit from 'express-rate-limit';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
 import { RaydiumProcessor } from '../services/price/processors/raydiumProcessor';
 import { BondingCurveProcessor } from '../services/price/processors/bondingCurveProcessor';
+import express from 'express';
+import multer from 'multer';
+import { pinataService } from '../services/pinataService';
+import { heliusService as heliusRestService } from '../services/heliusService';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
+const heliusManager = HeliusManager.getInstance();
 
 // CORS and rate limiting setup
 router.use(cors({
@@ -17,8 +23,6 @@ router.use(cors({
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-const heliusService = HeliusManager.getInstance();
 
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000,  // 1 minute window
@@ -32,7 +36,7 @@ router.use(limiter);
 router.get('/system/status', async (_req, res) => {
     try {
         const status = {
-            websocket: heliusService.getStatus(),
+            websocket: heliusManager.getStatus(),
             processors: {
                 raydium: RaydiumProcessor.getStatus(),
                 bondingCurve: BondingCurveProcessor.getStatus()
@@ -575,7 +579,7 @@ router.get('/trades/:mintAddress', async (req, res) => {
 // WebSocket status
 router.get('/ws/status', async (_req, res) => {
     try {
-        const status = heliusService.getStatus();
+        const status = heliusManager.getStatus();
         res.json(status);
     } catch (error) {
         logger.error('Error fetching WebSocket status:', error);
@@ -833,6 +837,40 @@ router.get('/users/:walletAddress/trading-stats', async (req, res) => {
     } catch (error) {
         logger.error('Error fetching trading stats:', error);
         res.status(500).json({ error: 'Failed to fetch trading stats' });
+    }
+});
+
+// File upload endpoint
+router.post('/upload/image', upload.single('file'), async (req, res) => {
+    try {
+        const file = req.file;
+        if (!file) throw new Error('No file provided');
+        const imageUrl = await pinataService.uploadImage(file);
+        res.json({ url: imageUrl });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to upload image' });
+    }
+});
+
+// Metadata upload endpoint
+router.post('/upload/metadata', async (req, res) => {
+    try {
+        const metadata = req.body;
+        const metadataUrl = await pinataService.uploadMetadata(metadata);
+        res.json({ url: metadataUrl });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to upload metadata' });
+    }
+});
+
+// Helius proxy endpoint
+router.post('/helius/assets', async (req, res) => {
+    try {
+        const { walletAddress, isDevnet } = req.body;
+        const assets = await heliusRestService.getAssetsByOwner(walletAddress, isDevnet);
+        res.json(assets);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch assets' });
     }
 });
 
