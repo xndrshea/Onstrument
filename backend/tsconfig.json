@@ -2,8 +2,7 @@
     "compilerOptions": {
         "target": "es2020",
         "module": "commonjs",
-        "outDir": "../dist/backend",
-        "rootDir": "..",
+        "outDir": "./dist",
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
@@ -15,7 +14,9 @@
             "shared/*": [
                 "shared/*"
             ]
-        }
+        },
+        "noImplicitAny": false,
+        "allowJs": true
     },
     "include": [
         "src/**/*",

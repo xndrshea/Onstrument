@@ -1,20 +1,20 @@
 import { Connection } from '@solana/web3.js';
 
-const isProduction = import.meta.env.MODE === 'production';
+const isDocker = import.meta.env.VITE_DOCKER === 'true';
 
 // Update your RPC endpoint configuration to include /api
 const ENDPOINTS = {
     production: {
-        base: 'https://api.yourapp.com',
-        mainnet: '/api/helius/rpc',        // Added /api prefix
-        devnet: '/api/helius/devnet/rpc',   // Added /api prefix
-        ws: '/api/ws'  // Add WebSocket endpoint
+        base: isDocker ? 'http://backend:3001' : 'https://api.yourapp.com',
+        mainnet: '/api/helius/rpc',
+        devnet: '/api/helius/devnet/rpc',
+        ws: '/api/ws'
     },
     development: {
         base: 'http://localhost:3001',
-        mainnet: '/api/helius/rpc',        // Added /api prefix
-        devnet: '/api/helius/devnet/rpc',   // Added /api prefix
-        ws: '/api/ws'  // Add WebSocket endpoint
+        mainnet: '/api/helius/rpc',
+        devnet: '/api/helius/devnet/rpc',
+        ws: '/api/ws'
     }
 } as const;
 
@@ -59,8 +59,8 @@ const createCustomRpcRequest = (endpoint: string) => {
     };
 };
 
-// Get the current environment's endpoints
-const ENV = ENDPOINTS[isProduction ? 'production' : 'development'];
+// Use isDocker instead of isProduction
+const ENV = isDocker ? ENDPOINTS.production : ENDPOINTS.development;
 
 // Create connections with cleaner URL construction
 export const mainnetConnection = new Connection(
@@ -81,8 +81,8 @@ export const devnetConnection = new Connection(
     }
 );
 
-export const defaultConnection = isProduction ? mainnetConnection : devnetConnection;
+export const defaultConnection = isDocker ? mainnetConnection : devnetConnection;
 
 export const config = {
-    isProduction
+    isDocker
 };
