@@ -4,7 +4,7 @@ import BN from 'bn.js';
 import { TOKEN_DECIMALS } from './bondingCurve';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 
-const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = '/api';
 
 export class TokenService {
     constructor(private wallet?: WalletContextState) { }

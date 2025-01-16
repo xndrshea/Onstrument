@@ -4,6 +4,7 @@ import axios from 'axios';
 export const heliusService = {
     async getAssetsByOwner(walletAddress: string, isDevnet: boolean) {
         const heliusUrl = isDevnet ? config.HELIUS_DEVNET_RPC_URL : config.HELIUS_RPC_URL;
+        console.log('Using Helius URL:', heliusUrl);
 
         const response = await axios.post(heliusUrl, {
             jsonrpc: '2.0',
@@ -24,8 +25,10 @@ export const heliusService = {
 
     async makeRpcRequest(body: any) {
         const heliusUrl = body.isDevnet ? config.HELIUS_DEVNET_RPC_URL : config.HELIUS_RPC_URL;
+        console.log('Making RPC request to:', heliusUrl);
 
-        const response = await axios.post(heliusUrl, body);
+        const { isDevnet, ...requestBody } = body;
+        const response = await axios.post(heliusUrl, requestBody);
         return response.data;
     }
 }; 

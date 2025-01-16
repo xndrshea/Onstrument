@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { TokenRecord } from '../../../shared/types/token'
 import { Link, useNavigate } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
-import { API_BASE_URL } from '../../config'
 import { formatMarketCap } from '../../utils/formatting'
 import { filterService } from '../../services/filterService'
 
@@ -20,12 +19,8 @@ export function MarketPage() {
     const fetchTokens = async () => {
         try {
             setIsLoading(true);
-            const url = new URL(`${API_BASE_URL}/market/tokens`);
-            url.searchParams.append('page', currentPage.toString());
-            url.searchParams.append('limit', TOKENS_PER_PAGE.toString());
-            url.searchParams.append('sortBy', sortBy);
+            const response = await fetch(`/api/market/tokens?page=${currentPage}&limit=${TOKENS_PER_PAGE}&sortBy=${sortBy}`);
 
-            const response = await fetch(url.toString());
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }

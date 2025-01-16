@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { User, UserService } from '../../services/userService';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { API_BASE_URL } from '../../config';
 import { Link, useNavigate } from 'react-router-dom';
 import { TradingStats } from './TradingStats';
 
@@ -51,7 +50,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
 
             try {
                 setIsLoadingStats(true);
-                const response = await fetch(`${API_BASE_URL}/users/${publicKey.toString()}/trading-stats`);
+                const response = await fetch(`/api/users/${publicKey.toString()}/trading-stats`);
                 if (response.ok) {
                     const data = await response.json();
                     setStats(data);

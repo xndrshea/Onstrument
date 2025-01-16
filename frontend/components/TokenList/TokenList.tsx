@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { TokenRecord } from '../../../shared/types/token'
-import { API_BASE_URL } from '../../config'
 import { TokenCard } from './TokenCard'
 
 interface TokenListProps {
@@ -23,10 +22,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
-            const url = new URL(`${API_BASE_URL}/tokens`);
-            url.searchParams.append('sortBy', volumePeriod);
-
-            const response = await fetch(url.toString());
+            const response = await fetch(`/api/tokens?sortBy=${volumePeriod}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }

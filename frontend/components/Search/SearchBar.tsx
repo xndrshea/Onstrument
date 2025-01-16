@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '../../config';
 
 interface SearchResult {
     mint_address: string;
@@ -35,7 +34,7 @@ export function SearchBar() {
 
             try {
                 const response = await fetch(
-                    `${API_BASE_URL}/search/tokens?q=${encodeURIComponent(query)}`
+                    `/api/search/tokens?q=${encodeURIComponent(query)}`
                 );
 
                 if (!response.ok) {

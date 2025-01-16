@@ -71,31 +71,39 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     const [isMigrating, setIsMigrating] = useState(false)
     const [spotPrice, setSpotPrice] = useState<number | null>(_currentPrice || null);
 
-    // Initialize bonding curve interface
+    // Move getAppropriateConnection before bondingCurve initialization
+    const getAppropriateConnection = () => {
+        console.log('Token type:', token.tokenType, 'Migration status:', token.curveConfig?.migrationStatus);
+
+        // For custom tokens that aren't migrated, ALWAYS use devnet
+        if (token.tokenType === 'custom' && (!token.curveConfig || token.curveConfig.migrationStatus !== 'migrated')) {
+            console.log('Using devnet connection for custom token - EVERYTHING should use devnet here');
+            return devnetConnection;  // This means SOL balance, token balance, AND price all from devnet
+        }
+
+        console.log('Using mainnet connection');
+        return mainnetConnection;
+    };
+
+    // Now bondingCurve can use getAppropriateConnection
     const bondingCurve = useMemo(() => {
-        if (!connection || !publicKey || !token.mintAddress || !token.curveAddress) {
-            return null
+        if (!publicKey || !token.mintAddress || !token.curveAddress) {
+            return null;
         }
 
         try {
+            const appropriateConnection = getAppropriateConnection();
             return new BondingCurve(
-                connection,
+                appropriateConnection,
                 wallet,
                 new PublicKey(token.mintAddress),
                 new PublicKey(token.curveAddress)
-            )
+            );
         } catch (error) {
-            console.error('Error creating bonding curve interface:', error)
-            return null
+            console.error('Error creating bonding curve interface:', error);
+            return null;
         }
-    }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet])
-
-    const getAppropriateConnection = () => {
-        if (token.tokenType === 'dex') {
-            return mainnetConnection;
-        }
-        return devnetConnection;
-    }
+    }, [publicKey, token.mintAddress, token.curveAddress, wallet, token.tokenType]);
 
     const checkTokenTradability = async () => {
         if (token.tokenType === 'custom') {
@@ -152,8 +160,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
         try {
             const appropriateConnection = getAppropriateConnection();
+            console.log('Fetching balances from:', token.tokenType === 'custom' ? 'DEVNET' : 'MAINNET');
 
-            // Get SOL balance and token balance regardless of token type
+            // Get SOL balance from the appropriate network
             const solBal = await appropriateConnection.getBalance(publicKey);
             setSolBalance(solBal / LAMPORTS_PER_SOL);
 

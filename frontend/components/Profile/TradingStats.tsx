@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { API_BASE_URL } from '../../config';
 
 interface TradingStatsRecord {
     mint_address: string;
@@ -26,7 +25,7 @@ export function TradingStats() {
 
             try {
                 setIsLoading(true);
-                const response = await fetch(`${API_BASE_URL}/users/${publicKey.toString()}/trading-stats`);
+                const response = await fetch(`/api/users/${publicKey.toString()}/trading-stats`);
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch trading stats');

@@ -6,7 +6,6 @@ import { TokenRecord } from '../../../shared/types/token';
 import { tokenService } from '../../services/tokenService';
 import { priceClient } from '../../services/priceClient';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
-import { API_BASE_URL } from '../../config';
 import { filterService } from '../../services/filterService';
 
 // Add at the top with other imports
@@ -149,13 +148,15 @@ export function TokenDetailsPage() {
     useEffect(() => {
         const fetchTopTokens = async () => {
             try {
-                const url = new URL(`${API_BASE_URL}/market/tokens`);
-                url.searchParams.append('page', '1');
-                url.searchParams.append('limit', '100');
-                url.searchParams.append('sortBy', sortField);
-                url.searchParams.append('sortDirection', sortDirection);
+                // Build query parameters
+                const params = new URLSearchParams({
+                    page: '1',
+                    limit: '100',
+                    sortBy: sortField,
+                    sortDirection: sortDirection
+                });
 
-                const response = await fetch(url.toString());
+                const response = await fetch(`/api/market/tokens?${params}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
