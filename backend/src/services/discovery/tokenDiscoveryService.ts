@@ -409,13 +409,30 @@ export class TokenDiscoveryService {
             const baseTokenId = pool.relationships.base_token.data.id.split('_')[1];
             const quoteTokenId = pool.relationships.quote_token.data.id.split('_')[1];
 
-            await this.upsertToken({
-                address: 'So11111111111111111111111111111111111111112',
-                token_type: 'dex',
-                current_price: parseFloat(attributes.quote_token_price_usd),
-                price_sol: 1,
-                token_source: 'geckoterminal'
-            });
+            const solPrice = this.SOL_ADDRESSES.includes(quoteTokenId)
+                ? parseFloat(attributes.quote_token_price_usd)
+                : parseFloat(attributes.base_token_price_usd);
+
+            // Get the previous price for comparison
+            const prevResult = await this.client.query(`
+                SELECT current_price 
+                FROM onstrument.tokens 
+                WHERE mint_address = 'So11111111111111111111111111111111111111112'
+                AND last_price_update > NOW() - INTERVAL '1 hour'`);
+
+            const prevPrice = prevResult.rows[0]?.current_price;
+
+            // Only update if the new price is within a reasonable % change of previous price
+            // or if we don't have a recent price
+            if (!prevPrice || (solPrice > 0 && Math.abs((solPrice - prevPrice) / prevPrice) < 0.10)) {
+                await this.upsertToken({
+                    address: 'So11111111111111111111111111111111111111112',
+                    token_type: 'dex',
+                    current_price: solPrice,
+                    price_sol: 1,
+                    token_source: 'geckoterminal'
+                });
+            }
 
             const isBaseSol = this.SOL_ADDRESSES.includes(baseTokenId);
             const currentPrice = isBaseSol

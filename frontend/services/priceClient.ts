@@ -28,7 +28,6 @@ class WebSocketClient {
             };
 
             this.ws.onmessage = (event) => {
-                console.log('DEBUG - WebSocket message received:', event.data);
                 this.handleMessage(event);
             };
 
@@ -94,7 +93,6 @@ class WebSocketClient {
     }
 
     private handleMessage(event: MessageEvent) {
-        console.log('WebSocket message received:', event.data);
         try {
             const data = JSON.parse(event.data);
             if (!data.mintAddress) return;
