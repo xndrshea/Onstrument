@@ -2,8 +2,6 @@ import {
     Connection,
     PublicKey,
     Keypair,
-    Transaction,
-    sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Raydium } from '@raydium-io/raydium-sdk-v2';
@@ -15,8 +13,7 @@ import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import fs from 'fs';
 import { createBurnCheckedInstruction } from '@solana/spl-token';
-import type { WebSocketManager} from '../websocket/WebSocketManager';
-import { wsManager } from '../websocket/WebSocketManager';
+import type { WebSocketManager } from '../websocket/WebSocketManager';
 
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const LAMPORTS_PER_SOL = 1_000_000_000;
