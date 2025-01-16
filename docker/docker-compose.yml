@@ -8,9 +8,9 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
+      - NODE_ENV=development
     env_file:
-      - ../.env.${NODE_ENV:-local}
+      - ../.env.local
     volumes:
       - ../backend:/app/backend
       - /app/backend/node_modules
@@ -19,10 +19,10 @@ services:
   timescaledb:
     image: timescale/timescaledb:latest-pg14
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "5432:5432"
     environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
       - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
     volumes:
       - timescaledb_data:/var/lib/postgresql/data

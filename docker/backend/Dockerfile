@@ -1,21 +1,24 @@
 FROM node:20-slim
 
-WORKDIR /app
+WORKDIR /app/backend
 
-# Copy package files first
-COPY package*.json ./
-COPY backend/package*.json ./backend/
+# Copy only backend package.json
+COPY backend/package*.json ./
 
-# Install dependencies
+# Install backend dependencies
 RUN npm install
-RUN cd backend && npm install
 
 # Copy backend source
-COPY backend ./backend
+COPY backend/src ./src
+COPY backend/tsconfig.json ./
 
 # Build TypeScript
-RUN npm run build:server
+RUN npm run build
+
+# Production environment
+ENV NODE_ENV=production
 
 EXPOSE 3001
 
+# Run production server
 CMD ["npm", "run", "start"] 
