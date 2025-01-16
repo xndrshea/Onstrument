@@ -10,12 +10,16 @@ import { Server } from 'http'
 import WebSocket from 'ws'
 import cors from 'cors'
 import { wsManager } from './services/websocket/WebSocketManager'
+import { loadConfig } from './config/parameterStore'
 
 const PORT = process.env.PORT || 3001
 
 async function startServer() {
     try {
         logger.info('Starting server initialization...')
+
+        // Load configuration (either from AWS or .env)
+        await loadConfig()
 
         // Check and initialize database if needed
         await checkDatabaseSetup()

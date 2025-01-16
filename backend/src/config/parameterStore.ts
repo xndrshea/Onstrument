@@ -1,14 +1,23 @@
 import { SSMClient, GetParametersByPathCommand } from '@aws-sdk/client-ssm';
 import { logger } from '../utils/logger';
+import dotenv from 'dotenv';
 
-const ssm = new SSMClient({ region: 'us-east-1' });
-
-export async function loadParameterStoreConfig() {
+export async function loadConfig() {
     const env = process.env.NODE_ENV || 'development';
-    const path = `/onstrument/${env}/`;
 
+    // For local development, use .env files
+    if (env === 'development') {
+        logger.info('Loading local environment variables...');
+        dotenv.config({ path: '.env.local' });
+        return;
+    }
+
+    // For production, try Parameter Store first
     try {
-        logger.info(`Loading parameters from ${path}`);
+        logger.info('Loading from AWS Parameter Store...');
+        const ssm = new SSMClient({ region: 'us-east-1' });
+        const path = `/onstrument/${env}/`;
+
         const response = await ssm.send(new GetParametersByPathCommand({
             Path: path,
             WithDecryption: true,
@@ -16,25 +25,24 @@ export async function loadParameterStoreConfig() {
         }));
 
         if (!response.Parameters) {
-            throw new Error('No parameters found');
+            throw new Error('No parameters found in AWS Parameter Store');
         }
 
         // Load into process.env
         response.Parameters.forEach(param => {
             if (param.Name && param.Value) {
-                // Strip the environment prefix
                 const envName = param.Name.replace(path, '');
                 process.env[envName] = param.Value;
             }
         });
 
-        logger.info(`Loaded ${response.Parameters.length} parameters from Parameter Store`);
+        logger.info(`Loaded ${response.Parameters.length} parameters from AWS Parameter Store`);
+
     } catch (error) {
-        if (env === 'development') {
-            logger.warn('Failed to load from Parameter Store in development - using local env files');
-            return;
-        }
-        logger.error('Failed to load parameters from AWS:', error);
-        throw error;
+        logger.error('Failed to load from AWS Parameter Store:', error);
+
+        // Fallback to .env files if AWS fails
+        logger.info('Falling back to .env files...');
+        dotenv.config({ path: `.env.${env}` });
     }
 } 
