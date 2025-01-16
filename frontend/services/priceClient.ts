@@ -31,10 +31,17 @@ class WebSocketClient {
     ]);
 
     private constructor() {
-        // Use relative WebSocket path that matches our backend WebSocket server
-        this.wsDevnetUrl = 'ws://' + window.location.host + '/api/ws';
-        this.wsMainnetUrl = 'ws://' + window.location.host + '/api/ws';
+        // For development environment
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
 
+        // Use the same base URL for both mainnet and devnet
+        this.wsDevnetUrl = `${wsProtocol}//${host}/api/ws`;
+        this.wsMainnetUrl = `${wsProtocol}//${host}/api/ws`;
+
+        // Initialize heartbeat monitoring for both networks
+        this.startHeartbeat('mainnet');
+        this.startHeartbeat('devnet');
     }
 
     static getInstance(): WebSocketClient {

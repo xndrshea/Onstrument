@@ -2,58 +2,82 @@ import { Connection } from '@solana/web3.js';
 
 const isProduction = import.meta.env.MODE === 'production';
 
-// Base URLs - hardcoded for security
-const API_URL = isProduction
-    ? 'https://api.yourapp.com'   // Replace with your production API URL
-    : 'http://localhost:3001';    // Local development API URL
+// Update your RPC endpoint configuration to include /api
+const ENDPOINTS = {
+    production: {
+        base: 'https://api.yourapp.com',
+        mainnet: '/api/helius/rpc',        // Added /api prefix
+        devnet: '/api/helius/devnet/rpc',   // Added /api prefix
+        ws: '/api/ws'  // Add WebSocket endpoint
+    },
+    development: {
+        base: 'http://localhost:3001',
+        mainnet: '/api/helius/rpc',        // Added /api prefix
+        devnet: '/api/helius/devnet/rpc',   // Added /api prefix
+        ws: '/api/ws'  // Add WebSocket endpoint
+    }
+} as const;
 
 // Custom RPC request function
 const createCustomRpcRequest = (endpoint: string) => {
     return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const body = init?.body ? JSON.parse(init.body as string) : {};
+        const isDevnet = endpoint.includes('devnet');
 
-        const rpcRequest = {
+        // Use the WebSocket endpoint for subscription methods
+        if (body.method?.includes('subscribe')) {
+            endpoint = `${ENV.base}${ENV.ws}`;
+        }
+
+        const requestBody = {
             jsonrpc: '2.0',
-            id: 1,
+            id: body.id || '1',
             method: body.method,
-            params: body.params || []
+            params: Array.isArray(body.params) ? body.params : [],
+            isDevnet
         };
 
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(rpcRequest)
-        });
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.clone().json();
+            return new Response(JSON.stringify(data), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (error) {
+            console.error('RPC request failed:', error);
+            throw error;
         }
-
-        const data = await response.json();
-        if (data.error) {
-            throw new Error(data.error.message);
-        }
-
-        return new Response(JSON.stringify(data), {
-            headers: { 'Content-Type': 'application/json' }
-        });
     };
 };
 
-// Create connections with custom RPC handlers
+// Get the current environment's endpoints
+const ENV = ENDPOINTS[isProduction ? 'production' : 'development'];
+
+// Create connections with cleaner URL construction
 export const mainnetConnection = new Connection(
-    `${API_URL}/api/helius/rpc`,
+    `${ENV.base}${ENV.mainnet}`,
     {
         commitment: 'confirmed',
-        fetch: createCustomRpcRequest(`${API_URL}/api/helius/rpc`)
+        fetch: createCustomRpcRequest(`${ENV.base}${ENV.mainnet}`),
+        wsEndpoint: `${ENV.base}${ENV.ws}`.replace('http', 'ws').replace('https', 'wss')
     }
 );
 
 export const devnetConnection = new Connection(
-    `${API_URL}/api/helius/devnet/rpc`,
+    `${ENV.base}${ENV.devnet}`,
     {
         commitment: 'confirmed',
-        fetch: createCustomRpcRequest(`${API_URL}/api/helius/devnet/rpc`)
+        fetch: createCustomRpcRequest(`${ENV.base}${ENV.devnet}`),
+        wsEndpoint: `${ENV.base}${ENV.ws}`.replace('http', 'ws').replace('https', 'wss')
     }
 );
 

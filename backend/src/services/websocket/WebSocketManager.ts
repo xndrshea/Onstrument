@@ -117,6 +117,7 @@ export class WebSocketManager extends EventEmitter {
     }
 
     broadcastPrice(mintAddress: string, price: number, volume?: number) {
+
         const message = {
             type: 'price',
             mintAddress,
@@ -129,6 +130,9 @@ export class WebSocketManager extends EventEmitter {
             time: Date.now(),
             volume: volume
         };
+
+
+
         if (this.wss) {
             this.wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
@@ -136,6 +140,7 @@ export class WebSocketManager extends EventEmitter {
                 }
             });
         }
+
     }
 
     broadcastMigration(mintAddress: string) {

@@ -172,15 +172,16 @@ export class BondingCurve {
         instructions: TransactionInstruction[],
         signers: Keypair[]
     ) {
-        const latestBlockhash = await this.connection.getLatestBlockhash();
+        // Get a FRESH blockhash with the LATEST valid block height
+        const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('processed');
 
         const tx = new Transaction();
         tx.feePayer = this.wallet!.publicKey!;
-        tx.recentBlockhash = latestBlockhash.blockhash;
+        tx.recentBlockhash = blockhash;  // Use the fresh blockhash
 
-        // Add lamports for ATA creation if needed
+        // KEEP the important rent handling for ATA creation
         if (instructions.some(ix => ix.programId.equals(TOKEN_PROGRAM_ID))) {
-            const rent = await this.connection.getMinimumBalanceForRentExemption(165); // 165 bytes for token account
+            const rent = await this.connection.getMinimumBalanceForRentExemption(165);
             tx.add(
                 SystemProgram.transfer({
                     fromPubkey: this.wallet!.publicKey!,
@@ -199,15 +200,31 @@ export class BondingCurve {
         const signedTx = await this.wallet.signTransaction(tx);
         signers.forEach(signer => signedTx.partialSign(signer));
 
-        const signature = await this.connection.sendRawTransaction(signedTx.serialize());
-        await this.connection.confirmTransaction({
-            signature,
-            blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        // Send the transaction IMMEDIATELY after signing
+        const signature = await this.connection.sendRawTransaction(signedTx.serialize(), {
+            skipPreflight: false,
+            preflightCommitment: 'processed'
         });
+        let retries = 0;
+        while (retries < 10) {
+            const status = await this.connection.getSignatureStatus(signature);
 
-        console.log(`Transaction submitted: https://solscan.io/tx/${signature}?cluster=devnet`);
-        return signature;
+            if (status?.value) {
+
+                if (status.value.confirmationStatus === 'processed' ||
+                    status.value.confirmationStatus === 'confirmed' ||
+                    status.value.confirmationStatus === 'finalized') {
+
+                    console.log(`Transaction submitted: https://solscan.io/tx/${signature}?cluster=devnet`);
+                    return signature;
+                }
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            retries++;
+        }
+
+        throw new Error('Transaction confirmation timeout');
     }
 
     async ensureTokenAccount(): Promise<PublicKey> {
@@ -238,8 +255,8 @@ export class BondingCurve {
                 const signature = await this.connection.sendRawTransaction(signedTx.serialize());
                 await this.connection.confirmTransaction({
                     signature,
-                    blockhash: latestBlockhash.blockhash,
-                    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+                    blockhash: tx.recentBlockhash,
+                    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
                 });
             }
             return buyerTokenAccount;
@@ -392,7 +409,7 @@ export class BondingCurve {
         );
 
         try {
-            const tx = await this.program.methods
+            const instruction = await this.program.methods
                 .sell(scaledAmount, scaledMinReturn, params.isSubscribed)
                 .accounts({
                     seller: this.wallet!.publicKey!,
@@ -405,17 +422,11 @@ export class BondingCurve {
                     systemProgram: SystemProgram.programId,
                     feeCollector: new PublicKey('E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L')
                 })
-                .rpc();
+                .instruction();
 
-            console.log('Sell transaction:', tx);
-            return tx;
+            return await this.buildAndSendTransaction([instruction], []);
         } catch (error: any) {
-            console.error('Sell error:', {
-                error,
-                message: error.message,
-                code: error.code,
-                logs: error.logs
-            });
+            console.error('Sell error:', error);
             throw error;
         }
     }
@@ -424,11 +435,10 @@ export class BondingCurve {
         price: number;
         totalCost: number;
         isSelling: boolean;
+
     }> {
-        console.log('ENTERING getPriceQuote:', { amount, isSelling });
 
         if (await this.shouldUseRaydium()) {
-            console.log('Using Raydium path');
             if (!this.mintAddress) throw new Error('Mint address is required');
             const quote = await dexService.calculateTradePrice(
                 this.mintAddress.toString(),
@@ -440,16 +450,11 @@ export class BondingCurve {
             return quote;
         }
 
-        console.log('Using Bonding Curve path');
 
         if (!this.mintAddress || !this.curveAddress) throw new Error('Required addresses missing');
         const tokenVault = this.getTokenVault();
 
         if (isSelling) {
-            console.log('Selling calculation input:', {
-                amount,
-                scaledAmount: new BN(amount * TOKEN_DECIMAL_MULTIPLIER).toString()
-            });
 
             const scaledAmount = new BN(amount * TOKEN_DECIMAL_MULTIPLIER);
             const price = await this.program.methods
@@ -461,14 +466,10 @@ export class BondingCurve {
                 })
                 .view();
 
-            console.log('Program returned price:', price.toString());
 
             const solReturn = price.toNumber() / LAMPORTS_PER_SOL;
 
-            console.log('Calculated values:', {
-                rawPrice: price.toString(),
-                solReturn,
-            });
+
 
             return {
                 price: solReturn,
@@ -487,12 +488,7 @@ export class BondingCurve {
                 })
                 .view();
 
-            console.log('Price Quote Debug:', {
-                inputSolAmount: amount,
-                rawSolAmount: solAmount.toString(),
-                rawTokenAmount: tokenAmount.toString(),
-                tokenAmount: tokenAmount.toNumber() / TOKEN_DECIMAL_MULTIPLIER,
-            });
+
 
             return {
                 price: tokenAmount.toNumber() / TOKEN_DECIMAL_MULTIPLIER,
@@ -622,6 +618,25 @@ export class BondingCurve {
         instructions.push(buyIx);
 
         return await this.buildAndSendTransaction(instructions, []);
+    }
+
+    // New method specifically for getting current token price
+    async getCurrentPrice(): Promise<number> {
+        if (!this.mintAddress || !this.curveAddress) throw new Error('Required addresses missing');
+        const tokenVault = this.getTokenVault();
+
+        // Calculate SOL needed for 1 token
+        const oneToken = new BN(TOKEN_DECIMAL_MULTIPLIER);
+        const solNeeded = await this.program.methods
+            .calculatePrice(oneToken, false)
+            .accounts({
+                mint: this.mintAddress,
+                curve: this.curveAddress,
+                tokenVault: tokenVault,
+            })
+            .view();
+
+        return solNeeded.toNumber() / LAMPORTS_PER_SOL;
     }
 
 }

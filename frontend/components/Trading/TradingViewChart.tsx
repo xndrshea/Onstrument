@@ -126,7 +126,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                         try {
                             // Check if we've already loaded data for this resolution
                             if (loadedDataRef.current[resolution]) {
-                                console.log(`Data already loaded for ${resolution}, skipping request`);
                                 onHistoryCallback([], { noData: false });
                                 return;
                             }
@@ -261,10 +260,8 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
             });
 
             widgetRef.current.onChartReady(() => {
-                console.log('Chart is ready');
                 try {
                     const button = widgetRef.current.createButton();
-                    console.log('Button created:', button);
 
                     // Match TradingView's button styling
                     button.textContent = denomination;
@@ -283,7 +280,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                         button.style.backgroundColor = "transparent";
                     });
 
-                    console.log('Button styled:', button.style);
 
                     button.addEventListener("click", () => {
                         console.log('Button clicked');
@@ -296,7 +292,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                         widgetRef.current.chart().resetData();
                     });
 
-                    console.log('Button setup complete');
                 } catch (error) {
                     console.error('Error setting up button:', error);
                 }

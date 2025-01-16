@@ -175,9 +175,10 @@ export class BondingCurvePriceFetcher {
                 isBuy
             });
 
-
-
+            logger.info(`About to broadcast price - mintAddress: ${mintAddress}, price: ${usdPrice}, volume: ${volumeUsd}`);
             wsManager.broadcastPrice(mintAddress, usdPrice, volumeUsd);
+            logger.info('Price broadcast call completed');
+
         } catch (error) {
             logger.error('Error calculating price:', error);
             throw error;

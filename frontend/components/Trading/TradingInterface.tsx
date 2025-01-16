@@ -8,7 +8,6 @@ import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { BN } from '@project-serum/anchor'
 import { dexService } from '../../services/dexService'
 import { mainnetConnection, devnetConnection } from '../../config'
-import { config } from '../../config'
 import { priceClient } from '../../services/priceClient'
 import { UserService } from '../../services/userService'
 
@@ -73,15 +72,11 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
     // Move getAppropriateConnection before bondingCurve initialization
     const getAppropriateConnection = () => {
-        console.log('Token type:', token.tokenType, 'Migration status:', token.curveConfig?.migrationStatus);
 
         // For custom tokens that aren't migrated, ALWAYS use devnet
         if (token.tokenType === 'custom' && (!token.curveConfig || token.curveConfig.migrationStatus !== 'migrated')) {
-            console.log('Using devnet connection for custom token - EVERYTHING should use devnet here');
             return devnetConnection;  // This means SOL balance, token balance, AND price all from devnet
         }
-
-        console.log('Using mainnet connection');
         return mainnetConnection;
     };
 
@@ -132,7 +127,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 setIsTokenTradable(Boolean(quote && quote.price > 0));
                 setIsMigrating(false);
             } catch (error) {
-                console.log("Raydium price check failed:", error);
                 setIsTokenTradable(false);
                 setIsMigrating(false);
             }
@@ -149,7 +143,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 setIsTokenTradable(Boolean(quote && quote.price > 0));
                 setIsMigrating(false);
             } catch (error) {
-                console.log("Token tradability check failed:", error);
                 setIsTokenTradable(false);
             }
         }
@@ -160,7 +153,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
         try {
             const appropriateConnection = getAppropriateConnection();
-            console.log('Fetching balances from:', token.tokenType === 'custom' ? 'DEVNET' : 'MAINNET');
 
             // Get SOL balance from the appropriate network
             const solBal = await appropriateConnection.getBalance(publicKey);
@@ -196,9 +188,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 if (token.tokenType === 'custom' &&
                     token.curveConfig?.migrationStatus !== 'migrated' &&
                     bondingCurve) {
-                    const quote = await bondingCurve.getPriceQuote(1, false);
-                    setSpotPrice(quote.price);
-                    if (onPriceUpdate) onPriceUpdate(quote.price);
+                    const spotPrice = await bondingCurve.getCurrentPrice();
+                    setSpotPrice(spotPrice);
+                    if (onPriceUpdate) onPriceUpdate(spotPrice);
                 } else if (token.tokenType === 'dex' || token.curveConfig?.migrationStatus === 'migrated') {
                     // For DEX tokens and migrated custom tokens, use Jupiter
                     const appropriateConnection = getAppropriateConnection();
@@ -281,7 +273,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 // For unmigrated custom tokens, use bonding curve
                 else if (bondingCurve) {
                     const quote = await bondingCurve.getPriceQuote(parsedAmount, isSelling);
-                    console.log('Got quote from bonding curve:', quote);
                     setPriceInfo(quote);
                 }
             } catch (error: any) {
@@ -330,8 +321,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             return
         }
 
+        setIsLoading(true)
+
         try {
-            setIsLoading(true)
             const appropriateConnection = getAppropriateConnection()
 
             if (token.tokenType === 'dex') {
@@ -371,30 +363,11 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 }
             }
 
-            // Update trading stats after successful trade
-            try {
-                const tradeAmount = parseFloat(amount);
-                const volumeInSol = isSelling
-                    ? priceInfo?.totalCost || 0  // When selling, use the actual SOL received
-                    : priceInfo?.totalCost || 0; // When buying, use the actual SOL spent
-
-                await fetch(`/api/users/${publicKey.toString()}/trading-stats`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        mintAddress: token.mintAddress,
-                        totalVolume: volumeInSol / LAMPORTS_PER_SOL, // Convert from lamports to SOL
-                        isSelling
-                    })
-                });
-            } catch (error) {
-                console.error('Error updating trading stats:', error);
-            }
-
-            await updateBalances()
+            // Success - clear form and update balances
             setAmount('')
+            setRawInput('')
+            await updateBalances()
+
         } catch (error: any) {
             console.error('Transaction error:', error)
             setError(error.message || 'Transaction failed')
@@ -580,7 +553,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     {/* Price Quote Display */}
                     {priceInfo && amount && amount.trim() !== '' && parseFloat(amount) > 0 && (
                         <>
-                            {console.log('Price Info:', priceInfo)}
                             <div className="mt-4 p-3 bg-[#1e2025] rounded-lg">
                                 <p className="text-gray-400 text-[14px]">
                                     {isSelling ? 'You will receive' : 'You will receive'}

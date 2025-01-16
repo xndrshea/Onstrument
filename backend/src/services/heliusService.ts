@@ -23,10 +23,18 @@ export const heliusService = {
     },
 
     async makeRpcRequest(body: any) {
-        const heliusUrl = body.isDevnet ? config.HELIUS_DEVNET_RPC_URL : config.HELIUS_RPC_URL;
+        const heliusUrl = body.isDevnet
+            ? `https://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`
+            : `https://rpc.helius.xyz/?api-key=${process.env.HELIUS_API_KEY}`;
 
-        const { ...requestBody } = body;
+
+
+        // Remove isDevnet before forwarding
+        const { isDevnet, ...requestBody } = body;
+
         const response = await axios.post(heliusUrl, requestBody);
+
+
         return response.data;
     }
 };
