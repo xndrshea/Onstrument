@@ -1,6 +1,5 @@
 import express from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import { errorHandler } from './middleware/errorHandler'
 import { logger } from './utils/logger'
 import rateLimit from 'express-rate-limit'
@@ -12,9 +11,7 @@ import { JupiterPriceUpdater } from './services/price/jupiterPriceUpdater'
 import { wsManager } from './services/websocket/WebSocketManager'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 
-// Load environment-specific config
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local'
-dotenv.config({ path: envFile })
+// Remove dotenv import and config loading
 logger.info(`Running in ${process.env.NODE_ENV || 'development'} environment`)
 
 export function createApp() {

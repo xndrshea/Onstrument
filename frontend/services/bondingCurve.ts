@@ -1,12 +1,13 @@
 import idl from '../../target/idl/bonding_curve.json';
 import type { BondingCurve as BondingCurveIDL } from '../../target/types/bonding_curve';
-import { WalletContextState } from '@solana/wallet-adapter-react';
+import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider } from '@coral-xyz/anchor';
 
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction } from '@solana/web3.js';
+import type { Connection, TransactionInstruction } from '@solana/web3.js';
+import { PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { BN } from 'bn.js';
-import { createTokenParams, TokenRecord } from '../../shared/types/token';
+import type { createTokenParams, TokenRecord } from '../../shared/types/token';
 import { dexService } from './dexService';
 
 // Add this constant at the top of the file

@@ -17,7 +17,9 @@
         "dev:backend-test": "ts-node-dev --respawn --transpile-only backend/src/index.ts",
         "test:aws": "ts-node scripts/testAwsAccess.ts",
         "test:aws:local": "ts-node scripts/testAwsAccess.ts local",
-        "test:aws:prod": "ts-node scripts/testAwsAccess.ts prod"
+        "test:aws:prod": "ts-node scripts/testAwsAccess.ts prod",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix"
     },
     "dependencies": {
         "@aws-sdk/client-ssm": "^3.726.1",
@@ -77,10 +79,14 @@
         "@types/pg": "^8.10.9",
         "@types/react": "^18.2.43",
         "@types/react-dom": "^18.2.17",
+        "@typescript-eslint/eslint-plugin": "^8.20.0",
+        "@typescript-eslint/parser": "^8.20.0",
         "@vitejs/plugin-react": "^4.2.1",
         "autoprefixer": "^10.4.20",
         "concurrently": "^9.1.0",
         "dotenv-cli": "^8.0.0",
+        "eslint": "^9.18.0",
+        "eslint-config-prettier": "^10.0.1",
         "nodemon": "^3.0.2",
         "postcss": "^8.4.49",
         "tailwindcss": "^3.4.16",

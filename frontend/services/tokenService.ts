@@ -1,8 +1,8 @@
-import { TokenRecord } from '../../shared/types/token';
+import type { TokenRecord } from '../../shared/types/token';
 import { logger } from '../utils/logger';
 import BN from 'bn.js';
 import { TOKEN_DECIMALS } from './bondingCurve';
-import { WalletContextState } from '@solana/wallet-adapter-react';
+import type { WalletContextState } from '@solana/wallet-adapter-react';
 
 const API_BASE_URL = '/api';
 

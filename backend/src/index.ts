@@ -8,7 +8,6 @@ import { checkDatabaseSetup } from './config/database'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { Server } from 'http'
 import WebSocket from 'ws'
-import cors from 'cors'
 import { wsManager } from './services/websocket/WebSocketManager'
 import { loadConfig } from './config/parameterStore'
 
@@ -18,16 +17,22 @@ async function startServer() {
     try {
         logger.info('Starting server initialization...')
 
-        // Load configuration (either from AWS or .env)
+        // 1. Load configuration (either from AWS or .env)
         await loadConfig()
+        logger.info('Config loaded successfully')
 
-        // Check and initialize database if needed
+        // 2. Check and initialize database if needed
         await checkDatabaseSetup()
+        logger.info('Database setup complete')
 
+        // 3. Create Express app
         const app = createApp()
-        const server = new Server(app)
+        logger.info('Express app created')
 
-        // Initialize WebSocket server with proper CORS
+        const server = new Server(app)
+        logger.info('HTTP server created')
+
+        // 4. Initialize WebSocket server with proper CORS
         const wss = new WebSocket.Server({
             server,
             path: '/api/ws',
@@ -48,17 +53,19 @@ async function startServer() {
             }
         })
 
-        // Initialize WebSocket Manager
+        // 5. Initialize WebSocket Manager
         wsManager.initialize(wss)
 
-        // Store WSS globally for legacy compatibility
+        // 6. Store WSS globally for legacy compatibility
         global.wss = wss
 
-        // Initialize HeliusManager with both WSS and WebSocketManager
+        // 7. Initialize HeliusManager with both WSS and WebSocketManager
         const heliusManager = HeliusManager.getInstance()
         await heliusManager.initialize(wss)
 
+        // 8. Start listening
         server.listen(PORT, () => {
+            logger.info(`Server is running on port ${PORT}`)
         })
 
     } catch (error) {

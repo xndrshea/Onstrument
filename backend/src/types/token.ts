@@ -1,4 +1,4 @@
-import { RaydiumPool } from '../services/discovery/tokenDiscoveryService';
+import type { RaydiumPool } from '../services/discovery/tokenDiscoveryService';
 
 export interface TokenUpsertData {
     token_type: 'dex';

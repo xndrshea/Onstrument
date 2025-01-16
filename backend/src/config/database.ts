@@ -1,10 +1,5 @@
 import { Pool } from 'pg'
-import dotenv from 'dotenv'
 import { logger } from '../utils/logger'
-
-// Load environment-specific config
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local'
-dotenv.config({ path: envFile })
 
 // Create connection pool with environment-specific SSL config
 const pool = new Pool({

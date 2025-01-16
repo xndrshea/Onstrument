@@ -15,7 +15,8 @@ import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import fs from 'fs';
 import { createBurnCheckedInstruction } from '@solana/spl-token';
-import { WebSocketManager, wsManager } from '../websocket/WebSocketManager';
+import type { WebSocketManager} from '../websocket/WebSocketManager';
+import { wsManager } from '../websocket/WebSocketManager';
 
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -28,25 +29,39 @@ export class MigrationService {
 
     constructor(wsManager: WebSocketManager) {
         this.wsManager = wsManager;
-        if (process.env.NODE_ENV === 'production' && !process.env.MIGRATION_ADMIN_KEYPAIR_PATH) {
-            throw new Error('MIGRATION_ADMIN_KEYPAIR_PATH not set in production');
+
+        // Debug environment
+        logger.info('MigrationService initialization:', {
+            NODE_ENV: process.env.NODE_ENV,
+            hasKeypair: !!process.env.MIGRATION_ADMIN_KEYPAIR,
+            keypairLength: process.env.MIGRATION_ADMIN_KEYPAIR?.length,
+            hasKeypairPath: !!process.env.MIGRATION_ADMIN_KEYPAIR_PATH,
+            envKeys: Object.keys(process.env).filter(key => key.includes('MIGRATION'))
+        });
+
+        if (process.env.MIGRATION_ADMIN_KEYPAIR) {
+            logger.info('Found keypair in environment, attempting to parse...');
+            try {
+                const rawValue = process.env.MIGRATION_ADMIN_KEYPAIR;
+                logger.info(`Raw keypair value type: ${typeof rawValue}, length: ${rawValue.length}`);
+                const keypairData = JSON.parse(rawValue);
+                logger.info('Successfully parsed keypair data');
+                this.keypair = Keypair.fromSecretKey(new Uint8Array(keypairData));
+                logger.info('Successfully created Solana keypair');
+            } catch (error) {
+                logger.error('Failed to process keypair:', error);
+                throw error;
+            }
+        } else if (process.env.MIGRATION_ADMIN_KEYPAIR_PATH) {
+            // Keypair from file system (development)
+            logger.info('Loading migration keypair from file');
+            const keypairData = JSON.parse(fs.readFileSync(process.env.MIGRATION_ADMIN_KEYPAIR_PATH, 'utf-8'));
+            this.keypair = Keypair.fromSecretKey(new Uint8Array(keypairData));
+        } else {
+            throw new Error('No migration keypair available - need either MIGRATION_ADMIN_KEYPAIR or MIGRATION_ADMIN_KEYPAIR_PATH');
         }
 
-        // If no MIGRATION_ADMIN_KEYPAIR_PATH is provided, generate a random keypair (for dev usage).
-        if (!process.env.MIGRATION_ADMIN_KEYPAIR_PATH) {
-            this.keypair = Keypair.generate();
-            this.connection = new Connection('https://api.devnet.solana.com');
-            return;
-        }
-
-        // Otherwise, load the keypair from file
-        const rawKey = fs.readFileSync(process.env.MIGRATION_ADMIN_KEYPAIR_PATH);
-        this.keypair = Keypair.fromSecretKey(
-            Buffer.from(JSON.parse(rawKey.toString()))
-        );
-        this.connection = new Connection(
-            process.env.RPC_ENDPOINT || 'https://api.devnet.solana.com'
-        );
+        this.connection = new Connection('https://api.devnet.solana.com');
     }
 
     async handleMigrationEvent(event: {

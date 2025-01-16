@@ -1,9 +1,9 @@
-import { Connection } from '@solana/web3.js';
-import { WalletContextState } from '@solana/wallet-adapter-react';
+import type { Connection } from '@solana/web3.js';
+import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { BondingCurve, TOKEN_DECIMALS } from './bondingCurve';
 // import { StorageService } from './storageService';
 import { TokenService } from './tokenService';
-import {
+import type {
     TokenRecord,
     createTokenParams,
 } from '../../shared/types/token';

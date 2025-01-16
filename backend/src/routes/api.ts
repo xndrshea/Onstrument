@@ -7,16 +7,21 @@ import rateLimit from 'express-rate-limit';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
 import { RaydiumProcessor } from '../services/price/processors/raydiumProcessor';
 import { BondingCurveProcessor } from '../services/price/processors/bondingCurveProcessor';
-import express from 'express';
 import multer from 'multer';
 import { pinataService } from '../services/pinataService';
 import { heliusService as heliusRestService } from '../services/heliusService';
 import { heliusService } from '../services/heliusService';
-import { config } from '../config/env';
+
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
-const heliusManager = HeliusManager.getInstance();
+let heliusManagerInstance: HeliusManager | null = null;
+const getHeliusManager = () => {
+    if (!heliusManagerInstance) {
+        heliusManagerInstance = HeliusManager.getInstance();
+    }
+    return heliusManagerInstance;
+};
 
 // CORS and rate limiting setup
 router.use(cors({
@@ -38,7 +43,7 @@ router.use(limiter);
 router.get('/system/status', async (_req, res) => {
     try {
         const status = {
-            websocket: heliusManager.getStatus(),
+            websocket: getHeliusManager().getStatus(),
             processors: {
                 raydium: RaydiumProcessor.getStatus(),
                 bondingCurve: BondingCurveProcessor.getStatus()
@@ -581,7 +586,7 @@ router.get('/trades/:mintAddress', async (req, res) => {
 // WebSocket status
 router.get('/ws/status', async (_req, res) => {
     try {
-        const status = heliusManager.getStatus();
+        const status = getHeliusManager().getStatus();
         res.json(status);
     } catch (error) {
         logger.error('Error fetching WebSocket status:', error);

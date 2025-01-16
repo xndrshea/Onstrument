@@ -1,7 +1,8 @@
-import { Connection, VersionedTransaction, PublicKey } from '@solana/web3.js';
-import { WalletContextState } from '@solana/wallet-adapter-react';
+import type { Connection} from '@solana/web3.js';
+import { VersionedTransaction, PublicKey } from '@solana/web3.js';
+import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { NATIVE_SOL_MINT } from '../constants';
-import { BN } from '@project-serum/anchor';
+import type { BN } from '@project-serum/anchor';
 import { mainnetConnection } from '../config';
 import { getMint } from '@solana/spl-token';
 

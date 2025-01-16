@@ -2,10 +2,10 @@ import axios, { AxiosError } from 'axios';
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 import { MetadataService } from '../metadata/metadataService';
-import { Pool } from 'pg';
-import { TokenUpsertData } from '../../types/token';
+import type { Pool } from 'pg';
+import type { TokenUpsertData } from '../../types/token';
 import { wsManager } from '../websocket/WebSocketManager';
-import { PoolClient } from 'pg';
+import type { PoolClient } from 'pg';
 
 export interface RaydiumPool {
     type: string;

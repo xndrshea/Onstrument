@@ -2,9 +2,6 @@ import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { PriceHistoryModel } from '../../../models/priceHistoryModel';
-import WebSocket from 'ws';
-import { WebSocketClient } from '../websocket/types';
-import { TOKEN_PROGRAM_ID, AccountLayout } from '@solana/spl-token';
 import { wsManager } from '../../websocket/WebSocketManager';
 import { pool } from '../../../config/database';
 

@@ -1,5 +1,5 @@
-import { CandlestickData } from 'lightweight-charts';
-import { Time } from 'lightweight-charts';
+import type { CandlestickData } from 'lightweight-charts';
+import type { Time } from 'lightweight-charts';
 
 
 class WebSocketClient {

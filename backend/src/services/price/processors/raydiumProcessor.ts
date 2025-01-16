@@ -5,10 +5,9 @@ import { logger } from '../../../utils/logger';
 import { LIQUIDITY_STATE_LAYOUT_V4 } from '@raydium-io/raydium-sdk';
 import { pool } from '../../../config/database';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { Umi } from '@metaplex-foundation/umi';
+import type { Umi } from '@metaplex-foundation/umi';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata'
 import { MetadataService } from '../../metadata/metadataService';
-import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 import { BN } from 'bn.js';
 import { PriceFetcher } from './priceFetcher';
 import { PRICE_WHITELIST } from '../../../constants/priceWhitelist';
