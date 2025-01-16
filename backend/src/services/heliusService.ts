@@ -20,5 +20,12 @@ export const heliusService = {
         });
 
         return response.data;
+    },
+
+    async makeRpcRequest(body: any) {
+        const heliusUrl = body.isDevnet ? config.HELIUS_DEVNET_RPC_URL : config.HELIUS_RPC_URL;
+
+        const response = await axios.post(heliusUrl, body);
+        return response.data;
     }
 }; 

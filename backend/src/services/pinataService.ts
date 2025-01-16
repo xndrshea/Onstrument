@@ -1,13 +1,17 @@
 import axios from 'axios';
 import { config } from '../config/env';
 import type { Request } from 'express';
+import FormData from 'form-data';
 
 export const pinataService = {
     async uploadImage(file: Request['file']): Promise<string> {
         if (!file) throw new Error('No file provided');
 
         const formData = new FormData();
-        formData.append('file', new Blob([file.buffer]), file.originalname);
+        formData.append('file', file.buffer, {
+            filename: file.originalname,
+            contentType: file.mimetype
+        });
 
         const metadata = JSON.stringify({
             name: file.originalname,
@@ -20,8 +24,8 @@ export const pinataService = {
             formData,
             {
                 headers: {
-                    'Authorization': `Bearer ${config.PINATA_JWT}`,
-                    'Content-Type': 'multipart/form-data'
+                    ...formData.getHeaders(),
+                    'Authorization': `Bearer ${config.PINATA_JWT}`
                 }
             }
         );
@@ -43,4 +47,4 @@ export const pinataService = {
 
         return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
     }
-}; 
+};

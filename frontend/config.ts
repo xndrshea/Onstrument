@@ -11,8 +11,9 @@ export const MAINNET_API_BASE_URL = API_BASE_URL;
 
 // Network connections
 export const DEVNET_URL = clusterApiUrl('devnet');
+export const mainnetConnection = new Connection(`${API_BASE_URL}/helius/rpc`);
 export const devnetConnection = new Connection(DEVNET_URL);
-export const defaultConnection = devnetConnection;
+export const defaultConnection = isProduction ? mainnetConnection : devnetConnection;
 
 export const config = {
     API_BASE_URL,

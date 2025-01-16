@@ -5,12 +5,18 @@ export const pinataService = {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${API_BASE_URL}/upload/image`, {
+        const url = `${API_BASE_URL}/upload/image`;
+        console.log('Attempting upload to:', url);
+
+        const response = await fetch(url, {
             method: 'POST',
             body: formData,
         });
 
+        console.log('Response status:', response.status);
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Upload failed:', errorText);
             throw new Error('Failed to upload image');
         }
 
@@ -19,7 +25,7 @@ export const pinataService = {
     },
 
     async uploadMetadata(metadata: any): Promise<string> {
-        const response = await fetch(`${API_BASE_URL}/upload/metadata`, {
+        const response = await fetch(`${API_BASE_URL}/api/upload/metadata`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(metadata),
@@ -32,4 +38,4 @@ export const pinataService = {
         const data = await response.json();
         return data.url;
     }
-}; 
+};

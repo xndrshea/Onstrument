@@ -11,6 +11,8 @@ import express from 'express';
 import multer from 'multer';
 import { pinataService } from '../services/pinataService';
 import { heliusService as heliusRestService } from '../services/heliusService';
+import { heliusService } from '../services/heliusService';
+import { config } from '../config/env';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -843,22 +845,25 @@ router.get('/users/:walletAddress/trading-stats', async (req, res) => {
 // File upload endpoint
 router.post('/upload/image', upload.single('file'), async (req, res) => {
     try {
-        const file = req.file;
-        if (!file) throw new Error('No file provided');
-        const imageUrl = await pinataService.uploadImage(file);
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file provided' });
+        }
+        const imageUrl = await pinataService.uploadImage(req.file);
         res.json({ url: imageUrl });
     } catch (error) {
+        console.error('Image upload error:', error);
         res.status(500).json({ error: 'Failed to upload image' });
     }
 });
 
 // Metadata upload endpoint
-router.post('/upload/metadata', async (req, res) => {
+router.post('/api/upload/metadata', async (req, res) => {
     try {
         const metadata = req.body;
         const metadataUrl = await pinataService.uploadMetadata(metadata);
         res.json({ url: metadataUrl });
     } catch (error) {
+        console.error('Metadata upload error:', error);
         res.status(500).json({ error: 'Failed to upload metadata' });
     }
 });
@@ -871,6 +876,17 @@ router.post('/helius/assets', async (req, res) => {
         res.json(assets);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch assets' });
+    }
+});
+
+// Helius RPC proxy endpoint
+router.post('/helius/rpc', async (req, res) => {
+    try {
+        const response = await heliusService.makeRpcRequest(req.body);
+        res.json(response);
+    } catch (error) {
+        console.error('Helius RPC error:', error);
+        res.status(500).json({ error: 'Failed to process RPC request' });
     }
 });
 

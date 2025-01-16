@@ -6,8 +6,8 @@ import { TokenTransactionService } from '../../services/TokenTransactionService'
 import { TokenFormData } from '../../../shared/types/token'
 import { PublicKey } from '@solana/web3.js'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
-import { pinataService } from '../../services/pinataService'
 import { UserService } from '../../services/userService'
+import { pinataService } from '../../services/pinataService'
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
