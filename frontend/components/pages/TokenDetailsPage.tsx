@@ -69,6 +69,12 @@ export function TokenDetailsPage() {
 
         let cleanup: (() => void) | undefined;
         const setupSubscription = async () => {
+            const network = token.tokenType === 'custom' ? 'devnet' : 'mainnet';
+
+            // Check WebSocket connection
+            const isConnected = priceClient.isConnected(network);
+            console.log(`WebSocket ${network} connection status:`, isConnected);
+
             // For dex tokens and migrated custom tokens, use current_price from database
             if (token.tokenType === 'dex' || (token.tokenType === 'custom' && token.tokenSource === 'migrated')) {
                 setCurrentPrice(token.currentPrice || null);
@@ -96,7 +102,7 @@ export function TokenDetailsPage() {
                     setCurrentPrice(price);
                     updateTokenWithPrice(price);
                 },
-                token.tokenType === 'custom' ? 'devnet' : 'mainnet'
+                network
             );
         };
 

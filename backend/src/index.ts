@@ -33,11 +33,13 @@ async function startServer() {
         logger.info('HTTP server created')
 
         // 4. Initialize WebSocket server with proper CORS
+        logger.info('Setting up WebSocket server...');
         const wss = new WebSocket.Server({
             server,
             path: '/api/ws',
             verifyClient: (info, cb) => {
                 const origin = info.origin || info.req.headers.origin
+                logger.info(`WebSocket connection attempt from origin: ${origin}`);
                 const allowedOrigins = [
                     'http://localhost:3000',
                     'http://localhost:5173',
@@ -46,15 +48,18 @@ async function startServer() {
 
                 if (allowedOrigins.includes(origin)) {
                     cb(true)
+                    logger.info('WebSocket connection accepted');
                 } else {
                     logger.warn(`Rejected WebSocket connection from origin: ${origin}`)
                     cb(false, 403, 'Forbidden')
                 }
             }
         })
+        logger.info('WebSocket server created on path: /api/ws');
 
         // 5. Initialize WebSocket Manager
         wsManager.initialize(wss)
+        logger.info('WebSocket Manager initialized');
 
         // 6. Store WSS globally for legacy compatibility
         global.wss = wss

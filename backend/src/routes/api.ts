@@ -11,6 +11,7 @@ import multer from 'multer';
 import { pinataService } from '../services/pinataService';
 import { heliusService as heliusRestService } from '../services/heliusService';
 import { heliusService } from '../services/heliusService';
+import { wsManager } from '../services/websocket/WebSocketManager';
 
 
 const router = Router();
@@ -904,6 +905,15 @@ router.post('/helius/devnet/rpc', async (req, res) => {
         logger.error('Helius Devnet RPC error:', error);
         res.status(500).json({ error: 'Failed to process RPC request' });
     }
+});
+
+// Add WebSocket health check endpoint
+router.get('/ws/health', (req, res) => {
+    const stats = wsManager.getStats();
+    res.json({
+        status: 'ok',
+        connections: stats.totalConnections
+    });
 });
 
 export default router; 
