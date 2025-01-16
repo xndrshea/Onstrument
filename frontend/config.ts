@@ -1,33 +1,60 @@
-import { Connection, clusterApiUrl } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 
 const isProduction = import.meta.env.MODE === 'production';
 
-// Constants
-const API_ENDPOINTS = {
-    MAINNET_RPC: '/api/helius/rpc',
-    DEVNET_RPC: '/api/helius/devnet/rpc'
-} as const;
+// Base URLs - hardcoded for security
+const API_URL = isProduction
+    ? 'https://api.yourapp.com'   // Replace with your production API URL
+    : 'http://localhost:3001';    // Local development API URL
 
-// Validate production URL
-const validateApiUrl = (url: string | undefined): string => {
-    if (!url && isProduction) {
-        throw new Error('Production API URL is required');
-    }
-    return url || 'http://localhost:3001';
+// Custom RPC request function
+const createCustomRpcRequest = (endpoint: string) => {
+    return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+
+        const rpcRequest = {
+            jsonrpc: '2.0',
+            id: 1,
+            method: body.method,
+            params: body.params || []
+        };
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rpcRequest)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.error) {
+            throw new Error(data.error.message);
+        }
+
+        return new Response(JSON.stringify(data), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+    };
 };
 
-// Base URLs
-export const API_URL = validateApiUrl(import.meta.env.VITE_API_URL);
-
-// Network connections
+// Create connections with custom RPC handlers
 export const mainnetConnection = new Connection(
-    `${API_URL}${API_ENDPOINTS.MAINNET_RPC}`,
-    'confirmed'
+    `${API_URL}/api/helius/rpc`,
+    {
+        commitment: 'confirmed',
+        fetch: createCustomRpcRequest(`${API_URL}/api/helius/rpc`)
+    }
 );
 
 export const devnetConnection = new Connection(
-    `${API_URL}${API_ENDPOINTS.DEVNET_RPC}`,
-    'confirmed'
+    `${API_URL}/api/helius/devnet/rpc`,
+    {
+        commitment: 'confirmed',
+        fetch: createCustomRpcRequest(`${API_URL}/api/helius/devnet/rpc`)
+    }
 );
 
 export const defaultConnection = isProduction ? mainnetConnection : devnetConnection;

@@ -192,13 +192,13 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     useEffect(() => {
         const updatePrice = async () => {
             try {
-                // Only proceed if we have a bonding curve for custom tokens
+                // For custom tokens that aren't migrated, use bonding curve
                 if (token.tokenType === 'custom' &&
                     token.curveConfig?.migrationStatus !== 'migrated' &&
-                    bondingCurve) {  // Add this check
-                    const initialPrice = await bondingCurve.getInitialPrice();
-                    setSpotPrice(initialPrice);
-                    if (onPriceUpdate) onPriceUpdate(initialPrice);
+                    bondingCurve) {
+                    const quote = await bondingCurve.getPriceQuote(1, false);
+                    setSpotPrice(quote.price);
+                    if (onPriceUpdate) onPriceUpdate(quote.price);
                 } else if (token.tokenType === 'dex' || token.curveConfig?.migrationStatus === 'migrated') {
                     // For DEX tokens and migrated custom tokens, use Jupiter
                     const appropriateConnection = getAppropriateConnection();

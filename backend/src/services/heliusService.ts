@@ -4,7 +4,6 @@ import axios from 'axios';
 export const heliusService = {
     async getAssetsByOwner(walletAddress: string, isDevnet: boolean) {
         const heliusUrl = isDevnet ? config.HELIUS_DEVNET_RPC_URL : config.HELIUS_RPC_URL;
-        console.log('Using Helius URL:', heliusUrl);
 
         const response = await axios.post(heliusUrl, {
             jsonrpc: '2.0',
@@ -25,10 +24,33 @@ export const heliusService = {
 
     async makeRpcRequest(body: any) {
         const heliusUrl = body.isDevnet ? config.HELIUS_DEVNET_RPC_URL : config.HELIUS_RPC_URL;
-        console.log('Making RPC request to:', heliusUrl);
 
-        const { isDevnet, ...requestBody } = body;
+        const { ...requestBody } = body;
         const response = await axios.post(heliusUrl, requestBody);
         return response.data;
     }
+};
+
+export const makeRpcRequest = async (body: any) => {
+    const isDevnet = body.isDevnet;
+    const endpoint = isDevnet ?
+        `https://rpc-devnet.helius.xyz/?api-key=${process.env.HELIUS_API_KEY}` :
+        `https://rpc.helius.xyz/?api-key=${process.env.HELIUS_API_KEY}`;
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: body.id || 'backend',
+            method: body.method,
+            params: body.params
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Helius RPC error: ${response.status}`);
+    }
+
+    return await response.json();
 }; 
