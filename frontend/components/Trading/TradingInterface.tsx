@@ -7,7 +7,7 @@ import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { BN } from '@project-serum/anchor'
 import { dexService } from '../../services/dexService'
-import { mainnetConnection, devnetConnection, API_BASE_URL } from '../../config'
+import { mainnetConnection, devnetConnection } from '../../config'
 import { config } from '../../config'
 import { priceClient } from '../../services/priceClient'
 import { UserService } from '../../services/userService'
@@ -91,7 +91,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     }, [connection, publicKey, token.mintAddress, token.curveAddress, wallet])
 
     const getAppropriateConnection = () => {
-        if (token.tokenType === 'dex' && config.HELIUS_RPC_URL) {
+        if (token.tokenType === 'dex') {
             return mainnetConnection;
         }
         return devnetConnection;
@@ -369,7 +369,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     ? priceInfo?.totalCost || 0  // When selling, use the actual SOL received
                     : priceInfo?.totalCost || 0; // When buying, use the actual SOL spent
 
-                await fetch(`${API_BASE_URL}/users/${publicKey.toString()}/trading-stats`, {
+                await fetch(`/api/users/${publicKey.toString()}/trading-stats`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

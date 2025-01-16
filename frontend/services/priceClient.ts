@@ -1,4 +1,3 @@
-import { API_BASE_URL, MAINNET_API_BASE_URL } from '../config';
 import { CandlestickData } from 'lightweight-charts';
 import { Time } from 'lightweight-charts';
 
@@ -32,9 +31,9 @@ class WebSocketClient {
     ]);
 
     private constructor() {
-        // Move URL construction to constructor
-        this.wsDevnetUrl = API_BASE_URL.replace('http', 'ws') + '/ws';  // Remove 'api/'
-        this.wsMainnetUrl = MAINNET_API_BASE_URL.replace('http', 'ws') + '/ws';
+        // Use relative WebSocket path that matches our backend WebSocket server
+        this.wsDevnetUrl = 'ws://' + window.location.host + '/api/ws';
+        this.wsMainnetUrl = 'ws://' + window.location.host + '/api/ws';
 
     }
 
@@ -243,7 +242,7 @@ class WebSocketClient {
     }
 
     async getPriceHistory(mintAddress: string): Promise<CandlestickData<Time>[]> {
-        const response = await fetch(`${API_BASE_URL}/ohlcv/${mintAddress}?resolution=1&from=${Math.floor(Date.now() / 1000 - 300)}&to=${Math.floor(Date.now() / 1000)}`);
+        const response = await fetch(`/api/ohlcv/${mintAddress}?resolution=1&from=${Math.floor(Date.now() / 1000 - 300)}&to=${Math.floor(Date.now() / 1000)}`);
         if (!response.ok) throw new Error('Failed to fetch price history');
 
         const data = await response.json();
@@ -259,7 +258,7 @@ class WebSocketClient {
 
     async getLatestPrice(mintAddress: string): Promise<number | null> {
         try {
-            const response = await fetch(`${API_BASE_URL}/prices/${mintAddress}/latest`);
+            const response = await fetch(`/api/prices/${mintAddress}/latest`);
             if (!response.ok) {
                 throw new Error('Failed to fetch latest price');
             }
@@ -389,12 +388,8 @@ export const priceClient = {
 
     // Only used for getting historical price data for charts
     async getPriceHistory(mintAddress: string): Promise<CandlestickData<Time>[]> {
-        const response = await fetch(`${API_BASE_URL}/price-history/${mintAddress}`);
-
-        if (!response.ok) {
-            console.error('Price history fetch failed:', response.status);
-            throw new Error('Failed to fetch price history');
-        }
+        const response = await fetch(`/api/ohlcv/${mintAddress}?resolution=1&from=${Math.floor(Date.now() / 1000 - 300)}&to=${Math.floor(Date.now() / 1000)}`);
+        if (!response.ok) throw new Error('Failed to fetch price history');
 
         const data: PriceHistoryPoint[] = await response.json();
 
@@ -414,7 +409,7 @@ export const priceClient = {
 
     getLatestPrice: async (mintAddress: string): Promise<number | null> => {
         try {
-            const response = await fetch(`${API_BASE_URL}/prices/${mintAddress}/latest`);
+            const response = await fetch(`/api/prices/${mintAddress}/latest`);
             if (!response.ok) {
                 throw new Error('Failed to fetch latest price');
             }

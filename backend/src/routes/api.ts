@@ -890,4 +890,15 @@ router.post('/helius/rpc', async (req, res) => {
     }
 });
 
+// Helius Devnet RPC proxy endpoint
+router.post('/helius/devnet/rpc', async (req, res) => {
+    try {
+        const response = await heliusService.makeRpcRequest({ ...req.body, isDevnet: true });
+        res.json(response);
+    } catch (error) {
+        logger.error('Helius Devnet RPC error:', error);
+        res.status(500).json({ error: 'Failed to process RPC request' });
+    }
+});
+
 export default router; 

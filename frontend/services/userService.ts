@@ -1,5 +1,3 @@
-import { API_BASE_URL } from "../config";
-
 export interface User {
     userId: string;
     walletAddress: string;
@@ -12,7 +10,7 @@ export interface User {
 export class UserService {
     static async getOrCreateUser(walletAddress: string): Promise<User> {
         try {
-            const response = await fetch(`${API_BASE_URL}/users`, {
+            const response = await fetch(`/api/users`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -41,7 +39,7 @@ export class UserService {
 
     static async getUser(walletAddress: string): Promise<User | null> {
         try {
-            const response = await fetch(`${API_BASE_URL}/users/${walletAddress}`);
+            const response = await fetch(`/api/users/${walletAddress}`);
 
             if (response.status === 404) {
                 return null;
@@ -68,7 +66,7 @@ export class UserService {
 
     static async toggleSubscription(walletAddress: string): Promise<User> {
         try {
-            const response = await fetch(`${API_BASE_URL}/users/${walletAddress}/toggle-subscription`, {
+            const response = await fetch(`/api/users/${walletAddress}/toggle-subscription`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

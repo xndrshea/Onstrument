@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { useNavigate } from 'react-router-dom';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
-import { API_BASE_URL } from '../../config';
 
 interface Asset {
     interface: string;
@@ -51,7 +50,7 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
             try {
                 const isDevnet = connection.rpcEndpoint.includes('devnet');
 
-                const response = await fetch(`${API_BASE_URL}/helius/assets`, {
+                const response = await fetch(`/api/helius/assets`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ walletAddress, isDevnet })
