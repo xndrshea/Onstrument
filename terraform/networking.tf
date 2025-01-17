@@ -124,37 +124,6 @@ resource "aws_route_table_association" "private_b" {
 }
 
 # Security Groups
-resource "aws_security_group" "alb" {
-  name        = "${var.app_name}-${var.environment}-alb-sg"
-  description = "ALB security group"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.app_name}-${var.environment}-alb-sg"
-  }
-}
-
 resource "aws_security_group" "ecs" {
   name        = "${var.app_name}-${var.environment}-ecs-sg"
   description = "ECS security group"

@@ -32,12 +32,12 @@ output "ecs_service_name" {
 
 output "alb_dns_name" {
   description = "DNS name of the load balancer"
-  value       = aws_lb.backend.dns_name
+  value       = aws_lb.main.dns_name
 }
 
 output "backend_url" {
   description = "URL of the backend service"
-  value       = "https://${aws_lb.backend.dns_name}"
+  value       = "https://${aws_lb.main.dns_name}"
 }
 
 # DNS outputs

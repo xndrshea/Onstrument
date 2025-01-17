@@ -83,6 +83,16 @@ resource "aws_iam_role_policy" "parameter_store_policy" {
   })
 }
 
+# Add ECR Repository
+resource "aws_ecr_repository" "backend" {
+  name         = "${var.app_name}-backend"
+  force_delete = true # Allows deletion with terraform destroy
+
+  image_scanning_configuration {
+    scan_on_push = true # Security scanning
+  }
+}
+
 # ECS Task Definition
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.app_name}-${var.environment}-backend"
@@ -96,7 +106,7 @@ resource "aws_ecs_task_definition" "backend" {
   container_definitions = jsonencode([
     {
       name      = "backend"
-      image     = "${var.app_name}-backend:latest"
+      image     = "${aws_ecr_repository.backend.repository_url}:latest"
       essential = true
 
       portMappings = [
@@ -170,6 +180,11 @@ resource "aws_ecs_service" "backend" {
   tags = {
     Name = "${var.app_name}-${var.environment}-backend-service"
   }
+
+  depends_on = [
+    aws_lb_listener.http,
+    aws_lb_listener.https
+  ]
 }
 
 # Auto-scaling

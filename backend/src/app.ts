@@ -130,6 +130,11 @@ export function createApp() {
         });
     });
 
+    // Add this near your other routes
+    app.get('/health', (req, res) => {
+        res.status(200).json({ status: 'healthy' });
+    });
+
     return app
 }
 
