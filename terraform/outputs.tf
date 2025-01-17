@@ -12,3 +12,8 @@ output "cloudfront_domain_name" {
   description = "Domain name of CloudFront distribution"
   value       = aws_cloudfront_distribution.frontend.domain_name
 }
+
+output "nameservers" {
+  value       = aws_route53_zone.main.name_servers
+  description = "Nameservers for Namecheap configuration"
+}

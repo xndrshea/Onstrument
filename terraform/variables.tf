@@ -9,7 +9,6 @@ variable "app_name" {
   type        = string
   default     = "onstrument"
 }
-
 variable "environment" {
   description = "Environment (staging/prod)"
   type        = string
@@ -19,3 +18,4 @@ variable "environment" {
     error_message = "Environment must be 'staging' or 'prod'"
   }
 }
+
