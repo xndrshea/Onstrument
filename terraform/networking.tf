@@ -5,28 +5,30 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-vpc"
+    Name = "${var.app_name}-vpc"
   }
 }
 
 # Public Subnets
-resource "aws_subnet" "main_a" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "${var.aws_region}a"
+resource "aws_subnet" "public_a" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "${var.aws_region}a"
+  map_public_ip_on_launch = true
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-subnet-a"
+    Name = "${var.app_name}-${var.environment}-public-a"
   }
 }
 
-resource "aws_subnet" "main_b" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.2.0/24"
-  availability_zone = "${var.aws_region}b"
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "${var.aws_region}b"
+  map_public_ip_on_launch = true
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-subnet-b"
+    Name = "${var.app_name}-${var.environment}-public-b"
   }
 }
 
@@ -37,7 +39,7 @@ resource "aws_subnet" "private_a" {
   availability_zone = "${var.aws_region}a"
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-private-a"
+    Name = "${var.app_name}-private-a"
   }
 }
 
@@ -47,7 +49,7 @@ resource "aws_subnet" "private_b" {
   availability_zone = "${var.aws_region}b"
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-private-b"
+    Name = "${var.app_name}-private-b"
   }
 }
 
@@ -55,7 +57,7 @@ resource "aws_subnet" "private_b" {
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
   tags = {
-    Name = "${var.app_name}-${var.environment}-igw"
+    Name = "${var.app_name}-igw"
   }
 }
 
@@ -66,10 +68,10 @@ resource "aws_eip" "nat" {
 
 resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.main_a.id
+  subnet_id     = aws_subnet.public_a.id
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-nat"
+    Name = "${var.app_name}-nat"
   }
 }
 
@@ -83,7 +85,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-public-rt"
+    Name = "${var.app_name}-public-rt"
   }
 }
 
@@ -96,18 +98,18 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name = "${var.app_name}-${var.environment}-private-rt"
+    Name = "${var.app_name}-private-rt"
   }
 }
 
 # Route Table Associations
 resource "aws_route_table_association" "public_a" {
-  subnet_id      = aws_subnet.main_a.id
+  subnet_id      = aws_subnet.public_a.id
   route_table_id = aws_route_table.public.id
 }
 
 resource "aws_route_table_association" "public_b" {
-  subnet_id      = aws_subnet.main_b.id
+  subnet_id      = aws_subnet.public_b.id
   route_table_id = aws_route_table.public.id
 }
 
@@ -122,14 +124,21 @@ resource "aws_route_table_association" "private_b" {
 }
 
 # Security Groups
-resource "aws_security_group" "ecs" {
-  name        = "${var.app_name}-${var.environment}-ecs-sg"
-  description = "ECS security group"
+resource "aws_security_group" "alb" {
+  name        = "${var.app_name}-${var.environment}-alb-sg"
+  description = "ALB security group"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port   = 3001
-    to_port     = 3001
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -140,4 +149,32 @@ resource "aws_security_group" "ecs" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-} 
+
+  tags = {
+    Name = "${var.app_name}-${var.environment}-alb-sg"
+  }
+}
+
+resource "aws_security_group" "ecs" {
+  name        = "${var.app_name}-${var.environment}-ecs-sg"
+  description = "ECS security group"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 3001
+    to_port         = 3001
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.app_name}-${var.environment}-ecs-sg"
+  }
+}

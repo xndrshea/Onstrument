@@ -435,7 +435,6 @@ export class BondingCurve {
         price: number;
         totalCost: number;
         isSelling: boolean;
-
     }> {
 
         if (await this.shouldUseRaydium()) {
@@ -618,25 +617,6 @@ export class BondingCurve {
         instructions.push(buyIx);
 
         return await this.buildAndSendTransaction(instructions, []);
-    }
-
-    // New method specifically for getting current token price
-    async getCurrentPrice(): Promise<number> {
-        if (!this.mintAddress || !this.curveAddress) throw new Error('Required addresses missing');
-        const tokenVault = this.getTokenVault();
-
-        // Calculate SOL needed for 1 token
-        const oneToken = new BN(TOKEN_DECIMAL_MULTIPLIER);
-        const solNeeded = await this.program.methods
-            .calculatePrice(oneToken, false)
-            .accounts({
-                mint: this.mintAddress,
-                curve: this.curveAddress,
-                tokenVault: tokenVault,
-            })
-            .view();
-
-        return solNeeded.toNumber() / LAMPORTS_PER_SOL;
     }
 
 }

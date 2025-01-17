@@ -1,3 +1,9 @@
+variable "environment" {
+  description = "Deployment environment"
+  type        = string
+  default     = "prod"
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string
@@ -9,13 +15,9 @@ variable "app_name" {
   type        = string
   default     = "onstrument"
 }
-variable "environment" {
-  description = "Environment (staging/prod)"
-  type        = string
-  default     = "staging"
-  validation {
-    condition     = contains(["staging", "prod"], var.environment)
-    error_message = "Environment must be 'staging' or 'prod'"
-  }
-}
 
+variable "domain_name" {
+  description = "Domain name for the application"
+  type        = string
+  default     = "onstrument.com"
+}

@@ -7,12 +7,21 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "onstrument-terraform-state"
-    key    = "terraform.tfstate"
-    region = "us-east-1"
+    bucket         = "onstrument-terraform-state"
+    key            = "terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "terraform-state-lock"
   }
 }
 
 provider "aws" {
   region = var.aws_region
+  default_tags {
+    tags = {
+      Environment = var.environment
+      Project     = var.app_name
+      Terraform   = "true"
+    }
+  }
 }

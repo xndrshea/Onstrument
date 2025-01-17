@@ -24,6 +24,10 @@ resource "aws_security_group" "alb" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "${var.app_name}-${var.environment}-alb-sg"
+  }
 }
 
 # Application Load Balancer
@@ -32,7 +36,13 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = [aws_subnet.main_a.id, aws_subnet.main_b.id]
+  subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+
+  enable_deletion_protection = true # Prevent accidental deletion
+
+  tags = {
+    Name = "${var.app_name}-${var.environment}-alb"
+  }
 }
 
 # Target Group
@@ -47,6 +57,13 @@ resource "aws_lb_target_group" "backend" {
     path                = "/health"
     healthy_threshold   = 2
     unhealthy_threshold = 10
+    interval            = 30
+    timeout             = 5
+    matcher             = "200" # Added specific success codes
+  }
+
+  tags = {
+    Name = "${var.app_name}-${var.environment}-tg"
   }
 }
 
@@ -78,4 +95,4 @@ resource "aws_lb_listener" "http" {
       status_code = "HTTP_301"
     }
   }
-} 
+}
