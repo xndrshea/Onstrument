@@ -6,10 +6,15 @@ WORKDIR /app/backend
 # Copy package files
 COPY backend/package*.json ./
 
-# Install dependencies
+# Install build dependencies first
+RUN apt-get update && \
+    apt-get install -y python3 make g++ curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install dependencies including dev dependencies
 RUN npm install
 
-# Copy source code and config files
+# Copy source code and config files  
 COPY backend/src ./src
 COPY backend/tsconfig.json ./
 COPY shared ../shared
@@ -27,15 +32,23 @@ FROM node:20-slim
 
 WORKDIR /app/backend
 
+# Install build essentials for native modules
+RUN apt-get update && \
+    apt-get install -y python3 make g++ curl && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy package files and install production dependencies
 COPY backend/package*.json ./
 RUN npm install --production
 
-# Copy compiled files from builder - fix the path
-COPY --from=builder /app/backend/dist/backend/src ./dist
-
-ENV NODE_ENV=production
+# Copy the built files from builder stage
+COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/shared ../shared
 
 EXPOSE 3001
 
-CMD ["npm", "run", "start"] 
+# Before CMD, let's check what files exist
+RUN ls -la dist/
+
+# Update the CMD to use the correct path
+CMD ["node", "dist/backend/src/index.js"] 

@@ -77,7 +77,7 @@ resource "aws_iam_role_policy" "parameter_store_policy" {
           "ssm:GetParameters",
           "ssm:GetParameter"
         ]
-        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/${var.app_name}/*"
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/onstrument/${var.environment}/*"
       }
     ]
   })
@@ -120,7 +120,7 @@ resource "aws_ecs_task_definition" "backend" {
       environment = [
         {
           name  = "NODE_ENV"
-          value = var.environment
+          value = "production"
         }
       ]
 

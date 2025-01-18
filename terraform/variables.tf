@@ -25,13 +25,13 @@ variable "domain_name" {
 variable "backend_image_tag" {
   description = "Docker image tag for backend service"
   type        = string
-  default     = "initial" # Default tag for first deployment
+  default     = "latest" # Just needs a placeholder for infrastructure setup
 }
 
 variable "frontend_version" {
   description = "Version tag for frontend deployment"
   type        = string
-  default     = null # Will be set by GitHub Actions
+  default     = "latest" # Allow it to be empty for plan/init
 }
 
 variable "create_certificate_validation" {

@@ -17,25 +17,31 @@ aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --
 
 # Build backend (from project root)
 echo "Building backend Docker image..."
-docker build -t $ECR_REPO:$VERSION -f docker/backend/Dockerfile .
+docker build --platform linux/amd64 \
+    -t $ECR_REPO:$VERSION \
+    -t $ECR_REPO:latest \
+    -f docker/backend/Dockerfile .
 
-# Tag and push
+# Tag and push both version-specific and latest tags
 echo "Pushing to ECR..."
 docker tag $ECR_REPO:$VERSION $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$VERSION
+docker tag $ECR_REPO:latest $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
 docker push $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$VERSION
+docker push $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
 
 echo "Building and deploying frontend..."
-cd frontend
-echo "Installing frontend dependencies..."
+# Build frontend from root (where package.json is)
+echo "Installing dependencies..."
 npm install
 
 echo "Building frontend..."
-npm run build
+npm run build -- \
+    --mode production
 
 echo "Deploying to S3..."
-# Get bucket name from terraform output
-BUCKET_NAME=$(cd ../terraform && terraform output -raw frontend_bucket_name)
-aws s3 sync dist/ s3://$BUCKET_NAME --delete
+# Hardcode the bucket name since it's a stable infrastructure value
+BUCKET_NAME="onstrument-prod-frontend"
+aws s3 sync frontend/dist/ s3://$BUCKET_NAME --delete
 
 # Update ECS service with new version
 echo "Updating ECS service..."
@@ -46,8 +52,8 @@ aws ecs update-service \
     --region $AWS_REGION
 
 echo "Invalidating CloudFront cache..."
-# Get distribution ID from terraform output
-DIST_ID=$(cd ../terraform && terraform output -raw cloudfront_distribution_id)
+# Hardcode the CloudFront distribution ID since it's a stable infrastructure value
+DIST_ID="E26HJ2P8HB4IIH"
 aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
 
 echo "Deployment complete!" 

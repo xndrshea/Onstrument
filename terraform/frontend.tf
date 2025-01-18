@@ -1,6 +1,10 @@
 # S3 bucket for frontend
 resource "aws_s3_bucket" "frontend" {
   bucket = "${var.app_name}-${var.environment}-frontend"
+  tags = {
+    Name    = "${var.app_name}-${var.environment}-frontend"
+    Version = var.frontend_version
+  }
 }
 
 # Enable versioning

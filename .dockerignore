@@ -1,0 +1,35 @@
+# Build artifacts
+dist/
+build/
+**/dist
+**/build
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Environment files
+.env*
+!.env.example
+
+# Development files
+.git
+.gitignore
+README.md
+*.log
+.vscode
+.idea
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+coverage/
+
+# Docker files
+Dockerfile*
+docker-compose*
+.docker
+
+# Other
+.DS_Store
+*.md 
