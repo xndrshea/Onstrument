@@ -93,6 +93,37 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
+# Create CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "backend" {
+  name              = "/ecs/${var.app_name}-${var.environment}-backend"
+  retention_in_days = 30
+
+  tags = {
+    Name        = "${var.app_name}-${var.environment}-backend-logs"
+    Environment = var.environment
+  }
+}
+
+# Add CloudWatch Logs permissions to the ECS execution role
+resource "aws_iam_role_policy" "ecs_cloudwatch_logs" {
+  name = "${var.app_name}-${var.environment}-ecs-cloudwatch"
+  role = aws_iam_role.ecs_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.backend.arn}:*"
+      }
+    ]
+  })
+}
+
 # ECS Task Definition
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.app_name}-${var.environment}-backend"
@@ -127,9 +158,9 @@ resource "aws_ecs_task_definition" "backend" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = "/ecs/${var.app_name}-${var.environment}"
+          "awslogs-group"         = aws_cloudwatch_log_group.backend.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "backend"
+          "awslogs-stream-prefix" = "ecs"
         }
       }
 

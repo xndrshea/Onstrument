@@ -18,7 +18,7 @@ export async function loadConfig() {
             // For production, use Parameter Store
             logger.info('Loading from AWS Parameter Store...');
             const ssm = new SSMClient({ region: 'us-east-1' });
-            const path = `/onstrument/${env}/`;
+            const path = `/onstrument/prod/`;
 
             const response = await ssm.send(new GetParametersByPathCommand({
                 Path: path,

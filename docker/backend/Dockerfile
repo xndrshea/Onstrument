@@ -47,8 +47,6 @@ COPY --from=builder /app/shared ../shared
 
 EXPOSE 3001
 
-# Before CMD, let's check what files exist
-RUN ls -la dist/
-
-# Update the CMD to use the correct path
+# Add debug env var but keep the original command structure
+ENV NODE_DEBUG=*
 CMD ["node", "dist/backend/src/index.js"] 
