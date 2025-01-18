@@ -678,26 +678,44 @@ export class TokenDiscoveryService {
     }
 
     async processQueuedPriceUpdates() {
-        // Take a snapshot of the queue and clear it immediately
         const queueSnapshot = Array.from(this.tokenPriceQueue);
-        this.tokenPriceQueue.clear();  // Clear the queue before processing
+        this.tokenPriceQueue.clear();
 
-        const tokenChunks = this.chunk(queueSnapshot, this.JUPITER_BATCH_SIZE);
+        // Make smaller chunks to reduce timeout likelihood
+        const tokenChunks = this.chunk(queueSnapshot, Math.min(50, this.JUPITER_BATCH_SIZE));
 
         for (const batchAddresses of tokenChunks) {
             try {
-
                 const priceData = await this.fetchJupiterPrices(batchAddresses);
                 await this.updateBatchPrices(priceData);
 
                 // Respect rate limits
                 await new Promise(resolve => setTimeout(resolve, this.MIN_DELAY_MS));
             } catch (error) {
-                console.error('Error in batch processing:', error);
-                // Re-queue failed batch only if error is retryable
-                if (error instanceof Error && !error.message.includes('HTTP error')) {
-                    batchAddresses.forEach(addr => this.queueTokenForPriceUpdate(addr));
+                this.logger.error('Error in batch processing:', {
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    batchSize: batchAddresses.length
+                });
+
+                // Only requeue if it's not a permanent failure
+                if (error instanceof Error &&
+                    !error.message.includes('HTTP error') &&
+                    batchAddresses.length > 1) {
+                    // Split batch in half and requeue if batch size > 1
+                    const mid = Math.floor(batchAddresses.length / 2);
+                    const firstHalf = batchAddresses.slice(0, mid);
+                    const secondHalf = batchAddresses.slice(mid);
+
+                    firstHalf.forEach(addr => this.queueTokenForPriceUpdate(addr));
+                    secondHalf.forEach(addr => this.queueTokenForPriceUpdate(addr));
+
+                    this.logger.info('Requeued failed batch in smaller chunks', {
+                        originalSize: batchAddresses.length,
+                        newBatchSizes: [firstHalf.length, secondHalf.length]
+                    });
                 }
+
+                // Wait longer after an error
                 await new Promise(resolve => setTimeout(resolve, this.MIN_DELAY_MS * 2));
             }
         }
@@ -756,32 +774,54 @@ export class TokenDiscoveryService {
     }
 
     private async fetchJupiterPrices(addresses: string[]): Promise<any> {
-        try {
+        const maxRetries = 3;
+        const baseTimeout = 15000; // 15 seconds
 
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                const controller = new AbortController();
+                const timeoutDuration = baseTimeout * (attempt + 1); // Increase timeout with each retry
+                const timeout = setTimeout(() => controller.abort(), timeoutDuration);
 
-            const response = await fetch(
-                `https://api.jup.ag/price/v2?ids=${addresses.join(',')}`,
-                { signal: controller.signal }
-            );
+                try {
+                    const response = await fetch(
+                        `https://api.jup.ag/price/v2?ids=${addresses.join(',')}`,
+                        {
+                            signal: controller.signal,
+                            headers: {
+                                'Accept': 'application/json'
+                            }
+                        }
+                    );
 
-            clearTimeout(timeout);
+                    clearTimeout(timeout);
 
-            if (!response.ok) {
-                console.error('Jupiter API error:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    url: response.url
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    return data;
+                } finally {
+                    clearTimeout(timeout);
+                }
+            } catch (error) {
+                const isLastAttempt = attempt === maxRetries - 1;
+                const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+
+                this.logger.warn(`Jupiter API attempt ${attempt + 1}/${maxRetries} failed:`, {
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    isTimeout: isAbortError,
+                    addresses: addresses.length
                 });
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
 
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error('Error in fetchJupiterPrices:', error);
-            throw error;
+                if (isLastAttempt) {
+                    throw error;
+                }
+
+                // Wait before retry, with exponential backoff
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+            }
         }
     }
 
