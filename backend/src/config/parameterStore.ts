@@ -14,11 +14,7 @@ export async function loadConfig() {
     logger.info(`Loading config for environment: ${env}`);
 
     try {
-        if (env === 'development') {
-            // For local development, use .env files
-            logger.info('Loading local environment variables...');
-            dotenv.config({ path: '.env.local' });
-        } else {
+        if (env === 'production') {
             // For production, use Parameter Store
             logger.info('Loading from AWS Parameter Store...');
             const ssm = new SSMClient({ region: 'us-east-1' });
@@ -50,6 +46,10 @@ export async function loadConfig() {
                     process.env[envName] = param.Value;
                 }
             });
+        } else {
+            // For both local dev and docker, use .env.local
+            logger.info('Loading local environment variables...');
+            dotenv.config({ path: '.env.local' });
         }
 
         configLoaded = true;

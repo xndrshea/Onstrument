@@ -83,8 +83,11 @@ export function createApp() {
         message: 'Too many requests from this IP, please try again later.'
     }))
 
-    // CORS setup with WebSocket support
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173']
+    // CORS setup
+    const allowedOrigins = process.env.NODE_ENV === 'production'
+        ? process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []
+        : ['http://localhost:3000', 'http://localhost:5173'];
+
     app.use(cors({
         origin: allowedOrigins,
         credentials: true,
@@ -94,12 +97,11 @@ export function createApp() {
             'Authorization',
             'solana-client',
             'x-requested-with',
-            'pinata-api-key',  // Add Pinata headers
+            'pinata-api-key',
             'pinata-secret-api-key'
         ],
-        // Allow WebSocket upgrade
         optionsSuccessStatus: 200
-    }))
+    }));
 
     // Add WebSocket upgrade handling
     app.get('/ws', (req, res) => {

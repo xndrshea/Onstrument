@@ -5,7 +5,7 @@ resource "aws_acm_certificate" "main" {
   validation_method         = "DNS"
 
   lifecycle {
-    create_before_destroy = true # Helps with certificate renewal
+    create_before_destroy = true
   }
 }
 
@@ -16,12 +16,6 @@ resource "aws_route53_zone" "main" {
   tags = {
     Name = "${var.app_name}-${var.environment}-zone"
   }
-}
-
-# Certificate Validation
-resource "aws_acm_certificate_validation" "main" {
-  certificate_arn         = aws_acm_certificate.main.arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
 
 # DNS Records for Certificate Validation
@@ -39,6 +33,26 @@ resource "aws_route53_record" "cert_validation" {
   zone_id = aws_route53_zone.main.zone_id
   records = [each.value.record]
   ttl     = 60
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      records, # Ignore changes to the validation record values
+      name     # Ignore changes to the validation record names
+    ]
+  }
+}
+
+# Certificate Validation
+resource "aws_acm_certificate_validation" "main" {
+  certificate_arn         = aws_acm_certificate.main.arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+
+  lifecycle {
+    ignore_changes = [
+      validation_record_fqdns # Ignore changes to the validation record FQDNs
+    ]
+  }
 }
 
 # Root domain (apex)

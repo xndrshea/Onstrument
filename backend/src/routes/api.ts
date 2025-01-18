@@ -24,14 +24,6 @@ const getHeliusManager = () => {
     return heliusManagerInstance;
 };
 
-// CORS and rate limiting setup
-router.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000,  // 1 minute window
     max: 300,                  // 300 requests per minute

@@ -3,11 +3,13 @@ services:
     build:
       context: ..
       dockerfile: docker/frontend/Dockerfile
+      args:
+        VITE_DOCKER: "true"
+        NODE_ENV: "development"
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - VITE_DOCKER=true
     networks:
       - app-network
     depends_on:

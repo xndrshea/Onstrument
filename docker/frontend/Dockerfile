@@ -2,6 +2,12 @@ FROM node:20-slim
 
 WORKDIR /app
 
+# Set ARG and ENV before build steps
+ARG VITE_DOCKER
+ARG NODE_ENV
+ENV VITE_DOCKER=$VITE_DOCKER
+ENV NODE_ENV=$NODE_ENV
+
 # Copy package files first
 COPY package*.json ./
 

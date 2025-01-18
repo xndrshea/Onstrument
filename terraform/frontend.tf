@@ -20,8 +20,19 @@ resource "aws_s3_bucket_website_configuration" "frontend" {
   }
 
   error_document {
-    key = "index.html" # SPA fallback
+    key = "index.html"
   }
+
+  routing_rules = jsonencode([
+    {
+      Condition = {
+        KeyPrefixEquals = "version"
+      }
+      Redirect = {
+        ReplaceKeyWith = "version.json"
+      }
+    }
+  ])
 }
 
 # CloudFront distribution
