@@ -47,8 +47,8 @@ export const getEnvironment = () => {
 export const getConnection = (isDevnet: boolean = false) => {
     const env = getEnvironment();
     const endpoint = isDevnet
-        ? 'https://api.devnet.solana.com'  // Direct devnet connection for fee estimation
-        : `${env.base}${env.mainnet}`;     // Proxied connection for other operations
+        ? `${env.base}${env.devnet}`
+        : `${env.base}${env.mainnet}`;
 
     return new Connection(endpoint, {
         commitment: 'confirmed',

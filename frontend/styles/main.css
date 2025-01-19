@@ -731,3 +731,26 @@ button[type="submit"]:disabled {
         padding: 1rem;
     }
 }
+
+/* Wallet Adapter Modal Styles */
+.wallet-adapter-modal {
+    z-index: 9999 !important;
+}
+
+.wallet-adapter-modal-wrapper {
+    background-color: #232427 !important;
+    position: fixed !important;
+    top: 1rem !important;
+    right: 1rem !important;
+    transform: none !important;
+    left: auto !important;
+    bottom: auto !important;
+    margin: 0 !important;
+}
+
+.wallet-adapter-button-trigger {
+    position: fixed !important;
+    top: 16px !important;
+    right: 16px !important;
+    z-index: 9999 !important;
+}

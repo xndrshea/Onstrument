@@ -4,6 +4,7 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Transaction, SystemProgram, PublicKey } from '@solana/web3.js';
 import { toast } from 'react-hot-toast';
 import { UserService } from '../../services/userService';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 
 interface SubscriptionTier {
     id: string;
@@ -66,13 +67,19 @@ interface SubscribeModalProps {
 export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
     const { publicKey, sendTransaction } = useWallet();
     const { connection } = useConnection();
+    const { setVisible } = useWalletModal();
     const [selectedTier, setSelectedTier] = React.useState<SubscriptionTier | null>(null);
     const [isProcessing, setIsProcessing] = React.useState(false);
 
     if (!isOpen) return null;
 
     const handleSubscribe = async (tier: SubscriptionTier) => {
-        if (!publicKey) return;
+        if (!publicKey) {
+            // If wallet is not connected, prompt to connect
+            setVisible(true); // This will open the wallet modal
+            return;
+        }
+
         setIsProcessing(true);
 
         try {
@@ -208,7 +215,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                                     disabled={isProcessing}
                                     className="w-full bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50"
                                 >
-                                    {isProcessing ? 'Processing...' : `Subscribe Now`}
+                                    {isProcessing ? 'Processing...' : publicKey ? 'Subscribe Now' : 'Connect Wallet to Subscribe'}
                                 </button>
                             </div>
                         ))}

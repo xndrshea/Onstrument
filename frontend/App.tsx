@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { useWalletModal, WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { TokenCreationForm } from './components/TokenCreation/TokenCreationForm'
 import { TokenList } from './components/TokenList/TokenList'
 import { Modal } from './components/Modal/Modal'
@@ -23,6 +23,7 @@ function App() {
     const [user, setUser] = useState<User | null>(null)
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false)
+    const { setVisible } = useWalletModal()
 
     useEffect(() => {
         if (connected && publicKey) {
@@ -46,6 +47,10 @@ function App() {
         setIsModalOpen(true)
     }
 
+    const handleSubscribeClick = () => {
+        setIsSubscribeModalOpen(true)
+    }
+
     return (
         <Router>
             <div style={{
@@ -56,7 +61,7 @@ function App() {
             }}>
                 <Header
                     onProfileClick={() => setIsProfileOpen(true)}
-                    onSubscribeClick={() => setIsSubscribeModalOpen(true)}
+                    onSubscribeClick={handleSubscribeClick}
                 />
 
                 <main style={{ padding: '20px', color: 'white', flex: 1 }}>
