@@ -1,4 +1,5 @@
 import winston from 'winston'
+import WinstonCloudWatch from 'winston-cloudwatch'
 
 export const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
@@ -12,7 +13,14 @@ export const logger = winston.createLogger({
     ],
 })
 
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV === 'production') {
+    logger.add(new WinstonCloudWatch({
+        logGroupName: process.env.CLOUDWATCH_GROUP_NAME || 'your-app-name',
+        logStreamName: `${process.env.CLOUDWATCH_STREAM_NAME || 'default'}-${Date.now()}`,
+        awsRegion: process.env.AWS_REGION || 'us-east-1',
+        messageFormatter: ({ level, message, ...meta }) => `[${level}] ${message} ${JSON.stringify(meta)}`,
+    }))
+} else {
     logger.add(new winston.transports.Console({
         format: winston.format.simple(),
     }))

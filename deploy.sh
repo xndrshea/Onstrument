@@ -31,12 +31,20 @@ deploy_backend() {
     docker push $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$VERSION
     docker push $AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
 
-    # Update ECS service
+    # Update ECS service while maintaining current configuration
     echo "Updating ECS service..."
     aws ecs update-service \
         --cluster onstrument-prod-cluster \
         --service onstrument-prod-backend-service \
         --force-new-deployment \
+        --no-cli-pager \
+        --region $AWS_REGION
+
+    # Monitor deployment
+    echo "Monitoring deployment..."
+    aws ecs wait services-stable \
+        --cluster onstrument-prod-cluster \
+        --services onstrument-prod-backend-service \
         --region $AWS_REGION
 }
 

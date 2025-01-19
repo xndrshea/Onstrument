@@ -47,6 +47,6 @@ COPY --from=builder /app/shared ../shared
 
 EXPOSE 3001
 
-# Add debug env var but keep the original command structure
-ENV NODE_DEBUG=*
+# Add specific debug env var for AWS SDK and our parameter store logs
+ENV NODE_DEBUG=aws*,parameterStore
 CMD ["node", "dist/backend/src/index.js"] 

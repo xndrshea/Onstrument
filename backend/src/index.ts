@@ -2,26 +2,38 @@ declare global {
     var wss: WebSocket.Server;
 }
 
-import { createApp } from './app'
+import { initializeApp } from './init'
 import { logger } from './utils/logger'
 import { checkDatabaseSetup } from './config/database'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { Server } from 'http'
 import WebSocket from 'ws'
 import { wsManager } from './services/websocket/WebSocketManager'
-import { loadConfig } from './config/parameterStore'
+import { parameterStore } from './config/parameterStore'
+import { createApp } from './app';
 
 const PORT = process.env.PORT || 3001
 
 async function startServer() {
+    // Add immediate console logs for startup debugging
+    console.log('[STARTUP] Application beginning startup sequence');
+    console.log('[STARTUP] NODE_ENV:', process.env.NODE_ENV);
+    console.log('[STARTUP] AWS_REGION:', process.env.AWS_REGION);
+
     try {
         logger.info('Starting server initialization...')
 
-        // 1. Load configuration (either from AWS or .env)
-        await loadConfig()
+        // 1. Load configuration ONCE and wait for it
+        await parameterStore.initialize()
         logger.info('Config loaded successfully')
 
-        // 2. Check and initialize database if needed
+        logger.info('Environment variables after initialization:', {
+            NODE_ENV: process.env.NODE_ENV,
+            AWS_REGION: process.env.AWS_REGION,
+            HELIUS_API_KEY: process.env.HELIUS_API_KEY ? '[REDACTED]' : 'undefined'
+        });
+
+        // 2. Now that we have env vars, check database
         await checkDatabaseSetup()
         logger.info('Database setup complete')
 

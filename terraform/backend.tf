@@ -77,7 +77,14 @@ resource "aws_iam_role_policy" "parameter_store_policy" {
           "ssm:GetParameters",
           "ssm:GetParameter"
         ]
-        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/onstrument/${var.environment}/*"
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/onstrument/prod/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = "*" # You might want to restrict this to your specific KMS key ARN
       }
     ]
   })

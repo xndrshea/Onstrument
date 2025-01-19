@@ -1,5 +1,6 @@
 import { Pool } from 'pg'
 import { logger } from '../utils/logger'
+import { parameterStore } from '../config/parameterStore'
 
 // Create connection pool with environment-specific SSL config
 const pool = new Pool({
@@ -24,6 +25,11 @@ pool.on('error', (err) => {
 
 // Check if database is initialized
 export async function checkDatabaseSetup() {
+    // Add check to ensure parameterStore is initialized
+    if (!parameterStore.isInitialized()) {
+        throw new Error('Parameter store must be initialized before database setup');
+    }
+
     try {
         const result = await pool.query(`
             SELECT EXISTS (
@@ -43,7 +49,7 @@ export async function checkDatabaseSetup() {
         }
     } catch (error) {
         logger.error('Failed to check/initialize database:', error)
-        process.exit(1)
+        throw error  // Let index.ts handle the error
     }
 }
 

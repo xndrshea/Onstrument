@@ -10,12 +10,18 @@ import { CronJob } from 'cron'
 import { JupiterPriceUpdater } from './services/price/jupiterPriceUpdater'
 import { wsManager } from './services/websocket/WebSocketManager'
 import { HeliusManager } from './services/price/websocket/heliusManager'
+import { parameterStore } from './config/parameterStore'
 
 // Remove dotenv import and config loading
 logger.info(`Running in ${process.env.NODE_ENV || 'development'} environment`)
 
 export function createApp() {
     const app = express()
+
+    // Add check to ensure parameterStore is initialized
+    if (!parameterStore.isInitialized()) {
+        throw new Error('Parameter store must be initialized before creating app');
+    }
 
     // Initialize all services
     initializeServices()
