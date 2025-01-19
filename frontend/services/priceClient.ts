@@ -1,6 +1,6 @@
 import type { CandlestickData } from 'lightweight-charts';
 import type { Time } from 'lightweight-charts';
-import { getEnvironment } from '../config';
+import { getBaseUrl } from '../config';
 
 
 class WebSocketClient {
@@ -15,7 +15,7 @@ class WebSocketClient {
     }
 
     private connect() {
-        const wsUrl = `${getEnvironment().base}${getEnvironment().ws}`.replace('http', 'ws').replace('https', 'wss');
+        const wsUrl = `${getBaseUrl()}/api/ws`.replace('http', 'ws').replace('https', 'wss');
         console.log('DEBUG - Attempting WebSocket connection:', wsUrl);
 
         try {

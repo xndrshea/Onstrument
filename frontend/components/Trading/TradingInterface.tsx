@@ -6,8 +6,8 @@ import { TokenRecord } from '../../../shared/types/token'
 import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import BN from 'bn.js'
-import { dexService } from '../../services/dexService'
-import { mainnetConnection, devnetConnection } from '../../config'
+import { DexService } from '../../services/dexService'
+import { getConnectionForToken } from '../../config'
 import { priceClient } from '../../services/priceClient'
 import { UserService } from '../../services/userService'
 
@@ -70,14 +70,15 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     const [isMigrating, setIsMigrating] = useState(false)
     const [spotPrice, setSpotPrice] = useState<number | null>(_currentPrice || null);
 
+    // Create instance at component level
+    const dexService = new DexService();
+
     // Move getAppropriateConnection before bondingCurve initialization
     const getAppropriateConnection = () => {
-
-        // For custom tokens that aren't migrated, ALWAYS use devnet
         if (token.tokenType === 'custom' && (!token.curveConfig || token.curveConfig.migrationStatus !== 'migrated')) {
-            return devnetConnection;  // This means SOL balance, token balance, AND price all from devnet
+            return getConnectionForToken({ tokenType: 'custom' });  // devnet connection
         }
-        return mainnetConnection;
+        return getConnectionForToken({ tokenType: 'dex' });  // mainnet connection
     };
 
     // Now bondingCurve can use getAppropriateConnection
@@ -122,7 +123,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     token.mintAddress,
                     1,
                     true,
-                    mainnetConnection
+                    getConnectionForToken({ tokenType: 'dex' })
                 );
                 setIsTokenTradable(Boolean(quote && quote.price > 0));
                 setIsMigrating(false);

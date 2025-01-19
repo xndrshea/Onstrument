@@ -184,10 +184,10 @@ router.post('/tokens', async (req, res) => {
     } catch (error) {
         console.error('Token creation API error:', {
             error,
-            message: error.message,
-            stack: error.stack
+            message: (error as Error).message,
+            stack: (error as Error).stack
         });
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: (error as Error).message });
     }
 });
 

@@ -7,28 +7,35 @@ import type {
     TokenRecord,
     createTokenParams,
 } from '../../shared/types/token';
+import { getConnection, getConnectionForToken } from '../config';
 
 export class TokenTransactionService {
-    private bondingCurve: BondingCurve;
-    // private storageService: StorageService;
-    private tokenService: TokenService;
     private connection: Connection;
     private wallet: WalletContextState;
+    private bondingCurve: BondingCurve;
+    private tokenService: TokenService;
 
     constructor(
-        connection: Connection,
-        wallet: WalletContextState
+        wallet: WalletContextState,
+        token?: { tokenType: string }
     ) {
-        this.connection = connection;
-        if (!connection) throw new Error('Connection is required');
-        if (!wallet) throw new Error('Wallet is required');
-        if (!wallet.publicKey) throw new Error('Wallet not connected');
+        const isDevnet = token?.tokenType === 'custom';
 
-        // Initialize services
-        this.bondingCurve = new BondingCurve(connection, wallet);
-        this.tokenService = new TokenService();
-        // this.storageService = new StorageService();
+        // Use the wallet's connection instead of creating a new one
         this.wallet = wallet;
+        this.connection = getConnection(isDevnet);
+
+        // Log connection details for debugging
+        console.log('TokenTransactionService init:', {
+            isDevnet,
+            tokenType: token?.tokenType,
+            walletConnected: Boolean(wallet.publicKey),
+            endpoint: this.connection.rpcEndpoint,
+            commitment: this.connection.commitment
+        });
+
+        this.bondingCurve = new BondingCurve(this.connection, wallet);
+        this.tokenService = new TokenService();
     }
 
     async createToken(
@@ -42,8 +49,20 @@ export class TokenTransactionService {
         }
     ): Promise<TokenRecord> {
         try {
+            console.log('Creating token with params:', {
+                name: params.name,
+                network: this.connection.rpcEndpoint,
+                walletPubkey: this.wallet.publicKey?.toString()
+            });
+
             // Create token with bonding curve
             const { mint, curve, tokenVault, signature } = await this.bondingCurve.createTokenWithCurve(params);
+
+            console.log('Token creation response:', {
+                mint: mint?.toString(),
+                curve: curve?.toString(),
+                signature
+            });
 
             if (!signature || !mint || !curve || !tokenVault) {
                 throw new Error('Failed to create token - missing required parameters');

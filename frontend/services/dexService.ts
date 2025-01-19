@@ -1,9 +1,9 @@
-import type { Connection} from '@solana/web3.js';
+import type { Connection } from '@solana/web3.js';
 import { VersionedTransaction, PublicKey } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { NATIVE_SOL_MINT } from '../constants';
 import type { BN } from '@project-serum/anchor';
-import { mainnetConnection } from '../config';
+import { getConnection, getConnectionForToken } from '../config';
 import { getMint } from '@solana/spl-token';
 
 interface TradeParams {
@@ -23,8 +23,14 @@ type PriceQuote = {
     isSelling: boolean;
 };
 
-export const dexService = {
-    getTokenPrice: async (
+export class DexService {
+    connection: Connection;
+
+    constructor(token?: { tokenType: string }) {
+        this.connection = getConnectionForToken(token);
+    }
+
+    getTokenPrice = async (
         mintAddress: string,
         _connection: Connection
     ): Promise<number | null> => {
@@ -43,9 +49,9 @@ export const dexService = {
             console.error('Error fetching token price:', error);
             return null;
         }
-    },
+    };
 
-    calculateTradePrice: async (
+    calculateTradePrice = async (
         mintAddress: string,
         amount: number,
         isSelling: boolean,
@@ -56,7 +62,7 @@ export const dexService = {
         }
 
         try {
-            const mintInfo = await mainnetConnection.getParsedAccountInfo(
+            const mintInfo = await getConnectionForToken({ tokenType: 'dex' }).getParsedAccountInfo(
                 new PublicKey(mintAddress)
             );
 
@@ -113,9 +119,9 @@ export const dexService = {
             console.error('Error calculating trade price:', error);
             return null;
         }
-    },
+    };
 
-    executeTrade: async ({
+    executeTrade = async ({
         mintAddress,
         amount,
         isSelling,
@@ -165,14 +171,14 @@ export const dexService = {
             }
 
             const signedTx = await wallet.signTransaction(transaction);
-            const latestBlockhash = await mainnetConnection.getLatestBlockhash();
+            const latestBlockhash = await getConnectionForToken({ tokenType: 'dex' }).getLatestBlockhash();
 
-            const signature = await mainnetConnection.sendRawTransaction(signedTx.serialize(), {
+            const signature = await getConnectionForToken({ tokenType: 'dex' }).sendRawTransaction(signedTx.serialize(), {
                 skipPreflight: true,
                 maxRetries: 2
             });
 
-            await mainnetConnection.confirmTransaction({
+            await getConnectionForToken({ tokenType: 'dex' }).confirmTransaction({
                 signature,
                 blockhash: latestBlockhash.blockhash,
                 lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
@@ -185,4 +191,4 @@ export const dexService = {
             throw new Error('Failed to execute swap');
         }
     }
-};
+}

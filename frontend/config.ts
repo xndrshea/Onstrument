@@ -43,64 +43,26 @@ export const getEnvironment = () => {
     return ENDPOINTS.docker;                             // Docker development (fallback)
 };
 
-const ENV = getEnvironment();
-
-// Custom RPC request function
-const createCustomRpcRequest = (endpoint: string) => {
-    return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-        const body = init?.body ? JSON.parse(init.body as string) : {};
-        const isDevnet = endpoint.includes('devnet');
-
-        const requestBody = {
-            jsonrpc: '2.0',
-            id: body.id || '1',
-            method: body.method,
-            params: Array.isArray(body.params) ? body.params : [],
-            isDevnet
-        };
-
-        try {
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.clone().json();
-            return new Response(JSON.stringify(data), {
-                headers: { 'Content-Type': 'application/json' }
-            });
-        } catch (error) {
-            console.error('RPC request failed:', error);
-            throw error;
-        }
-    };
+// Remove the direct endpoints and update the connection functions
+export const getConnection = (isDevnet: boolean = false) => {
+    const env = getEnvironment();
+    return new Connection(
+        `${env.base}${isDevnet ? env.devnet : env.mainnet}`,
+        'confirmed'
+    );
 };
 
-// Create connections with cleaner URL construction
-export const mainnetConnection = new Connection(
-    `${ENV.base}${ENV.mainnet}`,
-    {
-        commitment: 'confirmed',
-        fetch: createCustomRpcRequest(`${ENV.base}${ENV.mainnet}`),
-        wsEndpoint: `${ENV.base}${ENV.ws}`.replace('http', 'ws').replace('https', 'wss')
-    }
-);
+// Helper to determine connection type based on token
+export const getConnectionForToken = (token?: { tokenType: string }) => {
+    const isDevnet = token?.tokenType === 'custom';
+    console.log('Connection details:', { isDevnet, tokenType: token?.tokenType });
+    return getConnection(isDevnet);
+};
 
-export const devnetConnection = new Connection(
-    `${ENV.base}${ENV.devnet}`,
-    {
-        commitment: 'confirmed',
-        fetch: createCustomRpcRequest(`${ENV.base}${ENV.devnet}`),
-        wsEndpoint: `${ENV.base.replace('http', 'ws').replace('https', 'wss')}${ENV.ws}`
-    }
-);
-
-export const defaultConnection = isDocker ? mainnetConnection : devnetConnection;
+export const getBaseUrl = () => {
+    const env = getEnvironment();
+    return env.base;
+};
 
 export const config = {
     isDocker

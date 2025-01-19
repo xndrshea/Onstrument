@@ -3,12 +3,15 @@ import type { BondingCurve as BondingCurveIDL } from '../../target/types/bonding
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider } from '@coral-xyz/anchor';
 
-import type { Connection, TransactionInstruction } from '@solana/web3.js';
-import { PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
+import type { TransactionInstruction } from '@solana/web3.js';
+import { PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, VersionedTransaction, ComputeBudgetProgram, TransactionMessage, SimulateTransactionConfig } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { BN } from 'bn.js';
 import type { createTokenParams, TokenRecord } from '../../shared/types/token';
-import { dexService } from './dexService';
+import { DexService } from './dexService';
+
+const dexService = new DexService();
 
 // Add this constant at the top of the file
 export const TOKEN_DECIMALS = 6;
@@ -49,14 +52,14 @@ export class BondingCurve {
             throw new Error('createToken instruction not found in IDL. Please verify the IDL contains the correct instruction name.');
         }
 
-        this.connection = connection;
+        // Use the wallet's connection for transactions
+        this.connection = connection;  // Keep using passed connection
         this.wallet = wallet;
         this.mintAddress = mintAddress;
         this.curveAddress = curveAddress;
 
-
         const provider = new AnchorProvider(
-            connection,
+            this.connection,
             wallet as any,
             { commitment: 'confirmed' }
         );
@@ -70,6 +73,11 @@ export class BondingCurve {
 
     async createTokenWithCurve(params: createTokenParams) {
         try {
+            console.log('Creating token with connection:', {
+                endpoint: this.connection.rpcEndpoint,
+                wallet: this.wallet?.publicKey?.toString() || 'not connected'
+            });
+
             const mintKeypair = Keypair.generate();
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -171,60 +179,51 @@ export class BondingCurve {
     private async buildAndSendTransaction(
         instructions: TransactionInstruction[],
         signers: Keypair[]
-    ) {
-        // Get a FRESH blockhash with the LATEST valid block height
-        const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('processed');
+    ): Promise<string> {
+        try {
+            const computeUnitIx = ComputeBudgetProgram.setComputeUnitLimit({
+                units: 300_000
+            });
 
-        const tx = new Transaction();
-        tx.feePayer = this.wallet!.publicKey!;
-        tx.recentBlockhash = blockhash;  // Use the fresh blockhash
+            const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
+                microLamports: 100_000
+            });
 
-        // KEEP the important rent handling for ATA creation
-        if (instructions.some(ix => ix.programId.equals(TOKEN_PROGRAM_ID))) {
-            const rent = await this.connection.getMinimumBalanceForRentExemption(165);
-            tx.add(
-                SystemProgram.transfer({
-                    fromPubkey: this.wallet!.publicKey!,
-                    toPubkey: this.wallet!.publicKey!,
-                    lamports: rent
-                })
-            );
-        }
+            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
 
-        tx.add(...instructions);
+            const tx = new Transaction();
+            tx.feePayer = this.wallet!.publicKey!;
+            tx.recentBlockhash = blockhash;
+            tx.add(computeUnitIx, priorityFeeIx, ...instructions);
 
-        if (!this.wallet?.signTransaction) {
-            throw new Error('Wallet does not support signing');
-        }
-
-        const signedTx = await this.wallet.signTransaction(tx);
-        signers.forEach(signer => signedTx.partialSign(signer));
-
-        // Send the transaction IMMEDIATELY after signing
-        const signature = await this.connection.sendRawTransaction(signedTx.serialize(), {
-            skipPreflight: false,
-            preflightCommitment: 'processed'
-        });
-        let retries = 0;
-        while (retries < 10) {
-            const status = await this.connection.getSignatureStatus(signature);
-
-            if (status?.value) {
-
-                if (status.value.confirmationStatus === 'processed' ||
-                    status.value.confirmationStatus === 'confirmed' ||
-                    status.value.confirmationStatus === 'finalized') {
-
-                    console.log(`Transaction submitted: https://solscan.io/tx/${signature}?cluster=devnet`);
-                    return signature;
-                }
+            if (!this.wallet?.signTransaction) {
+                throw new Error('Wallet does not support signing');
             }
 
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            retries++;
-        }
+            const signedTx = await this.wallet.signTransaction(tx);
+            signers.forEach(signer => signedTx.partialSign(signer));
 
-        throw new Error('Transaction confirmation timeout');
+            const signature = await this.connection.sendRawTransaction(signedTx.serialize(), {
+                skipPreflight: false,
+                maxRetries: 3,
+                preflightCommitment: 'confirmed'
+            });
+
+            await this.connection.confirmTransaction({
+                signature,
+                blockhash,
+                lastValidBlockHeight
+            });
+
+            return signature;
+
+        } catch (error: any) {
+            console.error('Transaction failed:', {
+                message: error.message,
+                logs: error.logs
+            });
+            throw error;
+        }
     }
 
     async ensureTokenAccount(): Promise<PublicKey> {

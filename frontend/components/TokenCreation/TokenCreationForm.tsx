@@ -8,6 +8,7 @@ import { PublicKey } from '@solana/web3.js'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { UserService } from '../../services/userService'
 import { pinataService } from '../../services/pinataService'
+import { getConnection } from '../../config'
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
@@ -20,7 +21,7 @@ const MIN_SUPPLY = 10;
 export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFormProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
-    const tokenTransactionService = new TokenTransactionService(connection, wallet)
+    const tokenTransactionService = new TokenTransactionService(wallet, { tokenType: 'custom' })
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
@@ -163,7 +164,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 throw new Error('Transaction failed - invalid result')
             }
 
-            const mintAccount = await connection.getAccountInfo(new PublicKey(result.mintAddress))
+            const mintAccount = await getConnection(true).getAccountInfo(new PublicKey(result.mintAddress))
             if (!mintAccount) {
                 throw new Error('Failed to verify mint account creation')
             }

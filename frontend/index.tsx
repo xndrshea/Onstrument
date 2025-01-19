@@ -8,7 +8,7 @@ import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
 import { SolflareWalletAdapter } from '@solana/wallet-adapter-wallets'
 import '@solana/wallet-adapter-react-ui/styles.css'
-import { defaultConnection } from './config'
+import { getConnection } from './config'
 
 const wallets = [
     new SolflareWalletAdapter(),
@@ -19,7 +19,7 @@ if (!root) throw new Error('Root element not found')
 
 ReactDOM.createRoot(root).render(
     <React.StrictMode>
-        <ConnectionProvider endpoint={defaultConnection.rpcEndpoint}>
+        <ConnectionProvider endpoint={getConnection().rpcEndpoint}>
             <WalletProvider wallets={wallets} autoConnect>
                 <WalletModalProvider>
                     <App />
