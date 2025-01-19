@@ -11,6 +11,7 @@ import { JupiterPriceUpdater } from './services/price/jupiterPriceUpdater'
 import { wsManager } from './services/websocket/WebSocketManager'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { parameterStore } from './config/parameterStore'
+import { Express } from 'express'
 
 // Remove dotenv import and config loading
 logger.info(`Running in ${process.env.NODE_ENV || 'development'} environment`)
@@ -27,7 +28,7 @@ export function createApp() {
     initializeServices()
 
     // Initialize discovery service
-    const discoveryService = TokenDiscoveryService.getInstance()
+    const discoveryService = TokenDiscoveryService.getInstance();
 
     // Run initial queries immediately
     Promise.all([
@@ -70,10 +71,9 @@ export function createApp() {
         true    // runOnInit
     )
 
-    // Start the cron jobs
-    geckoJob.start()
-    raydiumJob.start()
-
+    // Don't start it yet
+    app.set('geckoJob', geckoJob)
+    app.set('raydiumJob', raydiumJob)
 
     // Security middleware
     app.use(helmet({
@@ -155,4 +155,18 @@ export function initializeServices() {
         jupiterPriceUpdater.cleanup();
         // ... other cleanup
     });
+}
+
+// Add a new function to start background tasks
+export function startBackgroundTasks(app: Express) {
+    const geckoJob = app.get('geckoJob');
+    const raydiumJob = app.get('raydiumJob');
+    if (geckoJob) {
+        logger.info('Starting background tasks...');
+        geckoJob.start();
+    }
+    if (raydiumJob) {
+        logger.info('Starting background tasks...');
+        raydiumJob.start();
+    }
 } 

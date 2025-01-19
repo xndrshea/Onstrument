@@ -15,8 +15,8 @@ export const logger = winston.createLogger({
 
 if (process.env.NODE_ENV === 'production') {
     logger.add(new WinstonCloudWatch({
-        logGroupName: process.env.CLOUDWATCH_GROUP_NAME || 'your-app-name',
-        logStreamName: `${process.env.CLOUDWATCH_STREAM_NAME || 'default'}-${Date.now()}`,
+        logGroupName: '/ecs/onstrument-prod-backend',
+        logStreamName: `ecs-${Date.now()}`,
         awsRegion: process.env.AWS_REGION || 'us-east-1',
         messageFormatter: ({ level, message, ...meta }) => `[${level}] ${message} ${JSON.stringify(meta)}`,
     }))

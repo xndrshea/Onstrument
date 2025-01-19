@@ -166,7 +166,7 @@ export class TokenDiscoveryService {
 
     static getInstance(): TokenDiscoveryService {
         if (!TokenDiscoveryService.instance) {
-            TokenDiscoveryService.instance = new TokenDiscoveryService(pool);
+            TokenDiscoveryService.instance = new TokenDiscoveryService(pool());
         }
         return TokenDiscoveryService.instance;
     }
@@ -187,7 +187,7 @@ export class TokenDiscoveryService {
     }
 
     private async processPools(raydiumPools: RaydiumPool[], geckoTerminalPools: any[]): Promise<void> {
-        const client = await pool.connect();
+        const client = await pool().connect();
 
         try {
             await client.query('BEGIN');
@@ -213,7 +213,7 @@ export class TokenDiscoveryService {
 
     private async ensureTokenMetadata(mintAddress: string): Promise<void> {
         try {
-            await pool.query(
+            await pool().query(
                 `INSERT INTO onstrument.tokens 
                 (mint_address, metadata_status, created_at, last_metadata_fetch, token_type) 
                 VALUES ($1, 'pending', NOW(), NOW(), 'dex')
@@ -228,7 +228,7 @@ export class TokenDiscoveryService {
             );
 
             // Queue metadata update if not already fetched
-            const result = await pool.query(
+            const result = await pool().query(
                 'SELECT metadata_status FROM onstrument.tokens WHERE mint_address = $1',
                 [mintAddress]
             );
@@ -584,7 +584,7 @@ export class TokenDiscoveryService {
                     last_price_update = NOW()
             `;
 
-            await pool.query(query, [
+            await pool().query(query, [
                 data.address,
                 data.token_type,
                 data.current_price || null,

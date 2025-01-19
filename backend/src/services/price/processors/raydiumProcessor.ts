@@ -206,7 +206,7 @@ export class RaydiumProcessor extends BaseProcessor {
 
     private async ensureTokenExists(mintAddress: string, decimals: number): Promise<boolean> {
         try {
-            await pool.query(
+            await pool().query(
                 `INSERT INTO onstrument.tokens (
                     mint_address,
                     decimals,
@@ -226,7 +226,7 @@ export class RaydiumProcessor extends BaseProcessor {
             );
 
             // Queue metadata update
-            const result = await pool.query(
+            const result = await pool().query(
                 `SELECT metadata_status FROM onstrument.tokens WHERE mint_address = $1`,
                 [mintAddress]
             );

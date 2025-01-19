@@ -28,7 +28,7 @@ export class MetadataService {
 
     async getMetadata(mintAddress: string): Promise<any> {
         // Return basic DB info while metadata processes
-        const result = await pool.query(
+        const result = await pool().query(
             'SELECT name, symbol, metadata_url FROM onstrument.tokens WHERE mint_address = $1',
             [mintAddress]
         );
@@ -46,14 +46,14 @@ export class MetadataService {
             this.processingQueue.add(mintAddress);
 
             // Check if token exists
-            const result = await pool.query(
+            const result = await pool().query(
                 'SELECT mint_address FROM onstrument.tokens WHERE mint_address = $1',
                 [mintAddress]
             );
 
             // If token doesn't exist, create it with token_type 'dex'
             if (result.rows.length === 0) {
-                await pool.query(
+                await pool().query(
                     `INSERT INTO onstrument.tokens 
                     (mint_address, metadata_status, created_at, last_metadata_fetch, token_type) 
                     VALUES ($1, 'pending', NOW(), NOW(), 'dex')`,
@@ -89,7 +89,7 @@ export class MetadataService {
                 off_chain_metadata: metadata.off_chain_metadata ? JSON.stringify(metadata.off_chain_metadata) : null
             };
 
-            await pool.query(
+            await pool().query(
                 `UPDATE onstrument.tokens 
                  SET 
                     name = $1,

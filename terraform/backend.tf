@@ -111,10 +111,10 @@ resource "aws_cloudwatch_log_group" "backend" {
   }
 }
 
-# Add CloudWatch Logs permissions to the ECS execution role
+# Add CloudWatch Logs permissions to the ECS task role
 resource "aws_iam_role_policy" "ecs_cloudwatch_logs" {
   name = "${var.app_name}-${var.environment}-ecs-cloudwatch"
-  role = aws_iam_role.ecs_execution_role.id
+  role = aws_iam_role.ecs_task_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -123,9 +123,14 @@ resource "aws_iam_role_policy" "ecs_cloudwatch_logs" {
         Effect = "Allow"
         Action = [
           "logs:CreateLogStream",
-          "logs:PutLogEvents"
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups"
         ]
-        Resource = "${aws_cloudwatch_log_group.backend.arn}:*"
+        Resource = [
+          "${aws_cloudwatch_log_group.backend.arn}",
+          "${aws_cloudwatch_log_group.backend.arn}:*"
+        ]
       }
     ]
   })

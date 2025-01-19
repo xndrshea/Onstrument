@@ -52,7 +52,7 @@ export class PriceHistoryModel {
                 ORDER BY bucket ASC;
             `;
 
-            const result = await pool.query(query, [
+            const result = await pool().query(query, [
                 tokenMintAddress,
                 fromTimestamp,
                 toTimestamp
@@ -119,7 +119,7 @@ export class PriceHistoryModel {
             currentMinute.setSeconds(0, 0);
 
             // First try to update existing minute's data
-            const result = await pool.query(`
+            const result = await pool().query(`
                 UPDATE onstrument.price_history 
                 SET 
                     high = GREATEST(high, $3),
@@ -137,7 +137,7 @@ export class PriceHistoryModel {
 
             // If no existing record for this minute, create a new one
             if (result.rows.length === 0) {
-                await pool.query(`
+                await pool().query(`
                     INSERT INTO onstrument.price_history (
                         time,
                         mint_address,
@@ -191,7 +191,7 @@ export class PriceHistoryModel {
             `;
 
             const params = [tokenMintAddress];
-            const result = await pool.query(query, params);
+            const result = await pool().query(query, params);
 
             return result.rows.map(row => ({
                 time: Math.floor(new Date(row.time).getTime() / 1000),
@@ -253,7 +253,7 @@ export class PriceHistoryModel {
                 `
             }[period];
 
-            const result = await pool.query(query, [mintAddress]);
+            const result = await pool().query(query, [mintAddress]);
             return Number(result.rows[0]?.total_volume || 0);
         } catch (error) {
             logger.error('Error getting volume stats:', error);
@@ -275,7 +275,7 @@ export class PriceHistoryModel {
                 LIMIT 1
             `;
 
-            const result = await pool.query(query, [tokenMintAddress]);
+            const result = await pool().query(query, [tokenMintAddress]);
 
             if (result.rows.length === 0) {
                 return null;

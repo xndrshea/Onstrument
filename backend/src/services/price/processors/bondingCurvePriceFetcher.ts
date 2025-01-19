@@ -187,7 +187,7 @@ export class BondingCurvePriceFetcher {
 
     private async getSolUsdPrice(): Promise<number> {
         try {
-            const result = await pool.query(`
+            const result = await pool().query(`
                 SELECT current_price
                 FROM onstrument.tokens 
                 WHERE mint_address = 'So11111111111111111111111111111111111111112'

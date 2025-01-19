@@ -70,7 +70,7 @@ export class JupiterPriceUpdater {
 
     private async fetchTokensForUpdate(): Promise<any[]> {
         try {
-            const result = await pool.query(`
+            const result = await pool().query(`
                 SELECT 
                     mint_address,
                     supply,
@@ -124,7 +124,7 @@ export class JupiterPriceUpdater {
                 null;
 
             try {
-                await pool.query(`
+                await pool().query(`
                     UPDATE onstrument.tokens 
                     SET 
                         current_price = $2,

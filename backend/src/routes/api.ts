@@ -72,7 +72,7 @@ router.post('/tokens', async (req, res) => {
         } = req.body;
 
         // Get current SOL price from our database
-        const solPriceResult = await pool.query(`
+        const solPriceResult = await pool().query(`
             SELECT current_price 
             FROM onstrument.tokens 
             WHERE mint_address = 'So11111111111111111111111111111111111111112'
@@ -87,7 +87,7 @@ router.post('/tokens', async (req, res) => {
         const initialMarketCapUsd = virtualSolana * solanaPrice;
 
         // First insert the token
-        const result = await pool.query(`
+        const result = await pool().query(`
             INSERT INTO onstrument.tokens (
                 mint_address,
                 curve_address,
@@ -138,7 +138,7 @@ router.post('/tokens', async (req, res) => {
             });
 
             try {
-                await pool.query(`
+                await pool().query(`
                     INSERT INTO onstrument.price_history (
                         time,
                         mint_address,
@@ -263,7 +263,7 @@ router.get('/tokens', async (req, res) => {
             orderByClause = 'ORDER BY t.market_cap_usd DESC NULLS LAST';
         }
 
-        const result = await pool.query(`
+        const result = await pool().query(`
             SELECT 
                 t.*,
                 t.market_cap_usd
@@ -337,7 +337,7 @@ router.get('/market/tokens', async (req, res) => {
         }
 
         // Get total count
-        const countResult = await pool.query(`
+        const countResult = await pool().query(`
             SELECT COUNT(*) FROM onstrument.tokens t ${typeWhere}
         `);
         const totalCount = parseInt(countResult.rows[0].count);
@@ -373,7 +373,7 @@ router.get('/market/tokens', async (req, res) => {
             LIMIT $1 OFFSET $2
         `;
 
-        const result = await pool.query(query, [limit, offset]);
+        const result = await pool().query(query, [limit, offset]);
 
         res.json({
             tokens: result.rows.map(token => ({
@@ -417,7 +417,7 @@ router.get('/tokens/:mintAddress', async (req, res) => {
             WHERE mint_address = $1
         `;
 
-        const result = await pool.query(query, [mintAddress]);
+        const result = await pool().query(query, [mintAddress]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -473,7 +473,7 @@ router.get('/search/tokens', async (req, res) => {
             ? [`%${query}%`, `${query}%`, type]
             : [`%${query}%`, `${query}%`];
 
-        const result = await pool.query(searchQuery, params);
+        const result = await pool().query(searchQuery, params);
         res.json({ tokens: result.rows });
     } catch (error) {
         logger.error('Search error:', error);
@@ -497,7 +497,7 @@ router.get('/price-history/:mintAddress', async (req, res) => {
 router.get('/prices/:mintAddress/latest', async (req, res) => {
     try {
         const { mintAddress } = req.params;
-        const result = await pool.query(`
+        const result = await pool().query(`
             SELECT 
                 time,
                 close as price,
@@ -554,7 +554,7 @@ router.get('/trades/:mintAddress', async (req, res) => {
         const { mintAddress } = req.params;
         const { limit = '50' } = req.query;
 
-        const trades = await pool.query(`
+        const trades = await pool().query(`
             SELECT 
                 signature,
                 wallet_address,
@@ -593,7 +593,7 @@ router.get('/tokens/custom/:mintAddress', async (req, res) => {
         const { mintAddress } = req.params;
         logger.info(`Fetching custom token: ${mintAddress}`);
 
-        const result = await pool.query(`
+        const result = await pool().query(`
             SELECT * FROM onstrument.custom_tokens
             WHERE mint_address = $1
         `, [mintAddress]);
@@ -625,7 +625,7 @@ router.get('/market/tokens/:mintAddress', async (req, res) => {
         const { mintAddress } = req.params;
         logger.info(`Fetching market token: ${mintAddress}`);
 
-        const result = await pool.query(`
+        const result = await pool().query(`
             SELECT 
                 t.mint_address,
                 t.name,
@@ -685,7 +685,7 @@ router.get('/market/tokens/:mintAddress', async (req, res) => {
 router.get('/pools/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
-        const result = await pool.query(`
+        const result = await pool().query(`
             SELECT * FROM onstrument.raydium_pools 
             WHERE base_mint = $1 OR quote_mint = $1
             ORDER BY created_at DESC
@@ -702,7 +702,7 @@ router.post('/users', async (req, res) => {
     try {
         const { walletAddress } = req.body;
 
-        const result = await pool.query(`
+        const result = await pool().query(`
             INSERT INTO onstrument.users (wallet_address)
             VALUES ($1)
             ON CONFLICT (wallet_address) 
@@ -721,7 +721,7 @@ router.get('/users/:walletAddress', async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
-        const result = await pool.query(`
+        const result = await pool().query(`
             SELECT user_id, wallet_address, is_subscribed, subscription_expires_at, created_at, last_seen
             FROM onstrument.users
             WHERE wallet_address = $1
@@ -742,7 +742,7 @@ router.post('/users/:walletAddress/toggle-subscription', async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
-        const result = await pool.query(`
+        const result = await pool().query(`
             UPDATE onstrument.users 
             SET 
                 is_subscribed = NOT is_subscribed,
@@ -771,7 +771,7 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
         const { mintAddress, totalVolume, isSelling } = req.body;
 
         // First get the user_id
-        const userResult = await pool.query(`
+        const userResult = await pool().query(`
             SELECT user_id FROM onstrument.users 
             WHERE wallet_address = $1
         `, [walletAddress]);
@@ -783,7 +783,7 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
         const userId = userResult.rows[0].user_id;
 
         // Update trading stats
-        await pool.query(`
+        await pool().query(`
             INSERT INTO onstrument.user_trading_stats (
                 user_id, 
                 mint_address, 
@@ -823,7 +823,7 @@ router.get('/users/:walletAddress/trading-stats', async (req, res) => {
         const { walletAddress } = req.params;
         const { mintAddress } = req.query;
 
-        const userResult = await pool.query(`
+        const userResult = await pool().query(`
             SELECT uts.*, t.symbol, t.name
             FROM onstrument.users u
             JOIN onstrument.user_trading_stats uts ON u.user_id = uts.user_id

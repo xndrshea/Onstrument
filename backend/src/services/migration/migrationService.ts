@@ -72,7 +72,7 @@ export class MigrationService {
     }) {
         try {
             // 1. Update the "migrationStatus" in the DB to "migrated"
-            await pool.query(
+            await pool().query(
                 `
                 UPDATE onstrument.tokens
                 SET 
