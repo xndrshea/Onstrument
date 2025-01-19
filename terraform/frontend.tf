@@ -56,6 +56,63 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # Add origin for API
+  origin {
+    domain_name = aws_lb.main.dns_name
+    origin_id   = "ALB"
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  # Add cache behavior for API requests FIRST
+  ordered_cache_behavior {
+    path_pattern     = "/api/*"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "ALB"
+
+    forwarded_values {
+      query_string = true
+      headers      = ["*"]
+      cookies {
+        forward = "all"
+      }
+    }
+
+    min_ttl                = 0
+    default_ttl            = 0
+    max_ttl                = 0
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  # Add cache behavior for WebSocket SECOND
+  ordered_cache_behavior {
+    path_pattern     = "/api/ws"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "ALB"
+
+    forwarded_values {
+      query_string = true
+      headers      = ["*"]
+      cookies {
+        forward = "all"
+      }
+    }
+
+    min_ttl                = 0
+    default_ttl            = 0
+    max_ttl                = 0
+    compress               = false
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  # Default behavior for S3 LAST
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
@@ -71,8 +128,26 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
 
     min_ttl     = 0
-    default_ttl = 3600  # 1 hour
-    max_ttl     = 86400 # 24 hours
+    default_ttl = 3600
+    max_ttl     = 86400
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.rewrite.arn
+    }
+  }
+
+  # Add custom error response for SPA routing
+  custom_error_response {
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
+  custom_error_response {
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
   }
 
   # Cache behavior for index.html
@@ -137,4 +212,24 @@ resource "aws_s3_bucket_policy" "frontend" {
       }
     ]
   })
+}
+
+# Add CloudFront Function for URL rewriting
+resource "aws_cloudfront_function" "rewrite" {
+  name    = "${var.app_name}-url-rewrite"
+  runtime = "cloudfront-js-1.0"
+  publish = true
+  code    = <<-EOF
+function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+    
+    // Check whether the URI is missing a file extension.
+    if (!uri.includes('.')) {
+        request.uri = '/index.html';
+    }
+    
+    return request;
+}
+EOF
 }

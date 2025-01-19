@@ -53,6 +53,8 @@ router.get('/system/status', async (_req, res) => {
 // Token creation endpoint
 router.post('/tokens', async (req, res) => {
     try {
+        console.log('Received token creation request:', req.body);
+
         const {
             mintAddress,
             curveAddress,
@@ -71,23 +73,30 @@ router.post('/tokens', async (req, res) => {
             telegramUrl
         } = req.body;
 
-        // Get current SOL price from our database
+        // Get current SOL price
         const solPriceResult = await pool().query(`
             SELECT current_price 
             FROM onstrument.tokens 
             WHERE mint_address = 'So11111111111111111111111111111111111111112'
             LIMIT 1
         `);
+        console.log('SOL price query result:', solPriceResult.rows);
 
         const solanaPrice = solPriceResult.rows[0]?.current_price || 0;
+        console.log('Using SOL price:', solanaPrice);
 
         // Calculate USD values
         const initialPriceUsd = initialPrice * solanaPrice;
-        const virtualSolana = 30; // Fixed virtual SOL amount
+        const virtualSolana = 30;
         const initialMarketCapUsd = virtualSolana * solanaPrice;
 
-        // First insert the token
-        const result = await pool().query(`
+        console.log('Calculated values:', {
+            initialPriceUsd,
+            initialMarketCapUsd
+        });
+
+        // Insert token
+        const insertQuery = `
             INSERT INTO onstrument.tokens (
                 mint_address,
                 curve_address,
@@ -109,7 +118,9 @@ router.post('/tokens', async (req, res) => {
                 created_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'custom', $14, $15, $16, CURRENT_TIMESTAMP)
             RETURNING *
-        `, [
+        `;
+
+        const values = [
             mintAddress,
             curveAddress,
             tokenVault,
@@ -126,100 +137,57 @@ router.post('/tokens', async (req, res) => {
             totalSupply,
             initialMarketCapUsd,
             initialPriceUsd
-        ]);
+        ];
 
-        // Now record the initial price (using initialPriceUsd for the condition)
+        console.log('Executing insert with values:', values);
+
+        const result = await pool().query(insertQuery, values);
+        console.log('Insert result:', result.rows[0]);
+
+        // Record initial price
         if (initialPriceUsd && initialPriceUsd > 0) {
-            logger.info('Recording initial price:', {
-                mintAddress,
-                price: initialPriceUsd,
-                marketCapUsd: initialMarketCapUsd,
-                timestamp: new Date()
-            });
+            const priceHistoryQuery = `
+                INSERT INTO onstrument.price_history (
+                    time,
+                    mint_address,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
+                    market_cap,
+                    is_buy,
+                    trade_count,
+                    buy_count,
+                    sell_count
+                ) VALUES (
+                    date_trunc('minute', CURRENT_TIMESTAMP),
+                    $1,
+                    $2,
+                    $2,
+                    $2,
+                    $2,
+                    0,
+                    $3,
+                    true,
+                    1,
+                    1,
+                    0
+                )
+            `;
 
-            try {
-                await pool().query(`
-                    INSERT INTO onstrument.price_history (
-                        time,
-                        mint_address,
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume,
-                        market_cap,
-                        is_buy,
-                        trade_count,
-                        buy_count,
-                        sell_count
-                    ) VALUES (
-                        date_trunc('minute', CURRENT_TIMESTAMP),
-                        $1,
-                        $2,
-                        $2,
-                        $2,
-                        $2,
-                        0,
-                        $3,
-                        true,
-                        1,
-                        1,
-                        0
-                    )
-                `, [mintAddress, initialPriceUsd, initialMarketCapUsd]);
-
-                logger.info('Successfully inserted initial OHLC data', {
-                    mintAddress,
-                    price: initialPriceUsd,
-                    marketCapUsd: initialMarketCapUsd
-                });
-            } catch (error) {
-                logger.error('Failed to insert initial OHLC data', {
-                    error,
-                    mintAddress,
-                    price: initialPriceUsd
-                });
-                throw error;
-            }
-        } else {
-            logger.warn('No initial price provided for token:', mintAddress);
+            await pool().query(priceHistoryQuery, [mintAddress, initialPriceUsd, initialMarketCapUsd]);
+            console.log('Price history recorded');
         }
 
-        const token = result.rows[0];
-        const response = {
-            mintAddress: token.mint_address,
-            curveAddress: token.curve_address,
-            tokenVault: token.token_vault,
-            name: token.name,
-            symbol: token.symbol,
-            decimals: token.decimals,
-            description: token.description,
-            metadataUri: token.metadata_url,
-            curveConfig: token.curve_config,
-            supply: token.supply,
-            tokenType: token.token_type,
-            createdAt: token.created_at,
-            websiteUrl: token.website_url,
-            twitterUrl: token.twitter_url,
-            docsUrl: token.docs_url,
-            telegramUrl: token.telegram_url,
-            currentPrice: initialPriceUsd,
-            marketCapUsd: initialMarketCapUsd
-        };
-
-        res.status(201).json(response);
+        res.json(result.rows[0]);
     } catch (error) {
-        logger.error('Error in token creation:', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined,
-            details: error,
-            requestBody: req.body
+        console.error('Token creation API error:', {
+            error,
+            message: error.message,
+            stack: error.stack
         });
-
-        res.status(500).json({
-            error: 'Failed to create token',
-            details: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -855,7 +823,7 @@ router.post('/upload/image', upload.single('file'), async (req, res) => {
 });
 
 // Metadata upload endpoint
-router.post('/api/upload/metadata', async (req, res) => {
+router.post('/upload/metadata', async (req, res) => {
     try {
         const metadata = req.body;
         const metadataUrl = await pinataService.uploadMetadata(metadata);

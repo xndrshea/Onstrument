@@ -53,13 +53,20 @@ resource "aws_lb_target_group" "backend" {
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
 
+  # Add this stickiness block for WebSocket support
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400
+    enabled         = true
+  }
+
   health_check {
     path                = "/health"
     healthy_threshold   = 2
     unhealthy_threshold = 10
     interval            = 30
     timeout             = 5
-    matcher             = "200" # Added specific success codes
+    matcher             = "200"
   }
 
   tags = {
@@ -93,6 +100,41 @@ resource "aws_lb_listener" "http" {
       port        = "443"
       protocol    = "HTTPS"
       status_code = "HTTP_301"
+    }
+  }
+}
+
+# Forward OPTIONS (CORS preflight) requests to the backend
+resource "aws_lb_listener_rule" "cors_options" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 1
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    http_request_method {
+      values = ["OPTIONS"]
+    }
+  }
+}
+
+# Add this new listener rule specifically for WebSocket upgrade
+resource "aws_lb_listener_rule" "websocket" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 2
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    http_header {
+      http_header_name = "Upgrade"
+      values           = ["websocket"]
     }
   }
 }

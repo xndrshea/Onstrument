@@ -109,13 +109,15 @@ export function createApp() {
         optionsSuccessStatus: 200
     }));
 
-    // Add WebSocket upgrade handling
-    app.get('/ws', (req, res) => {
-        res.set({
-            'Upgrade': 'websocket',
-            'Connection': 'Upgrade'
-        });
-        res.status(426).send('Upgrade Required');
+    // Update the WebSocket route handling
+    app.get('/api/ws', (req, res, next) => {
+        // Only handle actual WebSocket upgrade requests
+        if (req.headers.upgrade?.toLowerCase() !== 'websocket') {
+            return next();
+        }
+
+        // Let the WebSocketManager handle the upgrade
+        wsManager.handleUpgrade(req, res);
     });
 
     app.use(express.json())

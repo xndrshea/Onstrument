@@ -17,7 +17,7 @@ console.log('Environment Variables:', {
 
 const ENDPOINTS = {
     production: {
-        base: 'https://onstrument-prod-alb-1139815354.us-east-1.elb.amazonaws.com',
+        base: 'https://api.onstrument.com',
         mainnet: '/api/helius/rpc',
         devnet: '/api/helius/devnet/rpc',
         ws: '/api/ws'
@@ -50,11 +50,6 @@ const createCustomRpcRequest = (endpoint: string) => {
     return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const body = init?.body ? JSON.parse(init.body as string) : {};
         const isDevnet = endpoint.includes('devnet');
-
-        // Use the WebSocket endpoint for subscription methods
-        if (body.method?.includes('subscribe')) {
-            endpoint = `${ENV.base}${ENV.ws}`;
-        }
 
         const requestBody = {
             jsonrpc: '2.0',
@@ -101,7 +96,7 @@ export const devnetConnection = new Connection(
     {
         commitment: 'confirmed',
         fetch: createCustomRpcRequest(`${ENV.base}${ENV.devnet}`),
-        wsEndpoint: `${ENV.base}${ENV.ws}`.replace('http', 'ws').replace('https', 'wss')
+        wsEndpoint: `${ENV.base.replace('http', 'ws').replace('https', 'wss')}${ENV.ws}`
     }
 );
 

@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
+import express from 'express';
 
 interface WebSocketClient extends WebSocket {
     id: string;
@@ -172,6 +173,25 @@ export class WebSocketManager extends EventEmitter {
                 isAlive: client.isAlive
             }))
         };
+    }
+
+    handleUpgrade(req: express.Request, res: express.Response) {
+        if (!this.wss) {
+            res.status(500).send('WebSocket server not initialized');
+            return;
+        }
+
+        const head = req.headers;
+        const socket = res.socket;
+
+        if (!socket) {
+            res.status(400).send('WebSocket upgrade failed');
+            return;
+        }
+
+        this.wss.handleUpgrade(req, socket, Buffer.from(''), (ws) => {
+            this.wss!.emit('connection', ws, req);
+        });
     }
 }
 

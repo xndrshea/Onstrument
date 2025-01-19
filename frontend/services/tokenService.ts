@@ -70,7 +70,7 @@ export class TokenService {
                 tokenVault: token.tokenVault
             };
 
-            console.log('Sending token creation request:', requestData);
+            console.log('Token creation request data:', requestData);
 
             const response = await fetch(`${API_BASE_URL}/tokens`, {
                 method: 'POST',
@@ -80,19 +80,27 @@ export class TokenService {
                 body: JSON.stringify(requestData),
             });
 
+            const responseText = await response.text();
+            console.log('Raw API response:', responseText);
+
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error}`);
+                throw new Error(`HTTP error! status: ${response.status}, response: ${responseText}`);
             }
 
-            const data = await response.json();
+            const data = JSON.parse(responseText);
+            console.log('Parsed API response:', data);
+
             return {
                 ...token,
                 ...data,
-                token_type: 'custom' as const
+                tokenType: 'custom' as const
             };
         } catch (error) {
-            console.error('Token creation error:', error);
+            console.error('Token service create error:', {
+                error,
+                message: (error as Error).message,
+                stack: (error as Error).stack
+            });
             throw error;
         }
     }

@@ -49,15 +49,24 @@ export class TokenTransactionService {
                 throw new Error('Failed to create token - missing required parameters');
             }
 
-            // Wait for confirmation
-            const confirmation = await this.connection.confirmTransaction({
-                signature,
-                blockhash: await this.connection.getLatestBlockhash().then(res => res.blockhash),
-                lastValidBlockHeight: await this.connection.getLatestBlockhash().then(res => res.lastValidBlockHeight),
-            });
+            // Instead of using confirmTransaction, use getSignatureStatus in a polling loop
+            let retries = 0;
+            while (retries < 30) {
+                const status = await this.connection.getSignatureStatus(signature);
+                console.log('Transaction status:', status?.value);
 
-            if (confirmation.value.err) {
-                throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
+                if (status?.value?.confirmationStatus === 'processed' ||
+                    status?.value?.confirmationStatus === 'confirmed' ||
+                    status?.value?.confirmationStatus === 'finalized') {
+                    break;
+                }
+
+                if (status?.value?.err) {
+                    throw new Error(`Transaction failed: ${status.value.err.toString()}`);
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                retries++;
             }
 
             // Create new bonding curve instance with the new addresses
@@ -86,11 +95,19 @@ export class TokenTransactionService {
                 telegramUrl: socialLinks.telegramUrl || ''
             };
 
+            console.log('Sending token record to database:', tokenRecord);
+
             // Save to database through tokenService
             const savedToken = await this.tokenService.create(tokenRecord);
+            console.log('Token saved to database:', savedToken);
+
             return savedToken;
         } catch (error: any) {
-            console.error('Token creation error:', error);
+            console.error('Token creation error:', {
+                error,
+                message: error.message,
+                stack: error.stack
+            });
             throw error;
         }
     }
