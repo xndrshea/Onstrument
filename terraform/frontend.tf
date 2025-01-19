@@ -177,7 +177,10 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  aliases = ["${var.domain_name}"]
+  aliases = [
+    var.domain_name,
+    "www.${var.domain_name}"
+  ]
 
   viewer_certificate {
     acm_certificate_arn      = aws_acm_certificate.main.arn

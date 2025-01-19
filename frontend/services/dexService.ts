@@ -24,10 +24,8 @@ type PriceQuote = {
 };
 
 export class DexService {
-    connection: Connection;
-
-    constructor(token?: { tokenType: string }) {
-        this.connection = getConnectionForToken(token);
+    constructor() {
+        // No need to create connection here
     }
 
     getTokenPrice = async (
@@ -55,7 +53,7 @@ export class DexService {
         mintAddress: string,
         amount: number,
         isSelling: boolean,
-        _connection: Connection
+        connection: Connection
     ): Promise<PriceQuote | null> => {
         if (!amount || isNaN(amount) || amount <= 0) {
             return null;

@@ -9,6 +9,7 @@ import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
 import { SolflareWalletAdapter } from '@solana/wallet-adapter-wallets'
 import '@solana/wallet-adapter-react-ui/styles.css'
 import { getConnection } from './config'
+import { generateFavicon } from './src/assets/favicon'
 
 const wallets = [
     new SolflareWalletAdapter(),
@@ -17,9 +18,14 @@ const wallets = [
 const root = document.getElementById('root')
 if (!root) throw new Error('Root element not found')
 
+const connection = getConnection(true) // true for devnet connection
+
+// Add before React rendering
+generateFavicon();
+
 ReactDOM.createRoot(root).render(
     <React.StrictMode>
-        <ConnectionProvider endpoint={getConnection().rpcEndpoint}>
+        <ConnectionProvider endpoint={connection.rpcEndpoint}>
             <WalletProvider wallets={wallets} autoConnect>
                 <WalletModalProvider>
                     <App />

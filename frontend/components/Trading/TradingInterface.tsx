@@ -10,6 +10,7 @@ import { DexService } from '../../services/dexService'
 import { getConnectionForToken } from '../../config'
 import { priceClient } from '../../services/priceClient'
 import { UserService } from '../../services/userService'
+import { TokenTransactionService } from '../../services/TokenTransactionService'
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -72,14 +73,10 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
 
     // Create instance at component level
     const dexService = new DexService();
-
-    // Move getAppropriateConnection before bondingCurve initialization
-    const getAppropriateConnection = () => {
-        if (token.tokenType === 'custom' && (!token.curveConfig || token.curveConfig.migrationStatus !== 'migrated')) {
-            return getConnectionForToken({ tokenType: 'custom' });  // devnet connection
-        }
-        return getConnectionForToken({ tokenType: 'dex' });  // mainnet connection
-    };
+    const tokenService = useMemo(() => {
+        if (!connected || !publicKey) return null;
+        return new TokenTransactionService(wallet, connection, token);
+    }, [connected, publicKey, wallet, connection, token]);
 
     // Now bondingCurve can use getAppropriateConnection
     const bondingCurve = useMemo(() => {
@@ -88,9 +85,8 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         }
 
         try {
-            const appropriateConnection = getAppropriateConnection();
             return new BondingCurve(
-                appropriateConnection,
+                connection,
                 wallet,
                 new PublicKey(token.mintAddress),
                 new PublicKey(token.curveAddress)
@@ -99,7 +95,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             console.error('Error creating bonding curve interface:', error);
             return null;
         }
-    }, [publicKey, token.mintAddress, token.curveAddress, wallet, token.tokenType]);
+    }, [publicKey, token.mintAddress, token.curveAddress, wallet, connection]);
 
     const checkTokenTradability = async () => {
         if (token.tokenType === 'custom') {
@@ -123,7 +119,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     token.mintAddress,
                     1,
                     true,
-                    getConnectionForToken({ tokenType: 'dex' })
+                    connection
                 );
                 setIsTokenTradable(Boolean(quote && quote.price > 0));
                 setIsMigrating(false);
@@ -134,12 +130,11 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         } else {
             // Handle pool tokens as before
             try {
-                const appropriateConnection = getAppropriateConnection();
                 const quote = await dexService.calculateTradePrice(
                     token.mintAddress,
                     1,
                     true,
-                    appropriateConnection
+                    connection
                 );
                 setIsTokenTradable(Boolean(quote && quote.price > 0));
                 setIsMigrating(false);
@@ -153,10 +148,8 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         if (!publicKey) return;
 
         try {
-            const appropriateConnection = getAppropriateConnection();
-
             // Get SOL balance from the appropriate network
-            const solBal = await appropriateConnection.getBalance(publicKey);
+            const solBal = await connection.getBalance(publicKey);
             setSolBalance(solBal / LAMPORTS_PER_SOL);
 
             const ata = await getAssociatedTokenAddress(
@@ -164,9 +157,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 publicKey
             );
 
-            const ataInfo = await appropriateConnection.getAccountInfo(ata);
+            const ataInfo = await connection.getAccountInfo(ata);
             if (ataInfo) {
-                const tokenAccountInfo = await appropriateConnection.getTokenAccountBalance(ata);
+                const tokenAccountInfo = await connection.getTokenAccountBalance(ata);
                 setUserBalance(BigInt(tokenAccountInfo.value.amount));
             } else {
                 setUserBalance(BigInt(0));
@@ -194,12 +187,11 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     if (onPriceUpdate) onPriceUpdate(spotPrice);
                 } else if (token.tokenType === 'dex' || token.curveConfig?.migrationStatus === 'migrated') {
                     // For DEX tokens and migrated custom tokens, use Jupiter
-                    const appropriateConnection = getAppropriateConnection();
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
                         1,
                         true,
-                        appropriateConnection
+                        connection
                     );
                     if (quote) {
                         setSpotPrice(quote.price);
@@ -262,12 +254,11 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 // For DEX tokens and migrated custom tokens, use Jupiter
                 if (token.tokenType === 'dex' ||
                     (token.tokenType === 'custom' && token.curveConfig?.migrationStatus === 'migrated')) {
-                    const appropriateConnection = getAppropriateConnection();
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
                         parsedAmount,
                         isSelling,
-                        appropriateConnection
+                        connection
                     );
                     setPriceInfo(quote);
                 }
@@ -317,24 +308,30 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     }, [amount, isSelling, token.mintAddress])
 
     const handleTransaction = async () => {
-        if (!publicKey || !amount || !wallet) {
-            setError('Invalid transaction parameters')
+        if (!publicKey || !amount || !wallet || !tokenService) {
+            setError('Please connect your wallet')
             return
         }
 
         setIsLoading(true)
 
         try {
-            const appropriateConnection = getAppropriateConnection()
-
             if (token.tokenType === 'dex') {
+                // Add balance check for DEX trades
+                const parsedAmount = parseFloat(amount)
+                const requiredSol = isSelling ? 0.01 : parsedAmount + 0.01 // Add 0.01 SOL buffer for fees
+
+                if (!isSelling && solBalance < requiredSol) {
+                    throw new Error(`Insufficient SOL. Need at least ${requiredSol.toFixed(4)} SOL (including fees)`)
+                }
+
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
                     amount: new BN(parseFloat(amount) * (isSelling ? (10 ** token.decimals) : LAMPORTS_PER_SOL)),
                     isSelling,
                     slippageTolerance,
                     wallet,
-                    connection: appropriateConnection,
+                    connection: connection,
                     isSubscribed: isUserSubscribed
                 })
             } else if (bondingCurve && priceInfo) {
@@ -386,12 +383,11 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             // For DEX tokens, get initial price quote
             const getInitialPrice = async () => {
                 try {
-                    const appropriateConnection = getAppropriateConnection();
                     const quote = await dexService.calculateTradePrice(
                         token.mintAddress,
                         1,
                         true,  // isSelling
-                        appropriateConnection
+                        connection
                     );
                     if (quote) {
                         const price = quote.price;

@@ -17,13 +17,14 @@ export class TokenTransactionService {
 
     constructor(
         wallet: WalletContextState,
+        connection: Connection,
         token?: { tokenType: string }
     ) {
         const isDevnet = token?.tokenType === 'custom';
 
         // Use the wallet's connection instead of creating a new one
         this.wallet = wallet;
-        this.connection = getConnection(isDevnet);
+        this.connection = connection;
 
         // Log connection details for debugging
         console.log('TokenTransactionService init:', {
@@ -71,7 +72,7 @@ export class TokenTransactionService {
             // Instead of using confirmTransaction, use getSignatureStatus in a polling loop
             let retries = 0;
             while (retries < 30) {
-                const status = await this.connection.getSignatureStatus(signature);
+                const status = await this.connection.getSignatureStatus(signature.toString());
                 console.log('Transaction status:', status?.value);
 
                 if (status?.value?.confirmationStatus === 'processed' ||

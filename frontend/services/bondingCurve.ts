@@ -58,11 +58,32 @@ export class BondingCurve {
         this.mintAddress = mintAddress;
         this.curveAddress = curveAddress;
 
+        // Before creating provider
+        console.log('Creating AnchorProvider with:', {
+            connection: {
+                endpoint: this.connection.rpcEndpoint,
+                commitment: this.connection.commitment
+            },
+            wallet: {
+                publicKey: wallet.publicKey?.toString(),
+                connected: wallet.connected,
+                hasProvider: !!wallet.signTransaction,
+                adapterName: wallet.wallet?.adapter?.name
+            }
+        });
+
         const provider = new AnchorProvider(
             this.connection,
             wallet as any,
             { commitment: 'confirmed' }
         );
+
+        // After creating provider
+        console.log('AnchorProvider created:', {
+            providerConnection: provider.connection.rpcEndpoint,
+            providerWallet: provider.wallet?.publicKey?.toString(),
+            providerCommitment: provider.connection.commitment
+        });
 
         this.program = new Program(
             idl as BondingCurveIDL,
@@ -225,6 +246,7 @@ export class BondingCurve {
             throw error;
         }
     }
+
 
     async ensureTokenAccount(): Promise<PublicKey> {
         if (!this.mintAddress) throw new Error('Mint address is required');

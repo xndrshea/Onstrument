@@ -46,10 +46,15 @@ export const getEnvironment = () => {
 // Remove the direct endpoints and update the connection functions
 export const getConnection = (isDevnet: boolean = false) => {
     const env = getEnvironment();
-    return new Connection(
-        `${env.base}${isDevnet ? env.devnet : env.mainnet}`,
-        'confirmed'
-    );
+    const endpoint = isDevnet
+        ? 'https://api.devnet.solana.com'  // Direct devnet connection for fee estimation
+        : `${env.base}${env.mainnet}`;     // Proxied connection for other operations
+
+    return new Connection(endpoint, {
+        commitment: 'confirmed',
+        wsEndpoint: `${env.base}${env.ws}`,
+        confirmTransactionInitialTimeout: 60000
+    });
 };
 
 // Helper to determine connection type based on token
