@@ -3,16 +3,24 @@ import { Link } from 'react-router-dom';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { SearchBar } from '../Search/SearchBar';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useSubscription } from '../../hooks/useSubscription';
+import { SubscribeModal } from '../Subscription/SubscribeModal';
 
 interface HeaderProps {
     onProfileClick: () => void;
+    onSubscribeClick: () => void;
 }
 
-export function Header({ onProfileClick }: HeaderProps) {
+export function Header({ onProfileClick, onSubscribeClick }: HeaderProps) {
     const { connected, publicKey, disconnect } = useWallet();
     const { setVisible } = useWalletModal();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const { isSubscribed, isLoading } = useSubscription();
+    const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
+
+    // Add this debug log
+    console.log('Subscription state:', { connected, isLoading, isSubscribed });
 
     // Handle clicking outside of dropdown to close it
     useEffect(() => {
@@ -66,64 +74,82 @@ export function Header({ onProfileClick }: HeaderProps) {
                         <SearchBar />
                     </div>
 
-                    <div className="relative" ref={dropdownRef}>
-                        {!connected ? (
+                    <div className="flex items-center space-x-4">
+                        {connected && !isLoading && !isSubscribed && (
                             <button
-                                onClick={handleConnect}
-                                className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
+                                onClick={onSubscribeClick}
+                                className="bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
                             >
-                                Connect Wallet
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
-                            >
-                                <span>{publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}</span>
-                                <svg
-                                    className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
+                                Subscribe
                             </button>
                         )}
 
-                        {isDropdownOpen && connected && (
-                            <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-[#232427] ring-1 ring-black ring-opacity-5">
-                                <div className="py-1" role="menu">
-                                    <button
-                                        onClick={() => {
-                                            onProfileClick();
-                                            setIsDropdownOpen(false);
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800/50"
-                                        role="menuitem"
+                        <div className="relative" ref={dropdownRef}>
+                            {!connected ? (
+                                <button
+                                    onClick={handleConnect}
+                                    className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
+                                >
+                                    Connect Wallet
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                    className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
+                                >
+                                    <span>{publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}</span>
+                                    <svg
+                                        className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
                                     >
-                                        View Profile
-                                    </button>
-                                    <button
-                                        onClick={handleConnect}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800/50"
-                                        role="menuitem"
-                                    >
-                                        Change Wallet
-                                    </button>
-                                    <button
-                                        onClick={handleDisconnect}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800/50"
-                                        role="menuitem"
-                                    >
-                                        Disconnect
-                                    </button>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                            )}
+
+                            {isDropdownOpen && connected && (
+                                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-[#232427] ring-1 ring-black ring-opacity-5">
+                                    <div className="py-1" role="menu">
+                                        <button
+                                            onClick={() => {
+                                                onProfileClick();
+                                                setIsDropdownOpen(false);
+                                            }}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800/50"
+                                            role="menuitem"
+                                        >
+                                            View Profile
+                                        </button>
+                                        <button
+                                            onClick={handleConnect}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800/50"
+                                            role="menuitem"
+                                        >
+                                            Change Wallet
+                                        </button>
+                                        <button
+                                            onClick={handleDisconnect}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800/50"
+                                            role="menuitem"
+                                        >
+                                            Disconnect
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
+
+            {isSubscribeModalOpen && (
+                <SubscribeModal
+                    isOpen={isSubscribeModalOpen}
+                    onClose={() => setIsSubscribeModalOpen(false)}
+                />
+            )}
         </header>
     );
 } 

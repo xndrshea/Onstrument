@@ -3,8 +3,19 @@ export interface User {
     walletAddress: string;
     isSubscribed: boolean;
     subscriptionExpiresAt: string | null;
+    subscriptionTier: string | null;
+    goldenPoints: number;
     createdAt: string;
     lastSeen: string;
+}
+
+interface SubscriptionActivation {
+    walletAddress: string;
+    durationMonths: number;
+    paymentTxId: string;
+    tierType: string;
+    amountPaid: number;
+    goldenPoints: number;
 }
 
 export class UserService {
@@ -28,6 +39,8 @@ export class UserService {
                 walletAddress: data.wallet_address,
                 isSubscribed: data.is_subscribed,
                 subscriptionExpiresAt: data.subscription_expires_at,
+                subscriptionTier: data.subscription_tier,
+                goldenPoints: data.golden_points,
                 createdAt: data.created_at,
                 lastSeen: data.last_seen
             };
@@ -55,6 +68,8 @@ export class UserService {
                 walletAddress: data.wallet_address,
                 isSubscribed: data.is_subscribed,
                 subscriptionExpiresAt: data.subscription_expires_at,
+                subscriptionTier: data.subscription_tier,
+                goldenPoints: data.golden_points,
                 createdAt: data.created_at,
                 lastSeen: data.last_seen
             };
@@ -83,11 +98,34 @@ export class UserService {
                 walletAddress: data.wallet_address,
                 isSubscribed: data.is_subscribed,
                 subscriptionExpiresAt: data.subscription_expires_at,
+                subscriptionTier: data.subscription_tier,
+                goldenPoints: data.golden_points,
                 createdAt: data.created_at,
                 lastSeen: data.last_seen
             };
         } catch (error) {
             console.error('Error in toggleSubscription:', error);
+            throw error;
+        }
+    }
+
+    static async activateSubscription(params: SubscriptionActivation): Promise<User> {
+        try {
+            const response = await fetch(`/api/users/${params.walletAddress}/activate-subscription`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(params)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to activate subscription');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error in activateSubscription:', error);
             throw error;
         }
     }

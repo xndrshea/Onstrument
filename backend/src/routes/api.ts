@@ -876,4 +876,101 @@ router.get('/ws/health', (req, res) => {
     });
 });
 
+// Add subscription check endpoint
+router.get('/subscription/:walletAddress', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+
+        const result = await pool().query(`
+            SELECT 
+                is_subscribed, 
+                subscription_expires_at,
+                subscription_tier,
+                golden_points
+            FROM onstrument.users 
+            WHERE wallet_address = $1
+        `, [walletAddress]);
+
+        if (result.rows.length === 0) {
+            return res.json({
+                isSubscribed: false,
+                tier: null,
+                goldenPoints: 0
+            });
+        }
+
+        const user = result.rows[0];
+        const isSubscribed = user.is_subscribed &&
+            (!user.subscription_expires_at || new Date(user.subscription_expires_at) > new Date());
+
+        res.json({
+            isSubscribed,
+            tier: user.subscription_tier,
+            goldenPoints: user.golden_points
+        });
+    } catch (error) {
+        logger.error('Error checking subscription:', error);
+        res.status(500).json({ error: 'Failed to check subscription status' });
+    }
+});
+
+router.post('/users/:walletAddress/activate-subscription', async (req, res) => {
+    const client = await pool().connect();
+    try {
+        await client.query('BEGIN');
+
+        const { walletAddress } = req.params;
+        const { durationMonths, paymentTxId, tierType, amountPaid, goldenPoints } = req.body;
+
+        // Get user
+        const userResult = await client.query(
+            'SELECT user_id FROM onstrument.users WHERE wallet_address = $1',
+            [walletAddress]
+        );
+
+        if (userResult.rows.length === 0) {
+            throw new Error('User not found');
+        }
+
+        const userId = userResult.rows[0].user_id;
+        const expiresAt = new Date();
+        expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
+
+        // Update user subscription status AND golden points
+        await client.query(`
+            UPDATE onstrument.users 
+            SET 
+                is_subscribed = true,
+                subscription_expires_at = $1,
+                subscription_tier = $2,
+                golden_points = golden_points + $3
+            WHERE user_id = $4
+        `, [expiresAt, tierType, goldenPoints, userId]);
+
+        // Insert subscription history
+        await client.query(
+            `INSERT INTO onstrument.subscription_history 
+            (user_id, payment_tx_id, tier_type, amount_paid, duration_months, expires_at) 
+            VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, paymentTxId, tierType, amountPaid, durationMonths, expiresAt]
+        );
+
+        // Get updated user data
+        const updatedUser = await client.query(
+            `SELECT * FROM onstrument.users WHERE user_id = $1`,
+            [userId]
+        );
+
+        await client.query('COMMIT');
+        res.json(updatedUser.rows[0]);
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        logger.error('Error activating subscription:', error);
+        res.status(500).json({ error: 'Failed to activate subscription' });
+    } finally {
+        client.release();
+    }
+});
+
 export default router; 

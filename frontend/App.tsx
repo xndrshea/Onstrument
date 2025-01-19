@@ -14,6 +14,7 @@ import { UserService } from './services/userService'
 import { User } from './services/userService'
 import { ProfileModal } from './components/Profile/ProfileModal'
 import { ProfilePage } from './components/pages/ProfilePage'
+import { SubscribeModal } from './components/Subscription/SubscribeModal'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -21,6 +22,7 @@ function App() {
     const [refreshTrigger, setRefreshTrigger] = useState(0)
     const [user, setUser] = useState<User | null>(null)
     const [isProfileOpen, setIsProfileOpen] = useState(false)
+    const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false)
 
     useEffect(() => {
         if (connected && publicKey) {
@@ -52,7 +54,10 @@ function App() {
                 display: 'flex',
                 flexDirection: 'column'
             }}>
-                <Header onProfileClick={() => setIsProfileOpen(true)} />
+                <Header
+                    onProfileClick={() => setIsProfileOpen(true)}
+                    onSubscribeClick={() => setIsSubscribeModalOpen(true)}
+                />
 
                 <main style={{ padding: '20px', color: 'white', flex: 1 }}>
                     <Routes>
@@ -91,10 +96,18 @@ function App() {
                     </Modal>
                 )}
 
-                <ProfileModal
-                    isOpen={isProfileOpen}
-                    onClose={() => setIsProfileOpen(false)}
-                />
+                {isProfileOpen && (
+                    <ProfileModal
+                        isOpen={isProfileOpen}
+                        onClose={() => setIsProfileOpen(false)}
+                    />
+                )}
+                {isSubscribeModalOpen && (
+                    <SubscribeModal
+                        isOpen={isSubscribeModalOpen}
+                        onClose={() => setIsSubscribeModalOpen(false)}
+                    />
+                )}
             </div>
         </Router>
     )
