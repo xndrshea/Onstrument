@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import { Connection } from '@solana/web3.js';
 
 const isDocker = import.meta.env.VITE_DOCKER === 'true';
@@ -34,9 +36,7 @@ const ENDPOINTS = {
     }
 } as const;
 
-
-// Environment selection logic
-const getEnvironment = () => {
+export const getEnvironment = () => {
     if (isDocker && isProd) return ENDPOINTS.docker;     // Docker production build
     if (!isDocker && isProd) return ENDPOINTS.production; // Regular production
     if (!isDocker) return ENDPOINTS.development;         // Local development

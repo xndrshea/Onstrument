@@ -29,6 +29,13 @@ export function getPool(): Pool {
         pool.on('error', (err) => {
             logger.error('Unexpected error on idle client', err)
         });
+
+        logger.info('Initializing database connection with:', {
+            host: process.env.DB_HOST,
+            port: process.env.DB_PORT,
+            database: process.env.DB_NAME,
+            user: process.env.DB_USER
+        });
     }
     return pool;
 }

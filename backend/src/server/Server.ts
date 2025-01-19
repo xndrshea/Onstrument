@@ -33,6 +33,8 @@ export class ApplicationServer {
         const allowedOrigins = [
             'http://localhost:3000',
             'http://localhost:5173',
+            'https://onstrument.com',
+            'https://www.onstrument.com',
             process.env.FRONTEND_URL
         ].filter(Boolean);
 

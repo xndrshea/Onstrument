@@ -91,7 +91,7 @@ export function createApp() {
 
     // CORS setup
     const allowedOrigins = process.env.NODE_ENV === 'production'
-        ? process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []
+        ? ['https://onstrument.com', 'https://www.onstrument.com']
         : ['http://localhost:3000', 'http://localhost:5173'];
 
     app.use(cors({

@@ -19,42 +19,56 @@ export class InitializationService {
 
     public async initialize(port: number): Promise<ApplicationServer> {
         try {
+            logger.info('Starting application initialization...');
+
             // 1. Load configuration
+            logger.info('Step 1: Loading configuration...');
             await this.initializeConfig();
+            logger.info('Configuration loaded successfully');
 
-            // 2. Set up database
-            await this.initializeDatabase();
-
-            // 3. Create and configure Express app
+            // 2. Create and configure Express app
+            logger.info('Step 2: Creating Express application...');
             const app = await this.initializeExpress();
+            logger.info('Express application created successfully');
 
-            // 4. Create and initialize server
+            // 3. Create and initialize server
+            logger.info('Step 3: Creating and initializing server...');
             const server = new ApplicationServer(app, port);
             await server.initialize();
+            logger.info('Server initialized successfully');
 
             return server;
         } catch (error) {
             logger.error('Failed to initialize application:', error);
+            if (error instanceof Error) {
+                logger.error('Stack trace:', error.stack);
+            }
             throw error;
         }
     }
 
     private async initializeConfig(): Promise<void> {
-        logger.info('Loading configuration...');
-        await parameterStore.initialize();
-        logger.info('Configuration loaded successfully');
-    }
-
-    private async initializeDatabase(): Promise<void> {
-        logger.info('Setting up database...');
-        await checkDatabaseSetup();
-        logger.info('Database setup complete');
+        try {
+            logger.info('Checking parameter store initialization...');
+            if (!parameterStore.isInitialized()) {
+                throw new Error('Parameter store must be initialized before configuration setup');
+            }
+            logger.info('Parameter store check completed');
+        } catch (error) {
+            logger.error('Configuration initialization failed:', error);
+            throw error;
+        }
     }
 
     private async initializeExpress(): Promise<Express> {
-        logger.info('Creating Express application...');
-        const app = createApp();
-        logger.info('Express application created');
-        return app;
+        try {
+            logger.info('Setting up Express application...');
+            const app = createApp();
+            logger.info('Express application setup completed');
+            return app;
+        } catch (error) {
+            logger.error('Express initialization failed:', error);
+            throw error;
+        }
     }
 } 
