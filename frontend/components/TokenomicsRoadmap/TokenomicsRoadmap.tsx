@@ -101,15 +101,15 @@ export function TokenomicsRoadmap() {
                     3 SOL
                 </div>
 
-                {/* Liquidity Migration Row */}
+                {/* Onstrument Team Migration Reward Row */}
                 <div className="p-4 bg-gray-800/40 backdrop-blur-sm border-b border-blue-500/20">
-                    Liquidity % Migration
+                    Onstrument Team Migration Reward
                 </div>
                 <div className="p-4 bg-gray-800/40 backdrop-blur-sm border-b border-blue-500/20">
-                    100%
+                    0%
                 </div>
                 <div className="p-4 bg-gray-800/40 backdrop-blur-sm border-b border-blue-500/20">
-                    100%
+                    0%
                 </div>
             </div>
 

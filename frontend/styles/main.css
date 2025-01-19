@@ -165,11 +165,11 @@ button[type="submit"]:disabled {
     background-color: #232427;
     border-radius: 8px;
     padding: 1.5rem;
-    width: 90%;
+    width: 95%;
     max-width: 42rem;
-    max-height: 90vh;
+    max-height: 95vh;
     overflow-y: auto;
-    margin: 2rem;
+    margin: 1rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
@@ -274,7 +274,7 @@ button[type="submit"]:disabled {
 
 .search-results {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1rem;
     width: 100%;
 }
@@ -335,5 +335,399 @@ button[type="submit"]:disabled {
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+@media (max-width: 640px) {
+
+    /* Base container constraints */
+    html,
+    body {
+        overflow-x: hidden;
+        width: 100vw;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Main container adjustments */
+    .container {
+        width: 100%;
+        padding: 0 1rem;
+        margin: 0;
+    }
+
+    /* Token list and search results */
+    .token-list,
+    .search-results {
+        width: 100%;
+        padding: 0.5rem;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    /* Token items */
+    .token-item {
+        width: 100%;
+        margin: 0;
+        box-sizing: border-box;
+    }
+
+    /* Search bar */
+    .search-input {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+    }
+
+    /* Dropdown/Select elements */
+    select,
+    .dropdown {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    /* Images in token cards */
+    .token-item img {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1;
+        object-fit: cover;
+    }
+
+    /* Remove any fixed widths */
+    .token-card,
+    .modal-content,
+    .token-creation-form,
+    .price-chart-container {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 1rem;
+        box-sizing: border-box;
+    }
+
+    /* Token list header with buttons */
+    .token-list-header {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background: #1C1D21;
+        padding: 1rem 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .token-list-header button {
+        width: 100%;
+    }
+
+    /* Make token images bigger */
+    .token-item img,
+    .token-card img {
+        width: 100%;
+        height: 300px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+
+    /* Grid adjustments */
+    .grid {
+        grid-template-columns: 1fr !important;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+    }
+
+    .token-item,
+    .token-card {
+        width: 100%;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+    }
+
+    /* Header layout */
+    header .container {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+
+    /* Button container */
+    .button-container {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 0.5rem;
+    }
+
+    .token-card {
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+
+    .price-chart-container {
+        padding: 0.75rem;
+        margin: 0.75rem 0;
+        overflow-x: auto;
+    }
+
+    .search-results {
+        grid-template-columns: 1fr;
+        padding: 0.5rem;
+        gap: 0.75rem;
+    }
+
+    .modal-close {
+        top: 0.5rem;
+        right: 0.5rem;
+        padding: 1rem;
+        /* Larger touch target */
+    }
+
+    .search-results {
+        top: 3.5rem;
+    }
+
+    .token-details-container {
+        padding: 0;
+    }
+
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+
+    .metrics-card {
+        padding: 0.75rem;
+    }
+
+    .chart-container {
+        margin: 0 -1rem;
+        border-radius: 0;
+    }
+
+    .trading-form {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1a1b1f;
+        padding: 1rem;
+        border-top: 1px solid #2d3748;
+        border-radius: 1rem 1rem 0 0;
+        z-index: 40;
+    }
+
+    /* Mobile Navigation */
+    .mobile-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1a1b1f;
+        padding: 0.75rem;
+        border-top: 1px solid #2d3748;
+        z-index: 50;
+        display: none;
+    }
+
+    .mobile-nav-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+
+    .mobile-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        color: #e2e8f0;
+        text-decoration: none;
+        font-size: 0.75rem;
+        padding: 0.5rem;
+    }
+
+    .mobile-nav-item.active {
+        color: #3b82f6;
+    }
+
+    @media (max-width: 640px) {
+        .mobile-nav {
+            display: block;
+        }
+
+        /* Add padding to main content to account for bottom nav */
+        body {
+            padding-bottom: 4rem;
+        }
+
+        /* Market page mobile optimizations */
+        .overflow-x-auto {
+            margin: 0 -1rem;
+            padding: 0 1rem;
+        }
+
+        table {
+            font-size: 0.875rem;
+        }
+
+        th,
+        td {
+            padding: 0.75rem 0.5rem;
+        }
+
+        /* Token details page mobile optimizations */
+        .token-details-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .price-chart-container {
+            margin: 0 -1rem;
+            border-radius: 0;
+        }
+
+        /* Trading interface mobile optimizations */
+        .trading-interface {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #1a1b1f;
+            padding: 1rem;
+            border-top: 1px solid #2d3748;
+            border-radius: 1rem 1rem 0 0;
+            z-index: 40;
+        }
+
+        /* Search results mobile optimization */
+        .search-results {
+            position: fixed;
+            top: 4rem;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1a1b1f;
+            padding: 1rem;
+            overflow-y: auto;
+            z-index: 30;
+        }
+
+        /* Modal mobile optimization */
+        .modal-content {
+            margin: 0;
+            height: 100vh;
+            width: 100vw;
+            border-radius: 0;
+            padding: 1rem;
+        }
+    }
+}
+
+/* Mobile Navigation */
+.mobile-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #1a1b1f;
+    padding: 0.75rem;
+    border-top: 1px solid #2d3748;
+    z-index: 50;
+    display: none;
+}
+
+.mobile-nav-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+}
+
+.mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #e2e8f0;
+    text-decoration: none;
+    font-size: 0.75rem;
+    padding: 0.5rem;
+}
+
+.mobile-nav-item.active {
+    color: #3b82f6;
+}
+
+@media (max-width: 640px) {
+    .mobile-nav {
+        display: block;
+    }
+
+    /* Add padding to main content to account for bottom nav */
+    body {
+        padding-bottom: 4rem;
+    }
+
+    /* Market page mobile optimizations */
+    .overflow-x-auto {
+        margin: 0 -1rem;
+        padding: 0 1rem;
+    }
+
+    table {
+        font-size: 0.875rem;
+    }
+
+    th,
+    td {
+        padding: 0.75rem 0.5rem;
+    }
+
+    /* Token details page mobile optimizations */
+    .token-details-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .price-chart-container {
+        margin: 0 -1rem;
+        border-radius: 0;
+    }
+
+    /* Trading interface mobile optimizations */
+    .trading-interface {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1a1b1f;
+        padding: 1rem;
+        border-top: 1px solid #2d3748;
+        border-radius: 1rem 1rem 0 0;
+        z-index: 40;
+    }
+
+    /* Search results mobile optimization */
+    .search-results {
+        position: fixed;
+        top: 4rem;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #1a1b1f;
+        padding: 1rem;
+        overflow-y: auto;
+        z-index: 30;
+    }
+
+    /* Modal mobile optimization */
+    .modal-content {
+        margin: 0;
+        height: 100vh;
+        width: 100vw;
+        border-radius: 0;
+        padding: 1rem;
     }
 }
