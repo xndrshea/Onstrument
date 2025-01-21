@@ -9,8 +9,8 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 interface SubscriptionTier {
     id: string;
     name: string;
-    duration: number; // in months
-    price: number; // in SOL
+    duration: number;
+    priceUSD: number;  // Price in USD
     goldenPoints: number;
     features: string[];
 }
@@ -20,41 +20,35 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         id: 'monthly',
         name: 'Monthly',
         duration: 1,
-        price: 50,
+        priceUSD: 50,  // $50
         goldenPoints: 1,
         features: [
-            'Access to all premium features',
-            'Real-time market data',
-            'Advanced trading tools',
-            '1 Golden Point',
+            'Full Platform Access',
+            '1 Golden Point'
+        ]
+    },
+    {
+        id: 'quarterly',
+        name: '3 Months',
+        duration: 3,
+        priceUSD: 150,  // $150
+        goldenPoints: 5,
+        features: [
+            'Full Platform Access',
+            '5 Golden Points',
+            'Same price, more rewards'
         ]
     },
     {
         id: 'semiannual',
         name: '6 Months',
         duration: 6,
-        price: 250, // Discounted from 300
-        goldenPoints: 10,
+        priceUSD: 300,  // $300
+        goldenPoints: 12,
         features: [
-            'Everything in Monthly',
-            '10 Golden Points',
-            'Priority support',
-            'Early access to new features',
-            '17% discount'
-        ]
-    },
-    {
-        id: 'annual',
-        name: '12 Months',
-        duration: 12,
-        price: 450, // Discounted from 600
-        goldenPoints: 25,
-        features: [
-            'Everything in 6 Months',
-            '25 Golden Points',
-            'VIP Discord access',
-            'Exclusive NFT drops',
-            '25% discount'
+            'Full Platform Access',
+            '12 Golden Points',
+            'Maximum reward rate'
         ]
     }
 ];
@@ -64,6 +58,8 @@ interface SubscribeModalProps {
     onClose: () => void;
 }
 
+const DEVNET_TREASURY_WALLET = "nmcvZkzyojoi5KNAsdGrRSgwVsNWS3voBQnEVBqBvtM";
+
 export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
     const { publicKey, sendTransaction } = useWallet();
     const { connection } = useConnection();
@@ -71,61 +67,59 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
     const [selectedTier, setSelectedTier] = React.useState<SubscriptionTier | null>(null);
     const [isProcessing, setIsProcessing] = React.useState(false);
 
-    if (!isOpen) return null;
-
     const handleSubscribe = async (tier: SubscriptionTier) => {
         if (!publicKey) {
-            // If wallet is not connected, prompt to connect
-            setVisible(true); // This will open the wallet modal
+            setVisible(true);
             return;
         }
 
         setIsProcessing(true);
 
         try {
-            // Get latest blockhash
-            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+            // Get SOL price from Jupiter
+            const response = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
+            const data = await response.json();
+            const solPriceUSD = Number(data.data.So11111111111111111111111111111111111111112.price);
 
-            // Create a new transaction
+            // Calculate SOL amount needed for the subscription
+            const solAmount = tier.priceUSD / solPriceUSD;
+            const lamports = Math.ceil(solAmount * LAMPORTS_PER_SOL);
+
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+
             const transaction = new Transaction({
                 feePayer: publicKey,
                 blockhash,
                 lastValidBlockHeight,
             });
 
-            // Convert SOL amount to lamports
-            const lamports = tier.price * LAMPORTS_PER_SOL;
-
-            // Add transfer instruction
             const transferInstruction = SystemProgram.transfer({
                 fromPubkey: publicKey,
-                toPubkey: new PublicKey('YOUR_TREASURY_WALLET_ADDRESS'),
-                lamports: lamports,
+                toPubkey: new PublicKey(DEVNET_TREASURY_WALLET),
+                lamports,
             });
 
             transaction.add(transferInstruction);
 
-            // Send transaction
             const signature = await sendTransaction(transaction, connection);
 
-            // Wait for confirmation
-            const confirmation = await connection.confirmTransaction({
-                signature,
-                blockhash,
-                lastValidBlockHeight,
-            });
-
-            if (confirmation.value.err) {
-                throw new Error('Transaction failed');
+            // Poll for confirmation
+            let done = false;
+            while (!done) {
+                const status = await connection.getSignatureStatus(signature);
+                if (status?.value?.confirmationStatus === 'confirmed') {
+                    done = true;
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
             }
 
-            // Activate subscription with specific duration
             const updatedUser = await UserService.activateSubscription({
                 walletAddress: publicKey.toString(),
                 durationMonths: tier.duration,
                 paymentTxId: signature,
                 tierType: tier.id,
-                amountPaid: tier.price,
+                amountPaid: tier.priceUSD,
                 goldenPoints: tier.goldenPoints,
             });
 
@@ -192,7 +186,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                                 <div className="text-center mb-6">
                                     <h3 className="text-2xl font-bold text-white mb-2">{tier.name}</h3>
                                     <div className="text-3xl font-bold text-purple-400 mb-2">
-                                        {tier.price} SOL
+                                        ${tier.priceUSD}
                                     </div>
                                     <div className="text-sm text-gray-400">
                                         {tier.goldenPoints} Golden Points

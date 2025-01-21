@@ -224,17 +224,31 @@ export class BondingCurve {
             const signedTx = await this.wallet.signTransaction(tx);
             signers.forEach(signer => signedTx.partialSign(signer));
 
-            const signature = await this.connection.sendRawTransaction(signedTx.serialize(), {
-                skipPreflight: false,
-                maxRetries: 3,
-                preflightCommitment: 'confirmed'
-            });
+            const signature = await this.connection.sendRawTransaction(signedTx.serialize());
 
-            await this.connection.confirmTransaction({
-                signature,
-                blockhash,
-                lastValidBlockHeight
-            });
+            // Poll for confirmation
+            let done = false;
+            let retries = 30; // 30 second timeout
+            while (!done && retries > 0) {
+                const status = await this.connection.getSignatureStatus(signature);
+                console.log('Transaction status:', status?.value?.confirmationStatus);
+
+                if (status?.value?.confirmationStatus === 'confirmed') {
+                    done = true;
+                } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    retries--;
+                } else if (!status?.value) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    retries--;
+                } else {
+                    throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
+                }
+            }
+
+            if (!done) {
+                throw new Error('Transaction confirmation timeout');
+            }
 
             return signature;
 
