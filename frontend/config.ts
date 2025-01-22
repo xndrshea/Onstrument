@@ -2,7 +2,7 @@
 
 import { Connection } from '@solana/web3.js';
 
-// TEST GITHUB ACTIONS DEPLOYMENT - FRONTEND CHANGE - TEST 3 (with OIDC)
+// TEST GITHUB ACTIONS DEPLOYMENT - FRONTEND CHANGE - TEST 4 (with correct role name)
 const isDocker = import.meta.env.VITE_DOCKER === 'true';
 const isProd = import.meta.env.PROD === true;
 
