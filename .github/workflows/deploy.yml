@@ -3,15 +3,7 @@ name: Deploy
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'docker/**'
-      - 'shared/**'
-      - '.github/workflows/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
+    # Remove paths filter temporarily for testing
 
 env:
   AWS_REGION: us-east-1
@@ -23,13 +15,17 @@ env:
 
 jobs:
   deploy-backend:
-    if: github.event.head_commit.modified[0] != '' && (contains(github.event.head_commit.modified, 'backend/') || contains(github.event.head_commit.modified, 'docker/') || contains(github.event.head_commit.modified, 'shared/') || contains(github.event.head_commit.modified, 'package.json') || contains(github.event.head_commit.modified, 'tsconfig.json'))
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
-
     steps:
+      - name: Debug Info
+        run: |
+          echo "Running backend deployment"
+          echo "Git ref: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
+
     - uses: actions/checkout@v4
 
     - name: Configure AWS credentials
@@ -70,13 +66,17 @@ jobs:
           --region $AWS_REGION
 
   deploy-frontend:
-    if: github.event.head_commit.modified[0] != '' && (contains(github.event.head_commit.modified, 'frontend/') || contains(github.event.head_commit.modified, 'shared/') || contains(github.event.head_commit.modified, 'package.json') || contains(github.event.head_commit.modified, 'tsconfig.json'))
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
-
     steps:
+      - name: Debug Info
+        run: |
+          echo "Running frontend deployment"
+          echo "Git ref: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
+
     - uses: actions/checkout@v4
 
     - name: Configure AWS credentials
