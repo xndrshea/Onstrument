@@ -1,6 +1,17 @@
 # Get the AWS Caller Identity for the account ID
 data "aws_caller_identity" "current" {}
 
+# Create the OIDC Provider
+resource "aws_iam_openid_connect_provider" "github_actions" {
+  url = "https://token.actions.githubusercontent.com"
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  thumbprint_list = [
+    "6938fd4d98bab03faadb97b34396831e3780aea1" # GitHub's OIDC thumbprint
+  ]
+}
+
 resource "aws_iam_role" "github_actions" {
   name = "${var.app_name}-${var.environment}-github-actions-role"
 
@@ -11,7 +22,7 @@ resource "aws_iam_role" "github_actions" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Effect = "Allow"
         Principal = {
-          Federated = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
+          Federated = aws_iam_openid_connect_provider.github_actions.arn
         }
         Condition = {
           StringLike = {
