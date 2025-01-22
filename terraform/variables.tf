@@ -39,3 +39,21 @@ variable "create_certificate_validation" {
   type        = bool
   default     = false # Set to false since validation is already done
 }
+
+variable "frontend_bucket" {
+  description = "Name of the S3 bucket for frontend"
+  type        = string
+  default     = "onstrument-prod-frontend"
+}
+
+variable "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID"
+  type        = string
+  default     = "E26HJ2P8HB4IIH"
+}
+
+variable "ecs_cluster" {
+  description = "Name of the ECS cluster"
+  type        = string
+  default     = "onstrument-prod-cluster"
+}

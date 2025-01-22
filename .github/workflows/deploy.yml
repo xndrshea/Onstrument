@@ -1,0 +1,115 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker/**'
+      - 'shared/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: onstrument-backend
+  ECS_CLUSTER: onstrument-prod-cluster
+  ECS_SERVICE: onstrument-prod-backend-service
+  FRONTEND_BUCKET: onstrument-prod-frontend
+  CLOUDFRONT_DISTRIBUTION: E26HJ2P8HB4IIH
+
+jobs:
+  deploy-backend:
+    if: github.event.head_commit.modified[0] != '' && (contains(github.event.head_commit.modified, 'backend/') || contains(github.event.head_commit.modified, 'docker/') || contains(github.event.head_commit.modified, 'shared/') || contains(github.event.head_commit.modified, 'package.json') || contains(github.event.head_commit.modified, 'tsconfig.json'))
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push backend image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build --platform linux/amd64 \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+          -f docker/backend/Dockerfile .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+    - name: Deploy to ECS and Monitor
+      run: |
+        aws ecs update-service \
+          --cluster $ECS_CLUSTER \
+          --service $ECS_SERVICE \
+          --force-new-deployment \
+          --no-cli-pager \
+          --region $AWS_REGION
+
+        echo "Monitoring deployment..."
+        aws ecs wait services-stable \
+          --cluster $ECS_CLUSTER \
+          --services $ECS_SERVICE \
+          --region $AWS_REGION
+
+  deploy-frontend:
+    if: github.event.head_commit.modified[0] != '' && (contains(github.event.head_commit.modified, 'frontend/') || contains(github.event.head_commit.modified, 'shared/') || contains(github.event.head_commit.modified, 'package.json') || contains(github.event.head_commit.modified, 'tsconfig.json'))
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: |
+        npm install
+        cd frontend && npm install
+
+    - name: Build Frontend
+      env:
+        VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        VITE_WS_URL: ${{ secrets.VITE_WS_URL }}
+      run: |
+        cd frontend
+        npm run build -- --mode production
+
+    - name: Deploy Frontend to S3
+      run: |
+        aws s3 sync frontend/dist/ s3://${{ env.FRONTEND_BUCKET }} --delete
+
+    - name: Invalidate CloudFront
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION }} \
+          --paths "/*"
