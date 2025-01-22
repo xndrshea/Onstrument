@@ -9,7 +9,6 @@ export class ParameterStore {
 
     private constructor() {
         const region = process.env.AWS_REGION || 'us-east-1';
-        console.log('[STARTUP] Creating SSM client with region:', region);
         this.client = new SSMClient({ region });
         this.parameterPath = process.env.PARAMETER_PATH || '/onstrument/prod/';
     }
@@ -30,7 +29,6 @@ export class ParameterStore {
         let allParameters: Parameter[] = [];
 
         do {
-            console.log(`[STARTUP] Creating GetParametersByPathCommand with path: ${this.parameterPath}`);
             const command = new GetParametersByPathCommand({
                 Path: this.parameterPath,
                 Recursive: true,
@@ -38,7 +36,6 @@ export class ParameterStore {
                 NextToken: nextToken
             });
 
-            console.log('[STARTUP] Sending command to SSM...');
             const response = await this.client.send(command);
 
             if (response.Parameters) {
@@ -52,7 +49,6 @@ export class ParameterStore {
     }
 
     private setEnvironmentVariables(parameters: Parameter[]): void {
-        console.log('[STARTUP] All parameters received. Total count:', parameters.length);
 
         if (parameters.length === 0) {
             throw new Error('No parameters found in Parameter Store');
@@ -68,9 +64,6 @@ export class ParameterStore {
     }
 
     public async initialize(): Promise<void> {
-        console.log('[STARTUP] ParameterStore initialize() called');
-        console.log('[STARTUP] Current NODE_ENV:', process.env.NODE_ENV);
-        console.log('[STARTUP] Current AWS_REGION:', process.env.AWS_REGION);
 
         try {
             if (process.env.NODE_ENV === 'development') {

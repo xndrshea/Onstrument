@@ -58,15 +58,6 @@ export class PriceHistoryModel {
                 toTimestamp
             ]);
 
-            // Debug log the raw data
-            logger.debug('Raw OHLCV data from DB:', {
-                viewName,
-                firstRow: result.rows[0],
-                types: result.rows[0] ? Object.entries(result.rows[0]).map(([key, value]) =>
-                    `${key}: ${typeof value}`
-                ) : []
-            });
-
             // Force number conversion
             const processedRows = result.rows.map(row => ({
                 time: Number(row.time),

@@ -190,7 +190,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                             // Mark this resolution as loaded
                             loadedDataRef.current[resolution] = true;
 
-                            console.log(`Historical bars for ${resolution}:`, bars);
                             onHistoryCallback(bars, { noData: bars.length === 0 });
                         } catch (error) {
                             console.error('Error loading bars:', error);
@@ -202,7 +201,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                         let currentBar: any = null;
                         let lastClose: number | null = null;
 
-                        priceClient.subscribeToPrice(
+                        const unsubscribePromise = priceClient.subscribeToPrice(
                             token.mintAddress,
                             (update: { price: number; time: number; isSell?: boolean; volume?: number }) => {
                                 const price = Number(update.price || 0);
@@ -216,13 +215,11 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                                 }
 
                                 if (!currentBar || timestamp >= currentBar.time + resolutionMs) {
-                                    // If we have a current bar, close it
                                     if (currentBar) {
                                         lastClose = currentBar.close;
                                         onRealtimeCallback({ ...currentBar, isBarClosed: true });
                                     }
 
-                                    // Start new bar
                                     currentBar = {
                                         time: barStartTime,
                                         open: lastClose || price,
@@ -233,7 +230,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                                         isBarClosed: false
                                     };
                                 } else {
-                                    // Update current bar
                                     currentBar.high = Math.max(currentBar.high, price);
                                     currentBar.low = Math.min(currentBar.low, price);
                                     currentBar.close = price;
@@ -245,7 +241,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                             network
                         );
 
-                        return () => priceClient.unsubscribeFromPrice(token.mintAddress);
+                        return () => unsubscribePromise.then(cleanup => cleanup());
                     },
                     unsubscribeBars: () => { }
                 },

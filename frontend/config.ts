@@ -5,15 +5,6 @@ import { Connection } from '@solana/web3.js';
 const isDocker = import.meta.env.VITE_DOCKER === 'true';
 const isProd = import.meta.env.PROD === true;
 
-// Debug log
-console.log('Environment Variables:', {
-    VITE_DOCKER: import.meta.env.VITE_DOCKER,
-    PROD: import.meta.env.PROD,
-    MODE: import.meta.env.MODE,
-    selectedEndpoint: isDocker && isProd ? 'docker' :
-        !isDocker && isProd ? 'production' :
-            !isDocker ? 'development' : 'docker'
-});
 
 const ENDPOINTS = {
     production: {
@@ -60,7 +51,6 @@ export const getConnection = (isDevnet: boolean = false) => {
 // Helper to determine connection type based on token
 export const getConnectionForToken = (token?: { tokenType: string }) => {
     const isDevnet = token?.tokenType === 'custom';
-    console.log('Connection details:', { isDevnet, tokenType: token?.tokenType });
     return getConnection(isDevnet);
 };
 

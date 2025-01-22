@@ -151,18 +151,11 @@ export class MetadataService {
     }
 
     private async fetchMetadata(mintAddress: string): Promise<any> {
-        // Add VERY visible debug logging
-        console.log('🔑🔑🔑 METADATA SERVICE DEBUG 🔑🔑🔑');
-        console.log('HELIUS_API_KEY:', process.env.HELIUS_API_KEY);
-        console.log('HELIUS_RPC_URL:', config.HELIUS_RPC_URL);
-        console.log('🔑🔑🔑 END DEBUG 🔑🔑🔑');
+
 
         // Ensure parameter store is initialized
         if (!parameterStore.isInitialized()) {
-            console.log('🚨🚨🚨 PARAMETER STORE NOT INITIALIZED 🚨🚨🚨');
             await parameterStore.initialize();
-            console.log('✅✅✅ PARAMETER STORE INITIALIZED ✅✅✅');
-            console.log('HELIUS_API_KEY after init:', process.env.HELIUS_API_KEY);
         }
 
         // Now use environment variables

@@ -16,13 +16,10 @@ class WebSocketClient {
 
     private connect() {
         const wsUrl = `${getBaseUrl()}/api/ws`.replace('http', 'ws').replace('https', 'wss');
-        console.log('DEBUG - Attempting WebSocket connection:', wsUrl);
-
         try {
             this.ws = new WebSocket(wsUrl);
 
             this.ws.onopen = () => {
-                console.log('DEBUG - WebSocket connected successfully');
                 const identifyMsg = { type: 'identify', clientId: this.clientId };
                 this.ws?.send(JSON.stringify(identifyMsg));
             };
@@ -39,7 +36,6 @@ class WebSocketClient {
                 console.log('DEBUG - WebSocket closed:', event.code, event.reason);
             };
 
-            console.log('DEBUG - WebSocket current state:', this.ws.readyState);
         } catch (error) {
             console.error('DEBUG - Error creating WebSocket:', error);
         }

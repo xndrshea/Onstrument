@@ -28,19 +28,26 @@ export class ApplicationServer {
 
     private verifyWebSocketClient = (info: { origin: string }, cb: (verified: boolean, code?: number, message?: string) => void) => {
         const origin = info.origin;
-        logger.info(`WebSocket connection attempt from origin: ${origin}`);
+        const isDocker = process.env.DOCKER === 'true';
 
         const allowedOrigins = [
             'http://localhost:3000',
             'http://localhost:5173',
+            'http://frontend:3000',
             'https://onstrument.com',
             'https://www.onstrument.com',
             process.env.FRONTEND_URL
         ].filter(Boolean);
 
+        if (isDocker && process.env.NODE_ENV !== 'production') {
+            logger.info('Docker development mode - accepting connection from:', origin);
+            cb(true);
+            return;
+        }
+
         if (allowedOrigins.includes(origin)) {
             cb(true);
-            logger.info('WebSocket connection accepted');
+            logger.info('WebSocket connection accepted from:', origin);
         } else {
             logger.warn(`Rejected WebSocket connection from origin: ${origin}`);
             cb(false, 403, 'Forbidden');

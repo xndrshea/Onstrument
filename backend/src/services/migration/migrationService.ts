@@ -27,14 +27,7 @@ export class MigrationService {
     constructor(wsManager: WebSocketManager) {
         this.wsManager = wsManager;
 
-        // Debug environment
-        logger.info('MigrationService initialization:', {
-            NODE_ENV: process.env.NODE_ENV,
-            hasKeypair: !!process.env.MIGRATION_ADMIN_KEYPAIR,
-            keypairLength: process.env.MIGRATION_ADMIN_KEYPAIR?.length,
-            hasKeypairPath: !!process.env.MIGRATION_ADMIN_KEYPAIR_PATH,
-            envKeys: Object.keys(process.env).filter(key => key.includes('MIGRATION'))
-        });
+
 
         if (process.env.MIGRATION_ADMIN_KEYPAIR) {
             logger.info('Found keypair in environment, attempting to parse...');
@@ -42,16 +35,12 @@ export class MigrationService {
                 const rawValue = process.env.MIGRATION_ADMIN_KEYPAIR;
                 logger.info(`Raw keypair value type: ${typeof rawValue}, length: ${rawValue.length}`);
                 const keypairData = JSON.parse(rawValue);
-                logger.info('Successfully parsed keypair data');
                 this.keypair = Keypair.fromSecretKey(new Uint8Array(keypairData));
-                logger.info('Successfully created Solana keypair');
             } catch (error) {
                 logger.error('Failed to process keypair:', error);
                 throw error;
             }
         } else if (process.env.MIGRATION_ADMIN_KEYPAIR_PATH) {
-            // Keypair from file system (development)
-            logger.info('Loading migration keypair from file');
             const keypairData = JSON.parse(fs.readFileSync(process.env.MIGRATION_ADMIN_KEYPAIR_PATH, 'utf-8'));
             this.keypair = Keypair.fromSecretKey(new Uint8Array(keypairData));
         } else {

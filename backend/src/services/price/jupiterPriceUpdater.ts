@@ -17,8 +17,8 @@ interface JupiterResponse {
 
 export class JupiterPriceUpdater {
     private static instance: JupiterPriceUpdater;
-    private readonly BATCH_SIZE = 100;
-    private readonly UPDATE_INTERVAL = 60000; // 1 minute
+    private readonly BATCH_SIZE = 50;
+    private readonly UPDATE_INTERVAL = 300000; // 5 minutes
     private readonly JUPITER_RATE_LIMIT = 600; // requests per minute
     private readonly MIN_DELAY = (60 * 1000) / this.JUPITER_RATE_LIMIT;
     private isProcessing = false;
@@ -41,24 +41,23 @@ export class JupiterPriceUpdater {
     }
 
     private async processAllTokens() {
-        if (this.isProcessing) {
-            return;
-        }
+        if (this.isProcessing) return;
 
         try {
             this.isProcessing = true;
             const tokens = await this.fetchTokensForUpdate();
-
             const tokenBatches = this.chunkArray(tokens, this.BATCH_SIZE);
 
             for (const batch of tokenBatches) {
                 try {
                     const prices = await this.fetchJupiterPrices(batch.map(t => t.mint_address));
-
                     await this.updateTokenPrices(batch, prices);
-                    await this.delay(this.MIN_DELAY);
+                    await this.delay(5000);
                 } catch (error) {
-                    logger.error('Error processing batch:', error);
+                    if (!(error instanceof Error) || !error.message.includes('429')) {
+                        logger.error('Error processing batch:', error);
+                    }
+                    await this.delay(10000);
                 }
             }
         } catch (error) {
@@ -88,7 +87,7 @@ export class JupiterPriceUpdater {
 
     private async fetchJupiterPrices(mintAddresses: string[]): Promise<JupiterResponse> {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const timeout = setTimeout(() => controller.abort(), 10000);
 
         try {
             const response = await fetch(
@@ -99,12 +98,20 @@ export class JupiterPriceUpdater {
             clearTimeout(timeout);
 
             if (!response.ok) {
+                if (response.status === 429) {
+                    // Rate limit hit - log at debug level or skip logging
+                    return { data: {}, timeTaken: 0 };
+                }
                 logger.error('Error fetching Jupiter prices:', response.statusText);
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             return await response.json();
         } catch (error) {
+            if (error instanceof Error && error.message.includes('429')) {
+                // Rate limit error - return empty response
+                return { data: {}, timeTaken: 0 };
+            }
             logger.error('Error fetching Jupiter prices:', error);
             throw error;
         }

@@ -13,8 +13,6 @@ import { HeliusManager } from './services/price/websocket/heliusManager'
 import { parameterStore } from './config/parameterStore'
 import { Express } from 'express'
 
-// Remove dotenv import and config loading
-logger.info(`Running in ${process.env.NODE_ENV || 'development'} environment`)
 
 export function createApp() {
     const app = express()
@@ -164,11 +162,9 @@ export function startBackgroundTasks(app: Express) {
     const geckoJob = app.get('geckoJob');
     const raydiumJob = app.get('raydiumJob');
     if (geckoJob) {
-        logger.info('Starting background tasks...');
         geckoJob.start();
     }
     if (raydiumJob) {
-        logger.info('Starting background tasks...');
         raydiumJob.start();
     }
 } 

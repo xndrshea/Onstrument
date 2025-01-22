@@ -22,7 +22,6 @@ pub struct CreateToken<'info> {
         payer = creator,
         mint::decimals = 6,
         mint::authority = curve,
-        mint::freeze_authority = curve,
     )]
     pub mint: Box<Account<'info, Mint>>,
 

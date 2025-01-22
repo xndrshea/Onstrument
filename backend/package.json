@@ -4,6 +4,10 @@
         "start": "node dist/index.js",
         "dev": "concurrently \"nodemon src/index.ts\" \"cd ../frontend && npm run dev\"",
         "migrate": "ts-node src/scripts/runMigration.ts",
+        "migrate:local": "ts-node src/scripts/runMigration.ts --local",
+        "migrate:timescale": "ts-node src/scripts/runMigration.ts --timescale",
+        "migrate:status:local": "ts-node src/scripts/runMigration.ts status --local",
+        "migrate:status:timescale": "ts-node src/scripts/runMigration.ts status --timescale",
         "backup": "ts-node src/scripts/backupDatabase.ts",
         "build": "tsc"
     },

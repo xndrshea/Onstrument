@@ -19,8 +19,6 @@ export function Header({ onProfileClick, onSubscribeClick }: HeaderProps) {
     const { isSubscribed, isLoading } = useSubscription();
     const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
 
-    // Add this debug log
-    console.log('Subscription state:', { connected, isLoading, isSubscribed });
 
     // Handle clicking outside of dropdown to close it
     useEffect(() => {

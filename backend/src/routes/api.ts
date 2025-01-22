@@ -53,7 +53,6 @@ router.get('/system/status', async (_req, res) => {
 // Token creation endpoint
 router.post('/tokens', async (req, res) => {
     try {
-        console.log('Received token creation request:', req.body);
 
         const {
             mintAddress,
@@ -80,20 +79,14 @@ router.post('/tokens', async (req, res) => {
             WHERE mint_address = 'So11111111111111111111111111111111111111112'
             LIMIT 1
         `);
-        console.log('SOL price query result:', solPriceResult.rows);
 
         const solanaPrice = solPriceResult.rows[0]?.current_price || 0;
-        console.log('Using SOL price:', solanaPrice);
 
         // Calculate USD values
         const initialPriceUsd = initialPrice * solanaPrice;
         const virtualSolana = 30;
         const initialMarketCapUsd = virtualSolana * solanaPrice;
 
-        console.log('Calculated values:', {
-            initialPriceUsd,
-            initialMarketCapUsd
-        });
 
         // Insert token
         const insertQuery = `
@@ -139,10 +132,8 @@ router.post('/tokens', async (req, res) => {
             initialPriceUsd
         ];
 
-        console.log('Executing insert with values:', values);
 
         const result = await pool().query(insertQuery, values);
-        console.log('Insert result:', result.rows[0]);
 
         // Record initial price
         if (initialPriceUsd && initialPriceUsd > 0) {

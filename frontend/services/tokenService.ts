@@ -70,7 +70,6 @@ export class TokenService {
                 tokenVault: token.tokenVault
             };
 
-            console.log('Token creation request data:', requestData);
 
             const response = await fetch(`${API_BASE_URL}/tokens`, {
                 method: 'POST',
@@ -81,14 +80,12 @@ export class TokenService {
             });
 
             const responseText = await response.text();
-            console.log('Raw API response:', responseText);
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}, response: ${responseText}`);
             }
 
             const data = JSON.parse(responseText);
-            console.log('Parsed API response:', data);
 
             return {
                 ...token,
@@ -107,8 +104,7 @@ export class TokenService {
 
     async getAllTokens(page = 1, limit = 50): Promise<{ tokens: TokenRecord[], pagination: any }> {
         const url = `${API_BASE_URL}/market/tokens?page=${page}&limit=${limit}`;
-        console.log('Attempting to fetch from:', url);
-        console.log('API_BASE_URL:', API_BASE_URL);
+
 
         try {
             const response = await fetch(url, {

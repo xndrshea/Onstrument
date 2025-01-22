@@ -73,7 +73,6 @@ export function TokenDetailsPage() {
 
             // Check WebSocket connection
             const isConnected = priceClient.isConnected(network);
-            console.log(`WebSocket ${network} connection status:`, isConnected);
 
             // For dex tokens and migrated custom tokens, use current_price from database
             if (token.tokenType === 'dex' || (token.tokenType === 'custom' && token.tokenSource === 'migrated')) {
@@ -132,9 +131,6 @@ export function TokenDetailsPage() {
                 // Use TokenService instead of direct fetch
                 if (!mintAddress) return;
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
-
-                // Simple full data log
-                console.log('Full Token Data:', tokenData);
 
                 setToken(tokenData);
                 setLoading(false);

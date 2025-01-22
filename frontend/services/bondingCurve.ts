@@ -58,19 +58,6 @@ export class BondingCurve {
         this.mintAddress = mintAddress;
         this.curveAddress = curveAddress;
 
-        // Before creating provider
-        console.log('Creating AnchorProvider with:', {
-            connection: {
-                endpoint: this.connection.rpcEndpoint,
-                commitment: this.connection.commitment
-            },
-            wallet: {
-                publicKey: wallet.publicKey?.toString(),
-                connected: wallet.connected,
-                hasProvider: !!wallet.signTransaction,
-                adapterName: wallet.wallet?.adapter?.name
-            }
-        });
 
         const provider = new AnchorProvider(
             this.connection,
@@ -78,12 +65,7 @@ export class BondingCurve {
             { commitment: 'confirmed' }
         );
 
-        // After creating provider
-        console.log('AnchorProvider created:', {
-            providerConnection: provider.connection.rpcEndpoint,
-            providerWallet: provider.wallet?.publicKey?.toString(),
-            providerCommitment: provider.connection.commitment
-        });
+
 
         this.program = new Program(
             idl as BondingCurveIDL,
@@ -94,10 +76,7 @@ export class BondingCurve {
 
     async createTokenWithCurve(params: createTokenParams) {
         try {
-            console.log('Creating token with connection:', {
-                endpoint: this.connection.rpcEndpoint,
-                wallet: this.wallet?.publicKey?.toString() || 'not connected'
-            });
+
 
             const mintKeypair = Keypair.generate();
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
@@ -231,7 +210,6 @@ export class BondingCurve {
             let retries = 30; // 30 second timeout
             while (!done && retries > 0) {
                 const status = await this.connection.getSignatureStatus(signature);
-                console.log('Transaction status:', status?.value?.confirmationStatus);
 
                 if (status?.value?.confirmationStatus === 'confirmed') {
                     done = true;

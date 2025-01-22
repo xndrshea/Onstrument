@@ -28,7 +28,6 @@ export function TokenList({ onCreateClick }: TokenListProps) {
             }
 
             const data = await response.json();
-            console.log('Token data received:', data.tokens[0]);
 
             setTokens(data.tokens.map((token: any) => ({
                 mintAddress: token.mintAddress,

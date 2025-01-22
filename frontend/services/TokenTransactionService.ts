@@ -25,16 +25,6 @@ export class TokenTransactionService {
         // Use the wallet's connection instead of creating a new one
         this.wallet = wallet;
         this.connection = connection;
-
-        // Log connection details for debugging
-        console.log('TokenTransactionService init:', {
-            isDevnet,
-            tokenType: token?.tokenType,
-            walletConnected: Boolean(wallet.publicKey),
-            endpoint: this.connection.rpcEndpoint,
-            commitment: this.connection.commitment
-        });
-
         this.bondingCurve = new BondingCurve(this.connection, wallet);
         this.tokenService = new TokenService();
     }
@@ -50,20 +40,12 @@ export class TokenTransactionService {
         }
     ): Promise<TokenRecord> {
         try {
-            console.log('Creating token with params:', {
-                name: params.name,
-                network: this.connection.rpcEndpoint,
-                walletPubkey: this.wallet.publicKey?.toString()
-            });
+
 
             // Create token with bonding curve
             const { mint, curve, tokenVault, signature } = await this.bondingCurve.createTokenWithCurve(params);
 
-            console.log('Token creation response:', {
-                mint: mint?.toString(),
-                curve: curve?.toString(),
-                signature
-            });
+
 
             if (!signature || !mint || !curve || !tokenVault) {
                 throw new Error('Failed to create token - missing required parameters');
@@ -73,7 +55,6 @@ export class TokenTransactionService {
             let retries = 0;
             while (retries < 30) {
                 const status = await this.connection.getSignatureStatus(signature.toString());
-                console.log('Transaction status:', status?.value);
 
                 if (status?.value?.confirmationStatus === 'processed' ||
                     status?.value?.confirmationStatus === 'confirmed' ||
@@ -115,11 +96,9 @@ export class TokenTransactionService {
                 telegramUrl: socialLinks.telegramUrl || ''
             };
 
-            console.log('Sending token record to database:', tokenRecord);
 
             // Save to database through tokenService
             const savedToken = await this.tokenService.create(tokenRecord);
-            console.log('Token saved to database:', savedToken);
 
             return savedToken;
         } catch (error: any) {
