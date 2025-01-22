@@ -2,7 +2,7 @@
 
 import { Connection } from '@solana/web3.js';
 
-// Test GitHub Actions Deployment - Frontend Change
+// TEST GITHUB ACTIONS DEPLOYMENT - FRONTEND CHANGE - TEST 2
 const isDocker = import.meta.env.VITE_DOCKER === 'true';
 const isProd = import.meta.env.PROD === true;
 
