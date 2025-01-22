@@ -26,7 +26,7 @@ resource "aws_iam_role" "github_actions" {
         }
         Condition = {
           StringLike = {
-            "token.actions.githubusercontent.com:sub" : "repo:${var.app_name}/*:*"
+            "token.actions.githubusercontent.com:sub" : "repo:xndrshea/startup:*"
           }
         }
       }
