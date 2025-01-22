@@ -8,6 +8,8 @@ import { getPool } from './config/database';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 
+// Test GitHub Actions Deployment - Backend Change
+
 async function bootstrap() {
     try {
 
@@ -45,7 +47,6 @@ async function bootstrap() {
 }
 
 // Add this to ensure bootstrap is called
-logger.info('Starting bootstrap process...');
 bootstrap().catch(error => {
     logger.error('Fatal error during bootstrap:', error);
     process.exit(1);
