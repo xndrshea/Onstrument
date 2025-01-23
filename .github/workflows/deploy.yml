@@ -26,10 +26,6 @@ jobs:
           echo "Event name: ${{ github.event_name }}"
 
       - uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          token: ${{ secrets.GITHUB_TOKEN }}
-          token: ${{ secrets.TRADINGVIEW_TOKEN }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
