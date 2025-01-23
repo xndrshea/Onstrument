@@ -34,13 +34,13 @@ export function TokenomicsRoadmap() {
                     <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-8">
                     {[
                         { text: "Onstrument Bonding Curves", status: "Completed" },
                         { text: "Solana Tokens", status: "Completed" },
                         { text: "Fully Integrated Telegram Bots" },
-                        { text: "Coming to all chains near you" },
                         { text: "Onstrument News Terminal" },
+                        { text: "Open Source" },
                         { text: "All Future Products" }
                     ].map((item, index) => (
                         <div key={typeof item === 'string' ? item : item.text} className="relative">
@@ -51,7 +51,7 @@ export function TokenomicsRoadmap() {
                                     <div className="mt-2 text-sm text-emerald-400">✓ {item.status}</div>
                                 )}
                             </div>
-                            {index < 4 && (
+                            {index < 5 && (
                                 <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-blue-500/30"></div>
                             )}
                         </div>
