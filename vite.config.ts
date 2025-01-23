@@ -26,24 +26,7 @@ export default defineConfig(() => {
             cssCodeSplit: true,
             cssMinify: true,
             sourcemap: true,
-            outDir: 'dist',
-            assetsDir: 'assets',
-            // Add this to copy the charting library files
-            copyPublicDir: true,
-            rollupOptions: {
-                input: {
-                    main: './frontend/index.html',
-                },
-                output: {
-                    assetFileNames: (assetInfo) => {
-                        // Keep charting library files in their original structure
-                        if ((assetInfo as any).fileName?.includes('charting_library')) {
-                            return '[name][extname]'
-                        }
-                        return 'assets/[name]-[hash][extname]'
-                    },
-                }
-            }
+
         },
         css: {
             postcss: {
@@ -64,7 +47,7 @@ export default defineConfig(() => {
                 }
             }
         },
-        publicDir: './frontend/public',
+        publicDir: 'public',
         base: '/'
     }
 })

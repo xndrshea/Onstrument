@@ -114,18 +114,8 @@ jobs:
 
       - name: Build Frontend
         run: |
-          cd frontend
-          echo "Contents of public directory:"
-          ls -la public/
-          echo "Contents of charting_library:"
-          ls -la public/charting_library/
-          
+          cd frontend  
           npm run build -- --mode production
-          
-          echo "Contents of dist directory:"
-          ls -la dist/
-          echo "Contents of dist/charting_library (if exists):"
-          ls -la dist/charting_library/ || true
 
       - name: Deploy Frontend to S3
         run: |
