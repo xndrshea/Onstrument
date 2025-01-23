@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { resolve } from 'path'
 
 export default defineConfig(() => {
     // Set default value if not already set
@@ -8,26 +7,18 @@ export default defineConfig(() => {
 
     const isDocker = process.env.VITE_DOCKER === 'true'
 
+    console.log('Vite Config Environment:', {
+        VITE_DOCKER: process.env.VITE_DOCKER,
+        isDocker,
+        NODE_ENV: process.env.NODE_ENV
+    })
+
     const backendUrl = isDocker ? 'http://backend:3001' : 'http://localhost:3001'
     const wsUrl = isDocker ? 'ws://backend:3001' : 'ws://localhost:3001'
 
     return {
         root: './frontend',
-        plugins: [
-            react(),
-            {
-                name: 'copy-charting-library',
-                enforce: 'post',
-                apply: 'build',
-                generateBundle() {
-                    // Copy charting library files to build output
-                    const fs = require('fs-extra')
-                    const srcDir = resolve(__dirname, 'public/charting_library')
-                    const destDir = resolve(__dirname, 'dist/charting_library')
-                    fs.copySync(srcDir, destDir)
-                }
-            }
-        ],
+        plugins: [react()],
         envDir: './',
         envPrefix: ['VITE_'],
         define: {
@@ -41,8 +32,6 @@ export default defineConfig(() => {
             cssCodeSplit: true,
             cssMinify: true,
             sourcemap: true,
-            outDir: 'dist',
-            assetsDir: 'assets'
         },
         css: {
             postcss: {
