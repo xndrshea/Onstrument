@@ -28,7 +28,8 @@ export default defineConfig(() => {
             sourcemap: true,
             outDir: 'dist',
             assetsDir: 'assets',
-            // Add this to ensure all assets are copied
+            // Add this to copy the charting library files
+            copyPublicDir: true,
             rollupOptions: {
                 input: {
                     main: './frontend/index.html',
