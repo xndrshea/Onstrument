@@ -3,6 +3,8 @@ name: Deploy
 on:
   push:
     branches: [ main ]
+    paths:
+      - '**'  # This ensures the workflow runs for any file change
 
 env:
   AWS_REGION: us-east-1
@@ -13,7 +15,43 @@ env:
   CLOUDFRONT_DISTRIBUTION: E26HJ2P8HB4IIH
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'docker/**'
+              - 'programs/**'
+              - 'shared/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'Anchor.toml'
+              - 'rust-toolchain.toml'
+            frontend:
+              - 'frontend/**'
+              - 'tsconfig.json'
+              - 'tsconfig.node.json'
+              - 'tsconfig.server.json'
+              - 'vite.config.ts'
+              - 'tailwind.config.js'
+              - 'postcss.config.js'
+              - 'package.json'
+              - 'package-lock.json'
+
   deploy-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -82,6 +120,8 @@ jobs:
             --region $AWS_REGION
 
   deploy-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write

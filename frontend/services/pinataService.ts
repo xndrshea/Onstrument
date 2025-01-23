@@ -11,7 +11,6 @@ export const pinataService = {
             body: formData,
         });
 
-        console.log('Response status:', response.status);
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Upload failed:', errorText);

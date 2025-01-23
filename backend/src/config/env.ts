@@ -30,3 +30,4 @@ export const config = {
     BONDING_CURVE_PROGRAM_ID: '6M1WSZeEAGtc8oTkdTNWruMsW58XPByzuf6ayoN16cEq',
 } as const;
 
+
