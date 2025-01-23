@@ -7,12 +7,6 @@ export default defineConfig(() => {
 
     const isDocker = process.env.VITE_DOCKER === 'true'
 
-    console.log('Vite Config Environment:', {
-        VITE_DOCKER: process.env.VITE_DOCKER,
-        isDocker,
-        NODE_ENV: process.env.NODE_ENV
-    })
-
     const backendUrl = isDocker ? 'http://backend:3001' : 'http://localhost:3001'
     const wsUrl = isDocker ? 'ws://backend:3001' : 'ws://localhost:3001'
 
@@ -32,6 +26,23 @@ export default defineConfig(() => {
             cssCodeSplit: true,
             cssMinify: true,
             sourcemap: true,
+            outDir: 'dist',
+            assetsDir: 'assets',
+            // Add this to ensure all assets are copied
+            rollupOptions: {
+                input: {
+                    main: './frontend/index.html',
+                },
+                output: {
+                    assetFileNames: (assetInfo) => {
+                        // Keep charting library files in their original structure
+                        if ((assetInfo as any).fileName?.includes('charting_library')) {
+                            return '[name][extname]'
+                        }
+                        return 'assets/[name]-[hash][extname]'
+                    },
+                }
+            }
         },
         css: {
             postcss: {
@@ -52,7 +63,7 @@ export default defineConfig(() => {
                 }
             }
         },
-        publicDir: 'public',
+        publicDir: './frontend/public',
         base: '/'
     }
 })
