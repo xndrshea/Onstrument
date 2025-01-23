@@ -2,6 +2,9 @@ import {
     Connection,
     PublicKey,
     Keypair,
+    Transaction,
+    SystemProgram,
+    SignatureStatus,
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Raydium } from '@raydium-io/raydium-sdk-v2';
@@ -15,6 +18,7 @@ import fs from 'fs';
 import { createBurnCheckedInstruction } from '@solana/spl-token';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
 import { config } from '../../config/env';
+import { RpcResponseAndContext } from '@solana/web3.js';
 
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -138,6 +142,74 @@ export class MigrationService {
                 effectivePrice: event.effectivePrice
             });
 
+            // After successful pool creation, send developer reward
+            if (developerReward > 0) {
+                try {
+                    logger.info('Sending developer reward', {
+                        developer: event.developer,
+                        amount: developerReward / LAMPORTS_PER_SOL + ' SOL',
+                        isSubscribed: event.isSubscribed
+                    });
+
+                    const transaction = await this.createRewardTransaction(
+                        new PublicKey(event.developer),
+                        developerReward
+                    );
+
+                    // Sign and send the transaction
+                    transaction.sign(this.keypair);
+                    const signature = await this.connection.sendRawTransaction(
+                        transaction.serialize()
+                    );
+
+                    // Poll for confirmation
+                    let done = false;
+                    let retries = 30;
+                    let response: RpcResponseAndContext<SignatureStatus | null> | null = null;
+
+                    while (!done && retries > 0) {
+                        response = await this.connection.getSignatureStatus(signature);
+
+                        if (response?.value?.confirmationStatus === 'confirmed') {
+                            done = true;
+                        } else if (response?.value?.confirmationStatus === 'processed' ||
+                            response?.value?.confirmationStatus === 'finalized') {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            retries--;
+                        } else if (!response?.value) {
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            retries--;
+                        } else {
+                            throw new Error(`Transaction failed with status: ${response?.value?.confirmationStatus}`);
+                        }
+                    }
+
+                    if (!done) {
+                        throw new Error('Transaction confirmation timeout');
+                    }
+
+                    if (response?.value?.err) {
+                        throw new Error(`Transaction failed: ${response.value.err}`);
+                    }
+
+                    logger.info('Developer reward sent successfully', {
+                        signature,
+                        developer: event.developer,
+                        amount: developerReward / LAMPORTS_PER_SOL + ' SOL'
+                    });
+                } catch (rewardError) {
+                    // Log the error but don't throw - pool creation was successful
+                    logger.error('Failed to send developer reward', {
+                        error: rewardError,
+                        developer: event.developer,
+                        amount: developerReward / LAMPORTS_PER_SOL + ' SOL'
+                    });
+
+                    // Store failed payment in database for retry
+                    await this.storeFailedRewardPayment(event.developer, developerReward, event.mint);
+                }
+            }
+
             // Broadcast migration event to WebSocket clients
             this.wsManager.broadcastMigration(event.mint);
 
@@ -258,5 +330,43 @@ export class MigrationService {
 
             throw error;
         }
+    }
+
+    private async createRewardTransaction(
+        developerAddress: PublicKey,
+        rewardAmount: number
+    ): Promise<Transaction> {
+        const transaction = new Transaction();
+
+        // Add SOL transfer instruction
+        transaction.add(
+            SystemProgram.transfer({
+                fromPubkey: this.keypair.publicKey,
+                toPubkey: developerAddress,
+                lamports: rewardAmount
+            })
+        );
+
+        // Get latest blockhash
+        const { blockhash } = await this.connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = this.keypair.publicKey;
+
+        return transaction;
+    }
+
+    private async storeFailedRewardPayment(
+        developer: string,
+        amount: number,
+        mint: string
+    ): Promise<void> {
+        await pool().query(
+            `
+            INSERT INTO onstrument.failed_reward_payments
+            (developer_address, amount_lamports, mint_address, created_at)
+            VALUES ($1, $2, $3, NOW())
+            `,
+            [developer, amount, mint]
+        );
     }
 }
