@@ -186,7 +186,7 @@ export class BondingCurve {
             });
 
             const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-                microLamports: 100_000
+                microLamports: 150_000
             });
 
             const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');

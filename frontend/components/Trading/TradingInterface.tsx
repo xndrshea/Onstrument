@@ -51,6 +51,13 @@ const formatSmallNumber = (num: number | null): JSX.Element | string => {
     return `${num.toFixed(4)} SOL`;
 };
 
+// Add new styled components for the terminal look
+const TerminalCard = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
+    <div className={`bg-[#1E222D] border border-gray-800 rounded-lg ${className}`}>
+        {children}
+    </div>
+);
+
 export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUpdate }: TradingInterfaceProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
@@ -437,140 +444,123 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     };
 
     return (
-        <div className="p-4 bg-[#1a1b1f] rounded-lg">
-            {!connected && (
+        <TerminalCard className="p-4">
+            {!connected ? (
                 <div className="text-center mb-4">
-                    <p className="text-gray-400 mb-2">Connect your wallet to trade</p>
+                    <WalletMultiButton className="bg-[#2C3038] hover:bg-[#363B44] text-gray-200" />
                 </div>
-            )}
-
-            {connected && (
+            ) : (
                 <>
-                    {/* Balance Information */}
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="p-4 bg-[#1e2025] rounded-lg">
-                            <p className="text-gray-400 text-[14px]">Your SOL Balance</p>
-                            <p className="text-white text-[20px]">{solBalance.toFixed(4)} SOL</p>
-                        </div>
-                        <div className="p-4 bg-[#1e2025] rounded-lg">
-                            <p className="text-gray-400 text-[14px]">Your {token.symbol} Balance</p>
-                            <p className="text-white text-[20px]">
-                                {Number(userBalance) / (10 ** token.decimals)} {token.symbol}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Current Price Display */}
-                    <div className="mb-4 p-4 bg-[#1e2025] rounded-lg">
+                    {/* Price Display - Terminal Style */}
+                    <div className="mb-4">
                         <div className="flex justify-between items-center">
-                            <span className="text-gray-400 text-[14px]">Current Token Price</span>
-                            <span className="text-white text-[20px]">
-                                {spotPrice !== null ? formatSmallNumber(spotPrice) : 'Loading...'}
-                            </span>
+                            <span className="text-[#808591] text-sm">Price (SOL)</span>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-2xl font-mono ${priceInfo?.price && priceInfo.price > (spotPrice || 0) ? 'text-green-500' : 'text-red-500'}`}>
+                                    {spotPrice ? `${spotPrice.toFixed(6)} SOL` : 'N/A'}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Buy/Sell Toggle */}
-                    <div className="flex mb-4">
+                    {/* Trading Type Selector */}
+                    <div className="grid grid-cols-2 gap-1 mb-4 bg-[#2C3038] p-1 rounded">
                         <button
-                            className={`flex-1 py-2 text-[16px] ${!isSelling ? 'bg-[#22c55e] text-white' : 'bg-white text-[#1a1b1f]'}`}
+                            className={`py-2 px-4 rounded ${!isSelling ? 'bg-[#22C55E] text-white' : 'text-gray-400 hover:text-white'}`}
                             onClick={() => setIsSelling(false)}
-                            disabled={!isTokenTradable || isLoading || isMigrating}
                         >
                             Buy
                         </button>
                         <button
-                            className={`flex-1 py-2 text-[16px] ${isSelling ? 'bg-[#ef4444] text-white' : 'bg-white text-[#1a1b1f]'}`}
+                            className={`py-2 px-4 rounded ${isSelling ? 'bg-[#EF4444] text-white' : 'text-gray-400 hover:text-white'}`}
                             onClick={() => setIsSelling(true)}
-                            disabled={!isTokenTradable || isLoading || isMigrating}
                         >
                             Sell
                         </button>
                     </div>
 
-                    {/* Amount Input */}
+                    {/* Amount Input - Terminal Style */}
                     <div className="mb-4">
-                        <label className="block text-gray-400 text-[14px] mb-2">
-                            Amount ({isSelling ? token.symbol : 'SOL'})
-                        </label>
                         <input
                             type="text"
                             value={rawInput}
                             onChange={handleInputChange}
-                            className="w-full p-3 bg-white rounded-lg text-[#1a1b1f] text-[16px]"
-                            placeholder={`Enter amount in ${isSelling ? token.symbol : 'SOL'}`}
-                            disabled={!isTokenTradable || isLoading}
+                            className="w-full p-3 bg-[#2C3038] border border-gray-700 rounded text-white font-mono"
+                            placeholder={`0.00 ${isSelling ? token.symbol : 'SOL'}`}
                         />
                     </div>
 
-                    {/* Slippage Tolerance Input */}
+                    {/* Balance Display - Terminal Style */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <span className="text-[#808591] text-sm">Available</span>
+                            <div className="font-mono text-white">
+                                {solBalance.toFixed(4)} SOL
+                            </div>
+                        </div>
+                        <div>
+                            <span className="text-[#808591] text-sm">Balance</span>
+                            <div className="font-mono text-white">
+                                {Number(userBalance) / (10 ** token.decimals)} {token.symbol}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Slippage Control - Terminal Style */}
                     <div className="mb-4">
-                        <label className="block text-gray-400 text-[14px] mb-2">
-                            Slippage Tolerance (%)
-                        </label>
-                        <input
-                            type="text"
-                            value={slippageTolerance * 100}
-                            onChange={(e) => {
-                                const value = e.target.value
-                                if (value === '') {
-                                    setSlippageTolerance(0)
-                                } else {
-                                    const parsed = parseFloat(value)
-                                    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-                                        setSlippageTolerance(parsed / 100)
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[#808591] text-sm">Slippage</span>
+                            <input
+                                type="text"
+                                value={slippageTolerance * 100}
+                                onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (!isNaN(value)) {
+                                        setSlippageTolerance(value / 100);
                                     }
-                                }
-                            }}
-                            className="w-full p-3 bg-white rounded-lg text-[#1a1b1f] text-[16px]"
-                            placeholder="Enter slippage %"
-                            disabled={!isTokenTradable || isLoading}
-                        />
+                                }}
+                                className="w-20 p-1 bg-[#2C3038] border border-gray-700 rounded text-white font-mono text-right"
+                            />
+                        </div>
                     </div>
 
-                    {/* Trade Button */}
+                    {/* Trade Button - Terminal Style */}
                     <button
-                        className={`w-full py-3 rounded-lg text-[16px] ${isLoading || !isTokenTradable
+                        onClick={handleTransaction}
+                        disabled={isLoading || !amount || !isTokenTradable}
+                        className={`w-full py-3 rounded font-semibold ${isLoading
                             ? 'bg-gray-600 cursor-not-allowed'
                             : isSelling
-                                ? 'bg-[#ef4444] hover:bg-[#dc2626] text-white'
-                                : 'bg-[#22c55e] hover:bg-[#16a34a] text-white'
-                            }`}
-                        onClick={handleTransaction}
-                        disabled={isLoading || !amount || isNaN(parseFloat(amount)) || !isTokenTradable}
+                                ? 'bg-[#EF4444] hover:bg-[#DC2626]'
+                                : 'bg-[#22C55E] hover:bg-[#16A34A]'
+                            } text-white`}
                     >
-                        {isLoading ? (
-                            <span>Processing...</span>
-                        ) : (
-                            <span>{isSelling ? `Sell ${token.symbol}` : `Buy ${token.symbol}`}</span>
-                        )}
+                        {isLoading ? 'Processing...' : `${isSelling ? 'Sell' : 'Buy'} ${token.symbol}`}
                     </button>
 
-                    {/* Price Quote Display */}
-                    {priceInfo && amount && amount.trim() !== '' && parseFloat(amount) > 0 && (
-                        <>
-                            <div className="mt-4 p-3 bg-[#1e2025] rounded-lg">
-                                <p className="text-gray-400 text-[14px]">
-                                    {isSelling ? 'You will receive' : 'You will receive'}
-                                </p>
-                                <p className="text-white text-[20px]">
+                    {/* Quote Display - Terminal Style */}
+                    {priceInfo && (
+                        <div className="mt-4 p-3 bg-[#2C3038] rounded">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-[#808591]">Expected Output</span>
+                                <span className="text-white font-mono">
                                     {isSelling
-                                        ? `${priceInfo.totalCost.toString()} SOL`
-                                        : `${priceInfo.price.toString()} ${token.symbol}`
+                                        ? `${priceInfo.totalCost.toFixed(6)} SOL`
+                                        : `${priceInfo.price.toFixed(6)} ${token.symbol}`
                                     }
-                                </p>
+                                </span>
                             </div>
-                        </>
+                        </div>
                     )}
 
-                    {/* Error Display */}
+                    {/* Error Display - Terminal Style */}
                     {error && (
-                        <div className="mt-4 p-3 bg-red-900/20 border border-red-500 text-red-400 rounded-lg text-[14px]">
+                        <div className="mt-4 p-3 bg-red-900/20 border border-red-500 text-red-400 rounded text-sm">
                             {error}
                         </div>
                     )}
                 </>
             )}
-        </div>
-    )
+        </TerminalCard>
+    );
 } 
