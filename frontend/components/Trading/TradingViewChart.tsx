@@ -36,7 +36,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
     const [denomination, setDenomination] = useState<'SOL' | 'USD' | 'MCAP'>('USD');
 
     useEffect(() => {
-        console.log('TradingView chart effect starting');
         if (!containerRef.current) {
             console.log('Container ref not ready');
             return;
@@ -54,13 +53,11 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
             })
             .catch(err => console.error('Fetch error:', err));
 
-        console.log('Creating script element');
         const script = document.createElement('script');
         const scriptPath = '/charting_library/charting_library/charting_library.standalone.js';
         script.src = scriptPath;
         script.async = true;
 
-        console.log('Setting up script with path:', scriptPath);
 
         script.onerror = (error) => {
             console.error('Script failed to load:', error);
@@ -68,7 +65,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         };
 
         script.onload = () => {
-            console.log('Script loaded successfully');
             if (!window.TradingView) return;
 
             widgetRef.current = new (window as any).TradingView.widget({
@@ -304,7 +300,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                         });
 
                         button.addEventListener("click", () => {
-                            console.log('Button clicked');
                             setDenomination(prev => {
                                 const next = prev === 'SOL' ? 'USD' :
                                     prev === 'USD' ? 'MCAP' : 'SOL';
@@ -320,7 +315,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
             });
         };
 
-        console.log('Appending script to head');
         document.head.appendChild(script);
 
         return () => {

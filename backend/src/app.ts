@@ -81,13 +81,7 @@ export function createApp() {
         crossOriginOpenerPolicy: false,
     }))
 
-    app.use(rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: process.env.NODE_ENV === 'development' ? 1000 : 100,
-        message: 'Too many requests from this IP, please try again later.'
-    }))
-
-    // CORS setup
+    // CORS setup first
     const allowedOrigins = process.env.NODE_ENV === 'production'
         ? ['https://onstrument.com', 'https://www.onstrument.com']
         : ['http://localhost:3000', 'http://localhost:5173'];
@@ -105,6 +99,13 @@ export function createApp() {
             'pinata-secret-api-key'
         ],
         optionsSuccessStatus: 200
+    }));
+
+    // Rate limiting after CORS
+    app.use(rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: process.env.NODE_ENV === 'development' ? 1000 : 100,
+        message: 'Too many requests from this IP, please try again later.'
     }));
 
     // Update the WebSocket route handling
