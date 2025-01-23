@@ -3,10 +3,6 @@ name: Deploy
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'docker/**'
 
 env:
   AWS_REGION: us-east-1
@@ -18,7 +14,6 @@ env:
 
 jobs:
   deploy-backend:
-    if: github.event.head_commit.modified[*] =~ '^(backend/|docker/)'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -87,7 +82,6 @@ jobs:
             --region $AWS_REGION
 
   deploy-frontend:
-    if: github.event.head_commit.modified[*] =~ '^frontend/'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
