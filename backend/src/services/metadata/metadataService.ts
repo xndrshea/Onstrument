@@ -70,7 +70,6 @@ export class MetadataService {
 
     private async processMetadata(mintAddress: string, source: string): Promise<void> {
         try {
-            logger.info('Fetching metadata in processMetadata:', { mintAddress, source });
             const metadata = await this.fetchMetadata(mintAddress);
 
             // Extract supply as a number instead of JSON
@@ -152,12 +151,6 @@ export class MetadataService {
     }
 
     private async fetchMetadata(mintAddress: string): Promise<any> {
-        logger.info('Fetching metadata with:', {
-            mintAddress,
-            heliusUrl: config.HELIUS_RPC_URL,
-            heliusApiKey: process.env.HELIUS_API_KEY,
-            nodeEnv: process.env.NODE_ENV
-        });
 
         // Ensure parameter store is initialized
         if (!parameterStore.isInitialized()) {
