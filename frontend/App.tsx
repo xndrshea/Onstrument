@@ -15,6 +15,8 @@ import { User } from './services/userService'
 import { ProfileModal } from './components/Profile/ProfileModal'
 import { ProfilePage } from './components/pages/ProfilePage'
 import { SubscribeModal } from './components/Subscription/SubscribeModal'
+import { PrivacyPolicy } from './components/pages/PrivacyPolicy'
+import { TermsOfService } from './components/pages/TermsOfService'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -76,6 +78,8 @@ function App() {
                         <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
                         <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
                         <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                        <Route path="/terms-of-service" element={<TermsOfService />} />
                     </Routes>
                 </main>
 
