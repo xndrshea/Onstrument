@@ -121,6 +121,10 @@ jobs:
           cd frontend
           npm install
           
+          # Create necessary directories first
+          mkdir -p target/idl
+          mkdir -p target/types
+          
           # Copy necessary files into frontend directory
           cp -r ../target/idl/ ./target/idl/
           cp -r ../target/types/ ./target/types/
