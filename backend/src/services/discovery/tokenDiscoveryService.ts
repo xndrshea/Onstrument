@@ -188,17 +188,33 @@ export class TokenDiscoveryService {
 
     private async processPools(raydiumPools: RaydiumPool[], geckoTerminalPools: any[]): Promise<void> {
         const client = await pool().connect();
+        const BATCH_SIZE = 20;
 
         try {
             await client.query('BEGIN');
 
+            // Collect all unique token addresses
+            const tokenAddresses = new Set<string>();
+            raydiumPools.forEach(pool => {
+                tokenAddresses.add(pool.mintA.address);
+                tokenAddresses.add(pool.mintB.address);
+            });
+
+            // Process metadata in batches
+            const addressArray = Array.from(tokenAddresses);
+            const batches: string[][] = [];
+
+            for (let i = 0; i < addressArray.length; i += BATCH_SIZE) {
+                batches.push(addressArray.slice(i, i + BATCH_SIZE));
+            }
+
+            // Process each batch
+            for (const batch of batches) {
+                await this.metadataService.queueMetadataUpdate(batch, 'raydium');
+            }
+
+            // Update pool statistics
             for (const rPool of raydiumPools) {
-
-                // Queue metadata fetching for new tokens
-                await this.ensureTokenMetadata(rPool.mintA.address);
-                await this.ensureTokenMetadata(rPool.mintB.address);
-
-                // Update pool statistics
                 await this.updatePoolStats(client, rPool);
             }
 
@@ -234,7 +250,7 @@ export class TokenDiscoveryService {
             );
 
             if (result.rows[0].metadata_status !== 'fetched') {
-                await this.metadataService.queueMetadataUpdate(mintAddress, 'discovery_service');
+                await this.metadataService.queueMetadataUpdate([mintAddress], 'discovery_service');
             }
         } catch (error) {
             logger.error('TokenDiscoveryService: Error ensuring token metadata:', {

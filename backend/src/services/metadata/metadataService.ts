@@ -34,44 +34,40 @@ export class MetadataService {
         );
 
         // Queue update if not already processing
-        this.queueMetadataUpdate(mintAddress);
+        this.queueMetadataUpdate([mintAddress]);
 
         return result.rows[0] || null;
     }
 
-    async queueMetadataUpdate(mintAddress: string, source: string = 'unknown'): Promise<void> {
-        if (this.processingQueue.has(mintAddress)) return;
+    async queueMetadataUpdate(mintAddresses: string[], source: string = 'unknown'): Promise<void> {
+        // Process in batches of 20
+        const BATCH_SIZE = 20;
+        const batches: string[][] = [];
 
-        try {
-            this.processingQueue.add(mintAddress);
+        for (let i = 0; i < mintAddresses.length; i += BATCH_SIZE) {
+            batches.push(mintAddresses.slice(i, i + BATCH_SIZE));
+        }
 
-            // Check if token exists
-            const result = await pool().query(
-                'SELECT mint_address FROM onstrument.tokens WHERE mint_address = $1',
-                [mintAddress]
-            );
+        for (const batch of batches) {
+            try {
+                const metadataResults = await this.fetchMetadataBatch(batch);
 
-            // If token doesn't exist, create it with token_type 'dex'
-            if (result.rows.length === 0) {
-                await pool().query(
-                    `INSERT INTO onstrument.tokens 
-                    (mint_address, metadata_status, created_at, last_metadata_fetch, token_type) 
-                    VALUES ($1, 'pending', NOW(), NOW(), 'dex')`,
-                    [mintAddress]
-                );
+                // Process each result in the batch
+                for (const [mintAddress, metadata] of metadataResults.entries()) {
+                    await this.processMetadata(mintAddress, metadata, source);
+                }
+            } catch (error) {
+                logger.error('Error processing metadata batch:', {
+                    error,
+                    batchSize: batch.length,
+                    addresses: batch
+                });
             }
-
-            // Process metadata
-            await this.processMetadata(mintAddress, source);
-        } finally {
-            this.processingQueue.delete(mintAddress);
         }
     }
 
-    private async processMetadata(mintAddress: string, source: string): Promise<void> {
+    private async processMetadata(mintAddress: string, metadata: any, source: string): Promise<void> {
         try {
-            const metadata = await this.fetchMetadata(mintAddress);
-
             // Extract supply as a number instead of JSON
             const supply = typeof metadata.supply === 'number' ? metadata.supply : null;
 
@@ -150,69 +146,97 @@ export class MetadataService {
         }
     }
 
-    private async fetchMetadata(mintAddress: string): Promise<any> {
+    private async fetchMetadataBatch(mintAddresses: string[]): Promise<Map<string, any>> {
+        const maxRetries = 3;
+        const baseDelay = 1000;
+        const results = new Map<string, any>();
 
-        // Ensure parameter store is initialized
-        if (!parameterStore.isInitialized()) {
-            await parameterStore.initialize();
-        }
-
-        // Now use environment variables
-        const apiKey = process.env.HELIUS_API_KEY;
-        if (!apiKey) {
-            throw new Error('HELIUS_API_KEY not found in environment');
-        }
-
-        const response = await fetch(config.HELIUS_RPC_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 'metadata',
-                method: 'getAsset',
-                params: {
-                    id: mintAddress,
-                    displayOptions: {
-                        showFungible: true
-                    }
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                if (!parameterStore.isInitialized()) {
+                    await parameterStore.initialize();
                 }
-            }),
-        });
 
-        const data = await response.json();
+                const response = await fetch(config.HELIUS_RPC_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: 'metadata-batch',
+                        method: 'getAssetBatch',
+                        params: {
+                            ids: mintAddresses
+                        }
+                    }),
+                });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
 
-        const { result } = data;
+                const data = await response.json();
 
-        // Get total supply based on token type
-        const totalSupply = result.interface === 'V1_NFT'
-            ? result.supply?.print_current_supply
-            : result.token_info?.supply;
+                if (data.error) {
+                    throw new Error(`API error: ${JSON.stringify(data.error)}`);
+                }
 
-        // Transform Helius response to our schema
-        const transformed = {
-            name: result.content?.metadata?.name,
-            symbol: result.content?.metadata?.symbol,
-            description: result.content?.metadata?.description,
-            metadata_url: result.content?.json_uri,
-            interface: result.interface,
-            content: result.content,
-            authorities: result.authorities,
-            compression: result.compression,
-            grouping: result.grouping,
-            royalty: result.royalty,
-            creators: result.creators,
-            ownership: result.ownership,
-            supply: totalSupply,
-            decimals: result.token_info?.decimals,
-            mutable: result.mutable,
-            burnt: result.burnt,
-            token_info: result.token_info,
-            verified: false,
-            image_url: result.content?.files?.[0]?.uri || null,
-            attributes: result.content?.attributes
-        };
+                // Process each asset in the batch
+                for (const asset of data.result) {
+                    const totalSupply = asset.interface === 'V1_NFT'
+                        ? asset.supply?.print_current_supply
+                        : asset.token_info?.supply;
 
-        return transformed;
+                    results.set(asset.id, {
+                        name: asset.content?.metadata?.name,
+                        symbol: asset.content?.metadata?.symbol,
+                        description: asset.content?.metadata?.description,
+                        metadata_url: asset.content?.json_uri,
+                        interface: asset.interface || 'unknown',
+                        content: asset.content,
+                        authorities: asset.authorities,
+                        compression: asset.compression,
+                        grouping: asset.grouping,
+                        royalty: asset.royalty,
+                        creators: asset.creators,
+                        ownership: asset.ownership,
+                        supply: totalSupply,
+                        decimals: asset.token_info?.decimals,
+                        mutable: asset.mutable ?? false,
+                        burnt: asset.burnt ?? false,
+                        token_info: asset.token_info,
+                        verified: false,
+                        image_url: asset.content?.files?.[0]?.uri || null,
+                        attributes: asset.content?.attributes
+                    });
+                }
+
+                return results;
+
+            } catch (error) {
+                logger.warn(`Batch attempt ${attempt + 1}/${maxRetries} failed:`, {
+                    error,
+                    mintAddresses: mintAddresses.length
+                });
+
+                if (attempt === maxRetries - 1) {
+                    // On final attempt, return default values for all addresses
+                    mintAddresses.forEach(address => {
+                        results.set(address, {
+                            name: null,
+                            symbol: null,
+                            description: null,
+                            metadata_url: null,
+                            interface: 'unknown',
+                            // ... other default values ...
+                        });
+                    });
+                    return results;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, attempt)));
+            }
+        }
+
+        return results;
     }
 } 
