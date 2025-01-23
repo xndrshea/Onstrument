@@ -3,7 +3,6 @@ import { Router } from 'express';
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
 import { HeliusManager } from '../services/price/websocket/heliusManager';
-import rateLimit from 'express-rate-limit';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
 import { RaydiumProcessor } from '../services/price/processors/raydiumProcessor';
 import { BondingCurveProcessor } from '../services/price/processors/bondingCurveProcessor';
@@ -23,14 +22,6 @@ const getHeliusManager = () => {
     }
     return heliusManagerInstance;
 };
-
-const limiter = rateLimit({
-    windowMs: 1 * 60 * 1000,  // 1 minute window
-    max: 300,                  // 300 requests per minute
-    message: 'Too many requests from this IP, please try again later.'
-});
-
-router.use(limiter);
 
 // System status monitoring endpoint
 router.get('/system/status', async (_req, res) => {

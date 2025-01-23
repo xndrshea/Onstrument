@@ -103,8 +103,10 @@ export function createApp() {
 
     // Rate limiting after CORS
     app.use(rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: process.env.NODE_ENV === 'development' ? 1000 : 100,
+        windowMs: 1 * 60 * 1000,    // 1 minute window (more appropriate for trading)
+        max: process.env.NODE_ENV === 'development'
+            ? 1000                   // dev: 1000 requests per minute
+            : 600,                   // prod: 300 requests per minute (5 per second)
         message: 'Too many requests from this IP, please try again later.'
     }));
 
