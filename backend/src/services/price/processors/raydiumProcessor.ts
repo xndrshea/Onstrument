@@ -232,10 +232,7 @@ export class RaydiumProcessor extends BaseProcessor {
             );
 
             if (result.rows[0]?.metadata_status === 'pending') {
-                await MetadataService.getInstance().queueMetadataUpdate(
-                    mintAddress,
-                    'raydium_processor'
-                );
+                await MetadataService.getInstance().queueMetadataUpdate([mintAddress], 'raydium');
             }
 
             return true;
