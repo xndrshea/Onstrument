@@ -36,14 +36,31 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
     const [denomination, setDenomination] = useState<'SOL' | 'USD' | 'MCAP'>('USD');
 
     useEffect(() => {
-        if (!containerRef.current) return;
-        if (widgetRef.current) return; // Only create widget once
+        console.log('TradingView chart effect starting');
+        if (!containerRef.current) {
+            console.log('Container ref not ready');
+            return;
+        }
+        if (widgetRef.current) {
+            console.log('Widget already exists');
+            return;
+        }
 
+        console.log('Creating script element');
         const script = document.createElement('script');
-        script.src = '/charting_library/charting_library/charting_library.js';
+        const scriptPath = '/charting_library/charting_library/charting_library.js';
+        script.src = scriptPath;
         script.async = true;
 
+        console.log('Setting up script with path:', scriptPath);
+
+        script.onerror = (error) => {
+            console.error('Script failed to load:', error);
+            console.log('Document head children:', document.head.children);
+        };
+
         script.onload = () => {
+            console.log('Script loaded successfully');
             if (!window.TradingView) return;
 
             widgetRef.current = new (window as any).TradingView.widget({
@@ -294,13 +311,16 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
             });
         };
 
+        console.log('Appending script to head');
         document.head.appendChild(script);
+
         return () => {
+            console.log('Cleanup running');
             if (script.parentNode) {
                 script.parentNode.removeChild(script);
             }
         };
-    }, []); // Empty dependency array - only run once
+    }, []);
 
     // Handle denomination changes without recreating widget
     useEffect(() => {
