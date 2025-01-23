@@ -17,10 +17,11 @@ interface JupiterResponse {
 
 export class JupiterPriceUpdater {
     private static instance: JupiterPriceUpdater;
-    private readonly BATCH_SIZE = 50;
+    private readonly BATCH_SIZE = 100;
     private readonly UPDATE_INTERVAL = 300000; // 5 minutes
     private readonly JUPITER_RATE_LIMIT = 600; // requests per minute
-    private readonly MIN_DELAY = (60 * 1000) / this.JUPITER_RATE_LIMIT;
+    private readonly MIN_DELAY = (60 * 1000) / this.JUPITER_RATE_LIMIT; // minimum ms between requests
+    private lastRequestTime = Date.now();
     private isProcessing = false;
     private updateTimer: NodeJS.Timeout | null = null;
 
@@ -86,6 +87,13 @@ export class JupiterPriceUpdater {
     }
 
     private async fetchJupiterPrices(mintAddresses: string[]): Promise<JupiterResponse> {
+        // Enforce rate limit
+        const now = Date.now();
+        const elapsed = now - this.lastRequestTime;
+        if (elapsed < this.MIN_DELAY) {
+            await new Promise(resolve => setTimeout(resolve, this.MIN_DELAY - elapsed));
+        }
+
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -94,6 +102,7 @@ export class JupiterPriceUpdater {
                 `https://api.jup.ag/price/v2?ids=${mintAddresses.join(',')}`,
                 { signal: controller.signal }
             );
+            this.lastRequestTime = Date.now();
 
             clearTimeout(timeout);
 

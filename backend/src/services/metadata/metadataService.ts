@@ -214,11 +214,20 @@ export class MetadataService {
 
             } catch (error) {
                 logger.warn(`Batch attempt ${attempt + 1}/${maxRetries} failed:`, {
-                    error,
-                    mintAddresses: mintAddresses.length
+                    error: error instanceof Error ? {
+                        message: error.message,
+                        stack: error.stack,
+                        name: error.name
+                    } : error,
+                    mintAddresses: mintAddresses.length,
+                    mintAddressList: mintAddresses
                 });
 
                 if (attempt === maxRetries - 1) {
+                    logger.error('All retry attempts failed for batch:', {
+                        addresses: mintAddresses,
+                        finalError: error instanceof Error ? error.message : error
+                    });
                     // On final attempt, return default values for all addresses
                     mintAddresses.forEach(address => {
                         results.set(address, {
