@@ -56,7 +56,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
 
         console.log('Creating script element');
         const script = document.createElement('script');
-        const scriptPath = '/charting_library/charting_library/charting_library.js';
+        const scriptPath = '/charting_library/charting_library/charting_library.standalone.js';
         script.src = scriptPath;
         script.async = true;
 
