@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
 export default defineConfig(() => {
     // Set default value if not already set
@@ -12,7 +13,21 @@ export default defineConfig(() => {
 
     return {
         root: './frontend',
-        plugins: [react()],
+        plugins: [
+            react(),
+            {
+                name: 'copy-charting-library',
+                enforce: 'post',
+                apply: 'build',
+                generateBundle() {
+                    // Copy charting library files to build output
+                    const fs = require('fs-extra')
+                    const srcDir = resolve(__dirname, 'public/charting_library')
+                    const destDir = resolve(__dirname, 'dist/charting_library')
+                    fs.copySync(srcDir, destDir)
+                }
+            }
+        ],
         envDir: './',
         envPrefix: ['VITE_'],
         define: {
@@ -26,7 +41,8 @@ export default defineConfig(() => {
             cssCodeSplit: true,
             cssMinify: true,
             sourcemap: true,
-
+            outDir: 'dist',
+            assetsDir: 'assets'
         },
         css: {
             postcss: {
