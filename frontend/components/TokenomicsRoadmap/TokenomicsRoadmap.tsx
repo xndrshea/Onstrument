@@ -8,42 +8,56 @@ export function TokenomicsRoadmap() {
             <div className="relative mx-auto max-w-4xl mb-16">
                 <div className="absolute inset-0 bg-gradient-radial from-blue-500/20 via-violet-500/5 to-transparent blur-xl"></div>
                 <div className="relative bg-black/40 backdrop-blur-md p-10 rounded-2xl border border-blue-500/30 hover:border-violet-500/50 transition-all duration-500 shadow-2xl shadow-blue-500/10">
-                    <div className="flex flex-col items-center text-center mb-6">
+                    <div className="flex flex-col items-center justify-center text-center mb-6">
                         <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-500 mb-2">
                             100% Fee Distribution
                         </h2>
                         <div className="h-1 w-24 bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
                     </div>
 
-                    <p className="text-xl text-gray-200 leading-relaxed mb-6">
-                        Every two weeks, we airdrop <span className="text-blue-400 font-bold animate-pulse">100% of all fees</span> directly to subscribers.
+                    <p className="text-xl text-gray-200 leading-relaxed mb-6 text-center">
+                        Onstrument airdrops <span className="text-blue-400 font-bold animate-pulse">100% of all transaction fees</span> biweekly from free users directly to subscribers.
                     </p>
-
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
-                        {[
-                            "Onstrument Bonding Curves",
-                            "Solana Tokens",
-                            "Telegram Bots",
-                            "Onstrument News Terminal",
-                            "All Future Products"
-                        ].map((source) => (
-                            <div key={source} className="bg-blue-500/5 rounded-lg p-4 border border-blue-500/20 hover:border-violet-500/40 hover:bg-violet-500/10 transition-all duration-300">
-                                <span className="text-gray-200">{source}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="mt-8 flex justify-center">
-                        <div className="inline-flex items-center bg-blue-500/10 rounded-full px-6 py-3 border border-blue-500/30">
-                            <span className="text-gray-200">Regardless of the chain or the product, ALL fees → Subscribers</span>
-                        </div>
-                    </div>
                 </div>
             </div>
 
             <p className="text-lg text-gray-300 leading-relaxed mb-16 italic text-center max-w-3xl mx-auto">
                 This is a first of its kind tokenomics experiment, moving from transaction fees to a subscription model. We will keep building all of your favorite features and products to maximize your subscription.
             </p>
+
+            {/* New Roadmap Section */}
+            <div className="roadmap-section mb-16">
+                <div className="text-center mb-8">
+                    <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-500 mb-2">
+                        Product Roadmap
+                    </h2>
+                    <div className="h-1 w-24 mx-auto bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+                    {[
+                        { text: "Onstrument Bonding Curves", status: "Completed" },
+                        { text: "Solana Tokens", status: "Completed" },
+                        { text: "Fully Integrated Telegram Bots" },
+                        { text: "Coming to all chains near you" },
+                        { text: "Onstrument News Terminal" },
+                        { text: "All Future Products" }
+                    ].map((item, index) => (
+                        <div key={typeof item === 'string' ? item : item.text} className="relative">
+                            <div className="bg-blue-500/5 rounded-lg p-6 border border-blue-500/20 hover:border-violet-500/40 hover:bg-violet-500/10 transition-all duration-300 h-full">
+                                <div className="text-blue-400 font-bold mb-2">Phase {index + 1}</div>
+                                <span className="text-gray-200">{typeof item === 'string' ? item : item.text}</span>
+                                {item.status && (
+                                    <div className="mt-2 text-sm text-emerald-400">✓ {item.status}</div>
+                                )}
+                            </div>
+                            {index < 4 && (
+                                <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-blue-500/30"></div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
 
             <div className="comparison-container grid grid-cols-3 gap-4 mb-8">
                 {/* Header */}
