@@ -158,7 +158,12 @@ export function TokenDetailsPage() {
                     sortDirection: sortDirection
                 });
 
-                const response = await fetch(`/api/market/tokens?${params}`);
+                // If we're on a custom token page, use /api/tokens without tokenType filter
+                const endpoint = (token?.tokenType === 'custom' || tokenType === 'custom')
+                    ? `/api/tokens`  // For custom tokens, show all custom tokens
+                    : `/api/market/tokens?${params}`; // For dex tokens, use normal filtering
+
+                const response = await fetch(endpoint);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -171,7 +176,7 @@ export function TokenDetailsPage() {
             }
         };
         fetchTopTokens();
-    }, [sortField, sortDirection]);
+    }, [sortField, sortDirection, token?.tokenType, tokenType]);
 
     // Update the sorting function
     const sortTokens = (tokens: TokenRecord[]) => {

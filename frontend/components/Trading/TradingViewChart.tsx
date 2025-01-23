@@ -48,8 +48,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         // Add this debug fetch
         fetch('/charting_library/charting_library/charting_library.js')
             .then(r => r.text())
-            .then(text => {
-                console.log('Fetched content starts with:', text.substring(0, 100));
+            .then(() => {
             })
             .catch(err => console.error('Fetch error:', err));
 
@@ -318,7 +317,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         document.head.appendChild(script);
 
         return () => {
-            console.log('Cleanup running');
             if (script.parentNode) {
                 script.parentNode.removeChild(script);
             }

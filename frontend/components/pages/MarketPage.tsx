@@ -14,7 +14,7 @@ export function MarketPage() {
     const [currentPage, setCurrentPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [sortBy, setSortBy] = useState<string>('volume24h')
-    const TOKENS_PER_PAGE = 10
+    const TOKENS_PER_PAGE = 50
 
     const fetchTokens = async () => {
         try {
