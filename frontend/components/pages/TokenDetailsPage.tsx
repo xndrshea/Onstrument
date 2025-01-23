@@ -364,12 +364,12 @@ export function TokenDetailsPage() {
                         <div className="bg-[#1E222D] border border-gray-800 rounded-lg p-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <MetricsCard
-                                    title="Market Cap (SOL)"
-                                    value={token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
+                                    title="Market Cap (USD)"
+                                    value={token.marketCapUsd ? `$${formatMarketCap(token.marketCapUsd)}` : 'N/A'}
                                 />
                                 <MetricsCard
-                                    title="Price (SOL)"
-                                    value={currentPrice ? currentPrice.toFixed(6) : 'N/A'}
+                                    title="Price (USD)"
+                                    value={currentPrice ? `$${currentPrice.toFixed(6)}` : 'N/A'}
                                     change={token.priceChange24h}
                                 />
                             </div>
