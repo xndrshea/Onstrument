@@ -20,7 +20,6 @@ export class TokenTransactionService {
         connection: Connection,
         token?: { tokenType: string }
     ) {
-        const isDevnet = token?.tokenType === 'custom';
 
         // Use the wallet's connection instead of creating a new one
         this.wallet = wallet;

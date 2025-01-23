@@ -8,11 +8,14 @@ skip-lint = false
 [programs.devnet]
 bonding_curve = "6M1WSZeEAGtc8oTkdTNWruMsW58XPByzuf6ayoN16cEq"
 
+[programs.mainnet]
+bonding_curve = "6M1WSZeEAGtc8oTkdTNWruMsW58XPByzuf6ayoN16cEq"
+
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Devnet"
+cluster = "mainnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

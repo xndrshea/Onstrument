@@ -59,18 +59,15 @@ export class HeliusManager extends EventEmitter {
     }
 
     private async connect(): Promise<void> {
-        // Connect to mainnet for Raydium
-        // this.wsClientMainnet = new WebSocket(config.HELIUS_MAINNET_WEBSOCKET_URL);
-        // this.setupWebSocketHandlers(this.wsClientMainnet, 'mainnet');
+        const isProd = process.env.NODE_ENV === 'production';
 
-        // Connect to devnet for custom tokens
-        this.wsClientDevnet = new WebSocket(config.HELIUS_DEVNET_WEBSOCKET_URL);
-        this.setupWebSocketHandlers(this.wsClientDevnet, 'devnet');
+        // Production uses mainnet, development uses devnet
+        const wsClient = isProd
+            ? new WebSocket(config.HELIUS_MAINNET_WEBSOCKET_URL)
+            : new WebSocket(config.HELIUS_DEVNET_WEBSOCKET_URL);
 
-        // Update subscriptions to only include bonding curve
-        await this.subscribeToPrograms(this.wsClientDevnet, [config.BONDING_CURVE_PROGRAM_ID]);
-        // Comment out Raydium subscription
-        // await this.subscribeToPrograms(this.wsClientMainnet, config.RAYDIUM_PROGRAMS),
+        this.setupWebSocketHandlers(wsClient, isProd ? 'mainnet' : 'devnet');
+        await this.subscribeToPrograms(wsClient, [config.BONDING_CURVE_PROGRAM_ID]);
     }
 
     private setupWebSocketHandlers(wsClient: WebSocket | null, network: string): void {

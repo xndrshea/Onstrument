@@ -223,7 +223,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                         if (onPriceUpdate) onPriceUpdate(update.price);
                     }
                 },
-                'devnet'
+                import.meta.env.PROD ? 'mainnet' : 'devnet'
             ).then(cleanup => {
                 cleanupFn = cleanup;
             });
@@ -441,7 +441,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             {!connected && (
                 <div className="text-center mb-4">
                     <p className="text-gray-400 mb-2">Connect your wallet to trade</p>
-                    <WalletMultiButton />
                 </div>
             )}
 

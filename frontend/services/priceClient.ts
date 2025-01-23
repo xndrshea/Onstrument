@@ -51,7 +51,7 @@ class WebSocketClient {
     async subscribeToPrice(
         mintAddress: string,
         callback: (update: { price: number; time: number }) => void,
-        network: 'mainnet' | 'devnet' = 'devnet'
+        network: 'mainnet' | 'devnet' = import.meta.env.PROD ? 'mainnet' : 'devnet'
     ): Promise<() => void> {
         if (!this.subscribers.has(mintAddress)) {
             this.subscribers.set(mintAddress, new Set());
@@ -114,7 +114,7 @@ export const priceClient = {
     subscribeToPrice: (
         mintAddress: string,
         callback: (update: { price: number; time: number }) => void,
-        network: 'mainnet' | 'devnet' = 'devnet'
+        network: 'mainnet' | 'devnet' = import.meta.env.PROD ? 'mainnet' : 'devnet'
     ) => WebSocketClient.getInstance().subscribeToPrice(mintAddress, callback, network),
 
     isConnected: (network: 'mainnet' | 'devnet') =>

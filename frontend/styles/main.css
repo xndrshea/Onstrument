@@ -754,3 +754,8 @@ button[type="submit"]:disabled {
     right: 16px !important;
     z-index: 9999 !important;
 }
+
+/* Hide the default Select Wallet button */
+.wallet-adapter-button[data-testid="wallet-adapter-button-trigger"] {
+    display: none !important;
+}

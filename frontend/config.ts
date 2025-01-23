@@ -11,7 +11,6 @@ const ENDPOINTS = {
     production: {
         base: 'https://api.onstrument.com',
         mainnet: '/api/helius/rpc',
-        devnet: '/api/helius/devnet/rpc',
         ws: '/api/ws'
     },
     docker: {
@@ -38,7 +37,12 @@ export const getEnvironment = () => {
 // Remove the direct endpoints and update the connection functions
 export const getConnection = (isDevnet: boolean = false) => {
     const env = getEnvironment();
-    const endpoint = isDevnet
+
+    if (isDevnet && isProd) {
+        throw new Error('Devnet connections are not available in production');
+    }
+
+    const endpoint = isDevnet && 'devnet' in env
         ? `${env.base}${env.devnet}`
         : `${env.base}${env.mainnet}`;
 

@@ -237,7 +237,7 @@ export class TokenDiscoveryService {
                 await this.metadataService.queueMetadataUpdate(mintAddress, 'discovery_service');
             }
         } catch (error) {
-            this.logger.error(`Error ensuring token metadata: ${(error as Error).message}`, {
+            logger.error('TokenDiscoveryService: Error ensuring token metadata:', {
                 mintAddress,
                 error: error as Error
             });

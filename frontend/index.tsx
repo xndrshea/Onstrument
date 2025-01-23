@@ -18,7 +18,11 @@ const wallets = [
 const root = document.getElementById('root')
 if (!root) throw new Error('Root element not found')
 
-const connection = getConnection(true) // true for devnet connection
+const connection = getConnection(import.meta.env.PROD ? false : true) // Only use devnet in development
+console.log('Using connection:', {
+    endpoint: connection.rpcEndpoint,
+    isDevnet: connection.rpcEndpoint.includes('devnet')
+});
 
 // Add before React rendering
 generateFavicon();

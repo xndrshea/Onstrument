@@ -14,6 +14,7 @@ import { logger } from '../../utils/logger';
 import fs from 'fs';
 import { createBurnCheckedInstruction } from '@solana/spl-token';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
+import { config } from '../../config/env';
 
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -27,7 +28,11 @@ export class MigrationService {
     constructor(wsManager: WebSocketManager) {
         this.wsManager = wsManager;
 
-
+        const network = process.env.NODE_ENV === 'production' ? 'mainnet' : 'devnet';
+        const endpoint = network === 'mainnet'
+            ? config.HELIUS_RPC_URL
+            : config.HELIUS_DEVNET_RPC_URL;
+        this.connection = new Connection(endpoint);
 
         if (process.env.MIGRATION_ADMIN_KEYPAIR) {
             logger.info('Found keypair in environment, attempting to parse...');
@@ -46,8 +51,6 @@ export class MigrationService {
         } else {
             throw new Error('No migration keypair available - need either MIGRATION_ADMIN_KEYPAIR or MIGRATION_ADMIN_KEYPAIR_PATH');
         }
-
-        this.connection = new Connection('https://api.devnet.solana.com');
     }
 
     async handleMigrationEvent(event: {

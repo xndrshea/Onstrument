@@ -35,7 +35,8 @@ export class BondingCurvePriceFetcher {
     private readonly PROCESS_INTERVAL = 5000; // 5 seconds
 
     private constructor() {
-        this.connection = new Connection(config.HELIUS_DEVNET_RPC_URL);
+        const isProd = process.env.NODE_ENV === 'production';
+        this.connection = new Connection(isProd ? config.HELIUS_RPC_URL : config.HELIUS_DEVNET_RPC_URL);
         setInterval(() => this.checkAndProcessBatch(), 1000);
     }
 

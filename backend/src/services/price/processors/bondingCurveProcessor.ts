@@ -29,13 +29,17 @@ export class BondingCurveProcessor extends BaseProcessor {
 
     constructor() {
         super();
-        this.connection = new Connection(config.HELIUS_DEVNET_RPC_URL);
+        const isProd = process.env.NODE_ENV === 'production';
+        this.connection = new Connection(isProd ? config.HELIUS_RPC_URL : config.HELIUS_DEVNET_RPC_URL);
         this.migrationService = new MigrationService(wsManager);
         this.connectWebSocket();
     }
 
     private connectWebSocket() {
-        this.wsClient = new WebSocket(config.HELIUS_DEVNET_WEBSOCKET_URL);
+        const isProd = process.env.NODE_ENV === 'production';
+        this.wsClient = new WebSocket(
+            isProd ? config.HELIUS_MAINNET_WEBSOCKET_URL : config.HELIUS_DEVNET_WEBSOCKET_URL
+        );
 
         this.wsClient.on('open', () => {
             this.subscribe();
