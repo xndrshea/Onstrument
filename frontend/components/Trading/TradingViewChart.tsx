@@ -282,37 +282,38 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
 
             widgetRef.current.onChartReady(() => {
                 try {
-                    const button = widgetRef.current.createButton();
+                    // Wait for header to be ready before creating button
+                    widgetRef.current.headerReady().then(() => {
+                        const button = widgetRef.current.createButton();
 
-                    // Match TradingView's button styling
-                    button.textContent = denomination;
-                    button.style.color = "#d1d4dc";  // Match other buttons' text color
-                    button.style.padding = "0 12px";
-                    button.style.display = "flex";
-                    button.style.alignItems = "center";
-                    button.style.height = "100%";
-                    button.style.cursor = "pointer";
+                        // Match TradingView's button styling
+                        button.textContent = denomination;
+                        button.style.color = "#d1d4dc";
+                        button.style.padding = "0 12px";
+                        button.style.display = "flex";
+                        button.style.alignItems = "center";
+                        button.style.height = "100%";
+                        button.style.cursor = "pointer";
 
-                    // Add hover effect
-                    button.addEventListener('mouseenter', () => {
-                        button.style.backgroundColor = "rgba(250, 250, 250, 0.1)";
-                    });
-                    button.addEventListener('mouseleave', () => {
-                        button.style.backgroundColor = "transparent";
-                    });
-
-
-                    button.addEventListener("click", () => {
-                        console.log('Button clicked');
-                        setDenomination(prev => {
-                            const next = prev === 'SOL' ? 'USD' :
-                                prev === 'USD' ? 'MCAP' : 'SOL';
-                            button.textContent = next;
-                            return next;
+                        // Add hover effect
+                        button.addEventListener('mouseenter', () => {
+                            button.style.backgroundColor = "rgba(250, 250, 250, 0.1)";
                         });
-                        widgetRef.current.chart().resetData();
-                    });
+                        button.addEventListener('mouseleave', () => {
+                            button.style.backgroundColor = "transparent";
+                        });
 
+                        button.addEventListener("click", () => {
+                            console.log('Button clicked');
+                            setDenomination(prev => {
+                                const next = prev === 'SOL' ? 'USD' :
+                                    prev === 'USD' ? 'MCAP' : 'SOL';
+                                button.textContent = next;
+                                return next;
+                            });
+                            widgetRef.current.chart().resetData();
+                        });
+                    });
                 } catch (error) {
                     console.error('Error setting up button:', error);
                 }

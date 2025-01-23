@@ -94,6 +94,8 @@ jobs:
           echo "Event name: ${{ github.event_name }}"
 
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive  # Fetch frontend submodules recursively
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -114,14 +116,33 @@ jobs:
 
       - name: Build Frontend
         run: |
-          cd frontend  
-          mkdir -p dist/charting_library
-          cp -r public/charting_library dist/
+          # Install dependencies in frontend directory
+          cd frontend
+          npm install
+          
+          # Copy necessary files into frontend directory
+          cp -r ../target/idl/ ./target/idl/
+          cp -r ../target/types/ ./target/types/
+          cp ../tsconfig.json .
+          cp ../tsconfig.node.json .
+          cp ../vite.config.ts .
+          cp ../tailwind.config.js .
+          cp ../postcss.config.js .
+          
+          # Now build
           npm run build -- --mode production
 
       - name: Deploy Frontend to S3
         run: |
-          aws s3 sync frontend/dist/ s3://${{ env.FRONTEND_BUCKET }} --delete
+          aws s3 sync frontend/dist/ s3://${{ env.FRONTEND_BUCKET }} \
+            --delete \
+            --content-type "application/javascript" \
+            --exclude "*" \
+            --include "*.js"
+          
+          aws s3 sync frontend/dist/ s3://${{ env.FRONTEND_BUCKET }} \
+            --delete \
+            --exclude "*.js"
 
       - name: Invalidate CloudFront
         run: |
