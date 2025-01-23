@@ -94,9 +94,6 @@ jobs:
           echo "Event name: ${{ github.event_name }}"
 
       - uses: actions/checkout@v4
-        with:
-          submodules: true  # Enable submodule checkout
-          token: ${{ secrets.GITHUB_TOKEN }}  # Use the default token
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
