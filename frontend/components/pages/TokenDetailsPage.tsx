@@ -31,10 +31,6 @@ export function TokenDetailsPage() {
     const { mintAddress } = useParams();
     const location = useLocation();
     const tokenType = location.state?.tokenType || 'dex';
-
-    // Add immediate logging when component mounts
-    console.log('TokenDetailsPage mounted:', { mintAddress, tokenType });
-
     const [token, setToken] = useState<TokenRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -68,26 +64,19 @@ export function TokenDetailsPage() {
 
     // Add logging to state setters
     const setTokenWithLogging = (newToken: TokenRecord | null) => {
-        console.log('Setting token:', newToken);
         setToken(newToken);
     };
 
     const setCurrentPriceWithLogging = (newPrice: number | null) => {
-        console.log('Setting current price:', newPrice);
         setCurrentPrice(newPrice);
     };
 
     useEffect(() => {
         const fetchTokenDetails = async () => {
-            console.log('Fetching token details for:', mintAddress);
             try {
                 setLoading(true);
                 if (!mintAddress) return;
-
-                console.log('Calling tokenService with:', { mintAddress, tokenType });
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
-                console.log('Raw token data received:', tokenData);
-
                 setTokenWithLogging(tokenData);
                 setLoading(false);
             } catch (error) {
@@ -102,22 +91,14 @@ export function TokenDetailsPage() {
 
     // Modify the WebSocket subscription to handle both price types
     useEffect(() => {
-        console.log('Price update effect triggered. Token:', token);
         if (!token?.mintAddress) return;
 
         let cleanup: (() => void) | undefined;
         const setupSubscription = async () => {
             const network = token.tokenType === 'custom' ? 'devnet' : 'mainnet';
-            console.log('Setting up price subscription:', {
-                network,
-                tokenType: token.tokenType,
-                mintAddress: token.mintAddress,
-                currentPrice: token.currentPrice  // Log the current price
-            });
 
             // Always set the initial price from token data first
             if (token.currentPrice) {
-                console.log('Setting initial price from token:', token.currentPrice);
                 setCurrentPriceWithLogging(token.currentPrice);
             }
 
@@ -127,11 +108,6 @@ export function TokenDetailsPage() {
                     token.mintAddress,
                     (update) => {
                         const price = update.price;
-                        console.log('Price update received:', {
-                            price,
-                            previousPrice: currentPrice,
-                            update
-                        });
                         setCurrentPriceWithLogging(price);
                     },
                     network
@@ -315,14 +291,6 @@ export function TokenDetailsPage() {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-
-    // Add logging in render to see final values
-    console.log('Render values:', {
-        token,
-        currentPrice,
-        loading,
-        error
-    });
 
     if (loading) return <div className="p-4 text-[#808591] font-mono">Loading...</div>;
     if (error) return <div className="p-4 text-red-500 font-mono">Error: {error}</div>;
