@@ -7,7 +7,6 @@ import { tokenService } from '../../services/tokenService';
 import { priceClient } from '../../services/priceClient';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
 import { filterService } from '../../services/filterService';
-import { createPortal } from 'react-dom';
 import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
 
 const MAINNET_USDC_ADDRESS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';

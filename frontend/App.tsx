@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { useWallet } from '@solana/wallet-adapter-react'
-import { useWalletModal, WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { TokenCreationForm } from './components/TokenCreation/TokenCreationForm'
-import { TokenList } from './components/TokenList/TokenList'
 import { Modal } from './components/Modal/Modal'
 import TokenomicsRoadmap from './components/TokenomicsRoadmap/TokenomicsRoadmap'
 import { Footer } from './components/Footer/Footer'
@@ -17,6 +14,9 @@ import { ProfilePage } from './components/pages/ProfilePage'
 import { SubscribeModal } from './components/Subscription/SubscribeModal'
 import { PrivacyPolicy } from './components/pages/PrivacyPolicy'
 import { TermsOfService } from './components/pages/TermsOfService'
+import { TokenCreationForm } from './components/TokenCreation/TokenCreationForm'
+import { TokenList } from './components/TokenList/TokenList'
+import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -95,7 +95,12 @@ function App() {
                         <div className="connect-wallet-prompt" style={{ padding: '20px', textAlign: 'center' }}>
                             <h2>Connect Wallet Required</h2>
                             <p>Please connect your wallet to create a token.</p>
-                            <WalletMultiButton />
+                            <button
+                                onClick={() => setVisible(true)}
+                                className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
+                            >
+                                Select Wallet
+                            </button>
                         </div>
                     </Modal>
                 ) : (

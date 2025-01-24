@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { TokenRecord } from '../../../shared/types/token'
 import { BondingCurve, TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
@@ -11,6 +10,7 @@ import { getConnectionForToken } from '../../config'
 import { priceClient } from '../../services/priceClient'
 import { UserService } from '../../services/userService'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
+import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -62,6 +62,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     const { connection } = useConnection()
     const wallet = useWallet()
     const { publicKey, connected } = wallet
+    const { setVisible } = useWalletModal()
 
     // State management
     const [rawInput, setRawInput] = useState('');
@@ -426,7 +427,13 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         <TerminalCard className="p-4">
             {!connected ? (
                 <div className="text-center mb-4">
-                    <WalletMultiButton className="bg-[#2C3038] hover:bg-[#363B44] text-gray-200" />
+                    <p className="text-gray-400 mb-4">Please connect your wallet to trade</p>
+                    <button
+                        onClick={() => setVisible(true)}
+                        className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
+                    >
+                        Connect Wallet
+                    </button>
                 </div>
             ) : (
                 <>
