@@ -64,7 +64,7 @@ export class PriceHistoryModel {
         isBuy?: boolean;
     }) {
         try {
-            const { mintAddress, price, volume = 0, timestamp = new Date(), marketCap = 0, isBuy } = update;
+            const { mintAddress, price, volume, timestamp = new Date(), marketCap, isBuy } = update;
 
             // Round timestamp down to the start of the minute
             const currentMinute = new Date(timestamp);
@@ -130,7 +130,7 @@ export class PriceHistoryModel {
                     UPDATE onstrument.tokens
                     SET 
                         current_price = $2,
-                        market_cap_usd = $3,
+                        market_cap_usd = COALESCE($3::numeric, ($2::numeric * (supply#>>'{}')::numeric)), 
                         last_price_update = $4
                     WHERE mint_address = $1
                 `, [mintAddress, price, marketCap, timestamp]);

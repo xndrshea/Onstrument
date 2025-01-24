@@ -76,6 +76,7 @@ export function TokenDetailsPage() {
                 setLoading(true);
                 if (!mintAddress) return;
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
+                console.log('tokenData', tokenData);
                 setTokenWithLogging(tokenData);
                 setLoading(false);
             } catch (error) {

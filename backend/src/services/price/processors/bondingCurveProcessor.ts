@@ -183,43 +183,6 @@ export class BondingCurveProcessor extends BaseProcessor {
         }
     }
 
-    private async getTokenInfo(mintAddress: string): Promise<{
-        tokenVault: string,
-        curveAddress: string,
-        decimals: number
-    } | null> {
-        try {
-            logger.info('Fetching token info for:', mintAddress);
-
-            const result = await pool().query(`
-                SELECT token_vault, curve_address, decimals
-                FROM onstrument.tokens 
-                WHERE mint_address = $1 AND token_type = 'custom'
-            `, [mintAddress]);
-
-            logger.info('Token info query result:', {
-                mintAddress,
-                rowCount: result.rowCount,
-                firstRow: result.rows[0]
-            });
-
-            if (result.rows.length > 0) {
-                return {
-                    tokenVault: result.rows[0].token_vault,
-                    curveAddress: result.rows[0].curve_address,
-                    decimals: result.rows[0].decimals
-                };
-            }
-            return null;
-        } catch (error) {
-            logger.error('Error fetching token info:', {
-                error,
-                mintAddress
-            });
-            return null;
-        }
-    }
-
     private async handleBuyEvent(buffer: Buffer) {
         try {
             // Parse event data
@@ -346,5 +309,4 @@ export class BondingCurveProcessor extends BaseProcessor {
             });
         }
     }
-
 }

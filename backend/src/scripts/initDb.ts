@@ -34,7 +34,6 @@ export async function initializeDatabase() {
         }
     });
 
-
     try {
         await client.connect()
         console.log('Connected to database')

@@ -16,38 +16,6 @@ interface TradingInterfaceProps {
     onPriceUpdate?: (price: number) => void
 }
 
-// Helper function to format small numbers with subscript notation
-const formatSmallNumber = (num: number | null): JSX.Element | string => {
-    if (num === null) return 'Loading...';
-    if (typeof num !== 'number') return 'Invalid price';
-    if (num === 0) return '0';
-
-    // For very small numbers
-    if (num < 0.01) {
-        const numStr = num.toFixed(8);
-        let zeroCount = 0;
-        for (let i = 2; i < numStr.length; i++) {
-            if (numStr[i] === '0') {
-                zeroCount++;
-            } else {
-                break;
-            }
-        }
-
-        // Only use subscript notation if there are more than 3 consecutive zeros
-        if (zeroCount > 3) {
-            const remainingDigits = numStr.slice(2 + zeroCount);
-            return (
-                <span>
-                    0.0<sub>{zeroCount}</sub>{remainingDigits} SOL
-                </span>
-            );
-        }
-    }
-
-    // For regular numbers
-    return `${num.toFixed(4)} SOL`;
-};
 
 // Add new styled components for the terminal look
 const TerminalCard = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
