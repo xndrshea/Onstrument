@@ -408,7 +408,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                         <div className="flex justify-between items-center">
                             <span className="text-[#808591] text-sm">Price (SOL)</span>
                             <div className="flex items-center gap-2">
-                                <span className={`text-2xl font-mono ${priceInfo?.price && priceInfo.price > (spotPrice || 0) ? 'text-green-500' : 'text-red-500'}`}>
+                                <span className="text-2xl font-mono text-white">
                                     {spotPrice ? `${spotPrice.toFixed(6)} SOL` : 'N/A'}
                                 </span>
                             </div>

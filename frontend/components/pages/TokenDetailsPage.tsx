@@ -45,6 +45,7 @@ export function TokenDetailsPage() {
         height: window.innerHeight
     });
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+    const [metadataImage, setMetadataImage] = useState<string | null>(null);
 
     // Add useRef and useEffect for click-outside handling
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -70,6 +71,20 @@ export function TokenDetailsPage() {
         setCurrentPrice(newPrice);
     };
 
+    // Add new function to fetch metadata
+    const fetchMetadata = async (metadataUrl: string) => {
+        try {
+            const response = await fetch(metadataUrl);
+            const metadata = await response.json();
+            if (metadata.image) {
+                setMetadataImage(metadata.image);
+            }
+        } catch (error) {
+            console.error('Error fetching metadata:', error);
+        }
+    };
+
+    // Modify token details fetch to handle metadata
     useEffect(() => {
         const fetchTokenDetails = async () => {
             try {
@@ -78,6 +93,12 @@ export function TokenDetailsPage() {
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
                 console.log('tokenData', tokenData);
                 setTokenWithLogging(tokenData);
+
+                // If it's a custom token with metadataUrl, fetch the metadata
+                if (tokenData.tokenType === 'custom' && tokenData.metadataUrl) {
+                    await fetchMetadata(tokenData.metadataUrl);
+                }
+
                 setLoading(false);
             } catch (error) {
                 console.error('Error in fetchTokenDetails:', error);
@@ -192,6 +213,14 @@ export function TokenDetailsPage() {
         return () => window.removeEventListener('scroll', updatePosition);
     }, [isDropdownOpen]);
 
+    // Update the image URL logic
+    const getImageUrl = (token: TokenRecord) => {
+        if (token.tokenType === 'custom') {
+            return metadataImage || token.imageUrl;
+        }
+        return token.imageUrl;
+    };
+
     const renderTokenSelector = () => (
         <Menu as="div" className="relative inline-flex items-center">
             <MenuButton className="flex items-center gap-1 px-3 py-2 text-[#808591] hover:text-white bg-[#2C3038] hover:bg-[#363B44] rounded-md transition-colors">
@@ -254,9 +283,9 @@ export function TokenDetailsPage() {
                             className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-[#2C3038]"
                         >
                             <div className="flex items-center gap-2">
-                                {token.imageUrl && (
+                                {(token.tokenType === 'custom' ? metadataImage : token.imageUrl) && (
                                     <img
-                                        src={token.imageUrl}
+                                        src={token.tokenType === 'custom' ? metadataImage! : token.imageUrl!}
                                         alt=""
                                         className="w-5 h-5 rounded-full"
                                         onError={(e) => {
@@ -296,9 +325,6 @@ export function TokenDetailsPage() {
     if (error) return <div className="p-4 text-red-500 font-mono">Error: {error}</div>;
     if (!token) return <div className="p-4 text-[#808591] font-mono">Token not found</div>;
 
-    // Get image URL from content metadata
-    const imageUrl = token.content?.metadata?.image || token.imageUrl;
-
     return (
         <div className="flex flex-col flex-1 bg-[#131722] text-white overflow-x-hidden">
             <div className="max-w-[1920px] mx-auto w-full p-4 space-y-4">
@@ -311,11 +337,11 @@ export function TokenDetailsPage() {
                             <div className="flex flex-col">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center">
-                                        {imageUrl && (
+                                        {getImageUrl(token) && (
                                             <img
-                                                src={imageUrl}
+                                                src={getImageUrl(token)}
                                                 alt={token.name}
-                                                className="w-8 h-8 rounded-full object-cover mr-3"
+                                                className="w-10 h-10 rounded-full object-cover mr-3"
                                                 onError={(e) => {
                                                     (e.target as HTMLImageElement).style.display = 'none';
                                                 }}

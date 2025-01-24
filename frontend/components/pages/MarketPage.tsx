@@ -109,7 +109,7 @@ export function MarketPage() {
                                                 <img
                                                     src={token.imageUrl}
                                                     alt={token.symbol}
-                                                    className="w-6 h-6 rounded-full"
+                                                    className="w-8 h-8 rounded-full"
                                                 />
                                             )}
                                             <div>
