@@ -335,7 +335,7 @@ export function TokenDetailsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <MetricsCard
                                     title="Market Cap (USD)"
-                                    value={token.marketCapUsd ? `$${formatMarketCap(token.marketCapUsd)}` : 'N/A'}
+                                    value={token.marketCapUsd ? `${formatMarketCap(token.marketCapUsd)}` : 'N/A'}
                                 />
                                 <MetricsCard
                                     title="Price (USD)"
