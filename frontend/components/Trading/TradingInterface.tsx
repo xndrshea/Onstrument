@@ -214,31 +214,10 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         // Only run updatePrice if we have the necessary dependencies
         if (connected && publicKey) {
             updatePrice();
+            // Set up polling interval
+            const interval = setInterval(updatePrice, 10000); // Poll every 10 seconds
+            return () => clearInterval(interval);
         }
-
-        // Set up WebSocket subscription only for custom tokens
-        let cleanupFn: (() => void) | undefined;
-
-        if (token.tokenType === 'custom' &&
-            token.curveConfig?.migrationStatus !== 'migrated' &&
-            bondingCurve) {  // Add this check
-            priceClient.subscribeToPrice(
-                token.mintAddress,
-                (update) => {
-                    if (typeof update.price === 'number') {
-                        setSpotPrice(update.price);
-                        if (onPriceUpdate) onPriceUpdate(update.price);
-                    }
-                },
-                import.meta.env.PROD ? 'mainnet' : 'devnet'
-            ).then(cleanup => {
-                cleanupFn = cleanup;
-            });
-        }
-
-        return () => {
-            if (cleanupFn) cleanupFn();
-        };
     }, [token.mintAddress, token.tokenType, token.curveConfig?.migrationStatus, bondingCurve, connected, publicKey]);
 
     // Price quote updates

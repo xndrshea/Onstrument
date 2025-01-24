@@ -7,8 +7,8 @@ import { createHash } from 'crypto';
 import WebSocket from 'ws';
 import type { WebSocketClient } from '../websocket/types';
 import { pool } from '../../../config/database';
-import { BondingCurvePriceFetcher } from './bondingCurvePriceFetcher';
 import { wsManager } from '../../websocket/WebSocketManager';
+import { PriceHistoryModel } from '../../../models/priceHistoryModel';
 
 
 const TOKEN_DECIMALS = 6;
@@ -227,22 +227,32 @@ export class BondingCurveProcessor extends BaseProcessor {
             const amount = Number(buffer.readBigUInt64LE(40));
             const solAmount = Number(buffer.readBigUInt64LE(48));
 
-
-
             // Wait for next block
             await this.waitForNextBlock();
 
-            const tokenInfo = await this.getTokenInfo(mint.toString());
-            if (tokenInfo) {
-                await BondingCurvePriceFetcher.fetchPrice({
-                    mintAddress: mint.toString(),
-                    curveAddress: tokenInfo.curveAddress,
-                    tokenVault: tokenInfo.tokenVault,
-                    decimals: tokenInfo.decimals,
-                    volume: solAmount / LAMPORTS_PER_SOL,
-                    isBuy: true
-                });
-            }
+            // Calculate actual execution price in SOL
+            const solPrice = solAmount / LAMPORTS_PER_SOL;
+            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
+            const priceInSol = solPrice / tokenAmount;
+
+            // Get SOL/USD price
+            const solUsdPrice = await this.getSolUsdPrice();
+            const priceInUsd = priceInSol * solUsdPrice;
+            const volumeUsd = solPrice * solUsdPrice;
+
+            // Record price and broadcast
+            await PriceHistoryModel.recordPrice({
+                mintAddress: mint.toString(),
+                price: priceInUsd,
+                marketCap: 0, // We can calculate this separately if needed
+                volume: volumeUsd,
+                timestamp: new Date(),
+                isBuy: true
+            });
+
+            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd);
+            logger.info('Buy price broadcast completed', { mint: mint.toString(), price: priceInUsd, volume: volumeUsd });
+
         } catch (error) {
             logger.error('Error handling buy event:', error);
         }
@@ -257,24 +267,55 @@ export class BondingCurveProcessor extends BaseProcessor {
             const seller = new PublicKey(buffer.subarray(56, 88));
             const isSubscribed = buffer.readUInt8(88) === 1;
 
-
-
             // Wait for next block
             await this.waitForNextBlock();
 
-            const tokenInfo = await this.getTokenInfo(mint.toString());
-            if (tokenInfo) {
-                await BondingCurvePriceFetcher.fetchPrice({
-                    mintAddress: mint.toString(),
-                    curveAddress: tokenInfo.curveAddress,
-                    tokenVault: tokenInfo.tokenVault,
-                    decimals: tokenInfo.decimals,
-                    volume: solAmount / LAMPORTS_PER_SOL,
-                    isBuy: false
-                });
-            }
+            // Calculate actual execution price in SOL
+            const solPrice = solAmount / LAMPORTS_PER_SOL;
+            const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
+            const priceInSol = solPrice / tokenAmount;
+
+            // Get SOL/USD price
+            const solUsdPrice = await this.getSolUsdPrice();
+            const priceInUsd = priceInSol * solUsdPrice;
+            const volumeUsd = solPrice * solUsdPrice;
+
+            // Record price and broadcast
+            await PriceHistoryModel.recordPrice({
+                mintAddress: mint.toString(),
+                price: priceInUsd,
+                marketCap: 0, // We can calculate this separately if needed
+                volume: volumeUsd,
+                timestamp: new Date(),
+                isBuy: false
+            });
+
+            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd);
+            logger.info('Sell price broadcast completed', { mint: mint.toString(), price: priceInUsd, volume: volumeUsd });
+
         } catch (error) {
             logger.error('Error handling sell event:', error);
+        }
+    }
+
+    private async getSolUsdPrice(): Promise<number> {
+        try {
+            const result = await pool().query(`
+                SELECT current_price
+                FROM onstrument.tokens 
+                WHERE mint_address = 'So11111111111111111111111111111111111111112'
+            `);
+
+            const price = Number(result.rows[0]?.current_price);
+            if (!price) {
+                logger.warn('No SOL price found, using default');
+                return 187.5; // Fallback to recent price
+            }
+
+            return price;
+        } catch (error) {
+            logger.error('Error getting SOL price:', error);
+            return 187.5; // Fallback on error
         }
     }
 

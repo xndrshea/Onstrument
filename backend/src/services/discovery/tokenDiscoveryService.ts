@@ -157,11 +157,6 @@ export class TokenDiscoveryService {
     private constructor(client: Pool) {
         this.client = client;
         this.metadataService = MetadataService.getInstance();
-
-        // Ensure SOL exists in database once when service starts
-        this.ensureTokenMetadata('So11111111111111111111111111111111111111112').catch(err =>
-            this.logger.error('Failed to ensure SOL metadata:', err)
-        );
     }
 
     static getInstance(): TokenDiscoveryService {
@@ -425,29 +420,9 @@ export class TokenDiscoveryService {
             const baseTokenId = pool.relationships.base_token.data.id.split('_')[1];
             const quoteTokenId = pool.relationships.quote_token.data.id.split('_')[1];
 
-            const solPrice = this.SOL_ADDRESSES.includes(quoteTokenId)
-                ? parseFloat(attributes.quote_token_price_usd)
-                : parseFloat(attributes.base_token_price_usd);
-
-            // Get the previous price for comparison
-            const prevResult = await this.client.query(`
-                SELECT current_price 
-                FROM onstrument.tokens 
-                WHERE mint_address = 'So11111111111111111111111111111111111111112'
-                AND last_price_update > NOW() - INTERVAL '1 hour'`);
-
-            const prevPrice = prevResult.rows[0]?.current_price;
-
-            // Only update if the new price is within a reasonable % change of previous price
-            // or if we don't have a recent price
-            if (!prevPrice || (solPrice > 0 && Math.abs((solPrice - prevPrice) / prevPrice) < 0.10)) {
-                await this.upsertToken({
-                    address: 'So11111111111111111111111111111111111111112',
-                    token_type: 'dex',
-                    current_price: solPrice,
-                    price_sol: 1,
-                    token_source: 'geckoterminal'
-                });
+            // Skip if either token is SOL
+            if (this.SOL_ADDRESSES.includes(baseTokenId) || this.SOL_ADDRESSES.includes(quoteTokenId)) {
+                return;
             }
 
             const isBaseSol = this.SOL_ADDRESSES.includes(baseTokenId);
@@ -502,8 +477,6 @@ export class TokenDiscoveryService {
             };
 
             await this.upsertToken(tokenData);
-
-            // Add this line to broadcast the price
             wsManager.broadcastPrice(tokenData.address, tokenData.current_price || 0);
         } catch (error) {
             this.logger.error('Failed to process GeckoTerminal token:', error);
@@ -512,134 +485,74 @@ export class TokenDiscoveryService {
 
     private async upsertToken(data: TokenUpsertData): Promise<void> {
         try {
+            // Build dynamic query parts based on provided data
+            const insertColumns: string[] = ['mint_address', 'token_type'];
+            const insertValues: any[] = [data.address, data.token_type];
+            const updateParts: string[] = [];
+            let valueCounter = 3; // Starting from $3 since $1 and $2 are used
+
+            // Helper function to add a field if it exists
+            const addField = (fieldName: string, value: any) => {
+                if (value !== undefined && value !== null) {
+                    insertColumns.push(fieldName);
+                    insertValues.push(value);
+                    updateParts.push(`${fieldName} = $${valueCounter}`);
+                    valueCounter++;
+                }
+            };
+
+            // Add each field if it exists
+            addField('current_price', data.current_price);
+            addField('price_sol', data.price_sol);
+            addField('volume_5m', data.volume_5m);
+            addField('volume_1h', data.volume_1h);
+            addField('volume_6h', data.volume_6h);
+            addField('volume_24h', data.volume_24h);
+            addField('volume_7d', data.volume_7d);
+            addField('volume_30d', data.volume_30d);
+            addField('price_change_5m', data.price_change_5m);
+            addField('price_change_1h', data.price_change_1h);
+            addField('price_change_6h', data.price_change_6h);
+            addField('price_change_24h', data.price_change_24h);
+            addField('price_change_7d', data.price_change_7d);
+            addField('price_change_30d', data.price_change_30d);
+            addField('apr_24h', data.apr_24h);
+            addField('apr_7d', data.apr_7d);
+            addField('apr_30d', data.apr_30d);
+            addField('tvl', data.tvl);
+            addField('tx_5m_buys', data.tx_5m_buys);
+            addField('tx_5m_sells', data.tx_5m_sells);
+            addField('tx_5m_buyers', data.tx_5m_buyers);
+            addField('tx_5m_sellers', data.tx_5m_sellers);
+            addField('tx_1h_buys', data.tx_1h_buys);
+            addField('tx_1h_sells', data.tx_1h_sells);
+            addField('tx_1h_buyers', data.tx_1h_buyers);
+            addField('tx_1h_sellers', data.tx_1h_sellers);
+            addField('tx_6h_buys', data.tx_6h_buys);
+            addField('tx_6h_sells', data.tx_6h_sells);
+            addField('tx_6h_buyers', data.tx_6h_buyers);
+            addField('tx_6h_sellers', data.tx_6h_sellers);
+            addField('tx_24h_buys', data.tx_24h_buys);
+            addField('tx_24h_sells', data.tx_24h_sells);
+            addField('tx_24h_buyers', data.tx_24h_buyers);
+            addField('tx_24h_sellers', data.tx_24h_sellers);
+            addField('token_source', data.token_source);
+            addField('market_cap_usd', data.market_cap_usd);
+
+            // Always add last_price_update for inserts
+            insertColumns.push('last_price_update');
+            insertValues.push('NOW()');
+
             const query = `
-                INSERT INTO onstrument.tokens (
-                    mint_address,
-                    token_type,
-                    current_price,
-                    price_sol,
-                    volume_5m,
-                    volume_1h,
-                    volume_6h,
-                    volume_24h,
-                    volume_7d,
-                    volume_30d,
-                    price_change_5m,
-                    price_change_1h,
-                    price_change_6h,
-                    price_change_24h,
-                    price_change_7d,
-                    price_change_30d,
-                    apr_24h,
-                    apr_7d,
-                    apr_30d,
-                    tvl,
-                    tx_5m_buys,
-                    tx_5m_sells,
-                    tx_5m_buyers,
-                    tx_5m_sellers,
-                    tx_1h_buys,
-                    tx_1h_sells,
-                    tx_1h_buyers,
-                    tx_1h_sellers,
-                    tx_6h_buys,
-                    tx_6h_sells,
-                    tx_6h_buyers,
-                    tx_6h_sellers,
-                    tx_24h_buys,
-                    tx_24h_sells,
-                    tx_24h_buyers,
-                    tx_24h_sellers,
-                    token_source,
-                    market_cap_usd,
-                    last_price_update
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-                    $31, $32, $33, $34, $35, $36, $37, $38, NOW()
-                )
+                INSERT INTO onstrument.tokens (${insertColumns.join(', ')})
+                VALUES (${insertValues.map((_, i) => `$${i + 1}`).join(', ')})
                 ON CONFLICT (mint_address) DO UPDATE SET
-                    token_type = EXCLUDED.token_type,
-                    current_price = EXCLUDED.current_price,
-                    price_sol = EXCLUDED.price_sol,
-                    volume_5m = EXCLUDED.volume_5m,
-                    volume_1h = EXCLUDED.volume_1h,
-                    volume_6h = EXCLUDED.volume_6h,
-                    volume_24h = EXCLUDED.volume_24h,
-                    volume_7d = EXCLUDED.volume_7d,
-                    volume_30d = EXCLUDED.volume_30d,
-                    price_change_5m = EXCLUDED.price_change_5m,
-                    price_change_1h = EXCLUDED.price_change_1h,
-                    price_change_6h = EXCLUDED.price_change_6h,
-                    price_change_24h = EXCLUDED.price_change_24h,
-                    price_change_7d = EXCLUDED.price_change_7d,
-                    price_change_30d = EXCLUDED.price_change_30d,
-                    apr_24h = EXCLUDED.apr_24h,
-                    apr_7d = EXCLUDED.apr_7d,
-                    apr_30d = EXCLUDED.apr_30d,
-                    tvl = EXCLUDED.tvl,
-                    tx_5m_buys = EXCLUDED.tx_5m_buys,
-                    tx_5m_sells = EXCLUDED.tx_5m_sells,
-                    tx_5m_buyers = EXCLUDED.tx_5m_buyers,
-                    tx_5m_sellers = EXCLUDED.tx_5m_sellers,
-                    tx_1h_buys = EXCLUDED.tx_1h_buys,
-                    tx_1h_sells = EXCLUDED.tx_1h_sells,
-                    tx_1h_buyers = EXCLUDED.tx_1h_buyers,
-                    tx_1h_sellers = EXCLUDED.tx_1h_sellers,
-                    tx_6h_buys = EXCLUDED.tx_6h_buys,
-                    tx_6h_sells = EXCLUDED.tx_6h_sells,
-                    tx_6h_buyers = EXCLUDED.tx_6h_buyers,
-                    tx_6h_sellers = EXCLUDED.tx_6h_sellers,
-                    tx_24h_buys = EXCLUDED.tx_24h_buys,
-                    tx_24h_sells = EXCLUDED.tx_24h_sells,
-                    tx_24h_buyers = EXCLUDED.tx_24h_buyers,
-                    tx_24h_sellers = EXCLUDED.tx_24h_sellers,
-                    token_source = EXCLUDED.token_source,
-                    market_cap_usd = EXCLUDED.market_cap_usd,
+                    ${updateParts.length > 0 ? updateParts.join(', ') + ',' : ''}
                     last_price_update = NOW()
+                WHERE onstrument.tokens.mint_address = $1
             `;
 
-            await pool().query(query, [
-                data.address,
-                data.token_type,
-                data.current_price || null,
-                data.price_sol || null,
-                data.volume_5m || null,
-                data.volume_1h || null,
-                data.volume_6h || null,
-                data.volume_24h || null,
-                data.volume_7d || null,
-                data.volume_30d || null,
-                data.price_change_5m || null,
-                data.price_change_1h || null,
-                data.price_change_6h || null,
-                data.price_change_24h || null,
-                data.price_change_7d || null,
-                data.price_change_30d || null,
-                data.apr_24h || null,
-                data.apr_7d || null,
-                data.apr_30d || null,
-                data.tvl || null,
-                data.tx_5m_buys || null,
-                data.tx_5m_sells || null,
-                data.tx_5m_buyers || null,
-                data.tx_5m_sellers || null,
-                data.tx_1h_buys || null,
-                data.tx_1h_sells || null,
-                data.tx_1h_buyers || null,
-                data.tx_1h_sellers || null,
-                data.tx_6h_buys || null,
-                data.tx_6h_sells || null,
-                data.tx_6h_buyers || null,
-                data.tx_6h_sellers || null,
-                data.tx_24h_buys || null,
-                data.tx_24h_sells || null,
-                data.tx_24h_buyers || null,
-                data.tx_24h_sellers || null,
-                data.token_source,
-                data.market_cap_usd || null,
-            ]);
+            await pool().query(query, insertValues);
 
         } catch (error) {
             logger.error('Error upserting token:', {

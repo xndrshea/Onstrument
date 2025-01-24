@@ -10,6 +10,8 @@ export class MetadataService {
     private static instance: MetadataService;
     private umi: any;
     private processingQueue: Set<string> = new Set();
+    private queueTimer: NodeJS.Timeout | null = null;
+    private readonly QUEUE_PROCESS_INTERVAL = 30000; // 30 seconds
 
     private constructor() {
         if (!config.HELIUS_RPC_URL) {
@@ -17,6 +19,19 @@ export class MetadataService {
         }
         this.umi = createUmi(config.HELIUS_RPC_URL)
             .use(mplTokenMetadata());
+
+        // Start queue processor
+        this.startQueueProcessor();
+    }
+
+    private startQueueProcessor() {
+        this.queueTimer = setInterval(() => {
+            if (this.processingQueue.size > 0) {
+                const addresses = Array.from(this.processingQueue);
+                this.processingQueue.clear();
+                void this.queueMetadataUpdate(addresses, 'queue_processor');
+            }
+        }, this.QUEUE_PROCESS_INTERVAL);
     }
 
     static getInstance(): MetadataService {

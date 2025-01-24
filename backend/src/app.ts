@@ -12,6 +12,7 @@ import { wsManager } from './services/websocket/WebSocketManager'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { parameterStore } from './config/parameterStore'
 import { Express } from 'express'
+import { initializeSolPriceJob } from './jobs/solPriceJob'
 
 
 export function createApp() {
@@ -145,6 +146,9 @@ export function createApp() {
     app.get('/health', (req, res) => {
         res.status(200).json({ status: 'healthy' });
     });
+
+    // Initialize cron jobs
+    initializeSolPriceJob();
 
     return app
 }

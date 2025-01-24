@@ -34,15 +34,6 @@ export async function initializeDatabase() {
         }
     });
 
-    // Debug (safe to show encoded URL)
-    console.log('Using connection string:', connectionString);
-
-    // Add debug
-    console.log('Password type:', typeof process.env.DB_PASSWORD);
-    console.log('Password length:', process.env.DB_PASSWORD?.length);
-
-    console.log('Raw password:', process.env.DB_PASSWORD);
-    console.log('Password chars:', process.env.DB_PASSWORD?.split('').map(c => c.charCodeAt(0)));
 
     try {
         await client.connect()
