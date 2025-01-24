@@ -66,7 +66,12 @@ function App() {
                     onSubscribeClick={handleSubscribeClick}
                 />
 
-                <main style={{ padding: '20px', color: 'white', flex: 1 }}>
+                <main style={{
+                    padding: '20px',
+                    color: 'white',
+                    flex: '1 1 auto',
+                    minHeight: 0  // Add this to prevent flex item from growing
+                }}>
                     <Routes>
                         <Route path="/" element={
                             <TokenList
