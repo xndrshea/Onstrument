@@ -225,6 +225,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                             token.mintAddress,
                             (update: { price: number; time: number; isSell?: boolean; volume?: number }) => {
                                 const price = Number(update.price || 0);
+                                const volume = Number(update.volume || 0);
                                 const timestamp = update.time * 1000;
                                 const resolutionMs = getResolutionInMs(resolution);
                                 const barStartTime = Math.floor(timestamp / resolutionMs) * resolutionMs;
@@ -246,14 +247,14 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                                         high: price,
                                         low: price,
                                         close: price,
-                                        volume: 0,
+                                        volume: volume,
                                         isBarClosed: false
                                     };
                                 } else {
                                     currentBar.high = Math.max(currentBar.high, price);
                                     currentBar.low = Math.min(currentBar.low, price);
                                     currentBar.close = price;
-                                    currentBar.volume += update.volume || 0;
+                                    currentBar.volume += volume;
                                 }
 
                                 onRealtimeCallback(currentBar);

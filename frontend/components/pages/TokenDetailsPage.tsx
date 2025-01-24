@@ -10,9 +10,6 @@ import { filterService } from '../../services/filterService';
 import { createPortal } from 'react-dom';
 import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
 
-// Add at the top with other imports
-type VolumeKey = `volume${string}`;
-type TokenKey = keyof TokenRecord;
 const MAINNET_USDC_ADDRESS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 // Updated MetricsCard component with terminal style
@@ -20,9 +17,7 @@ const MetricsCard = ({ title, value, change }: { title: string; value: string | 
     <div className="bg-[#1E222D] border border-gray-800 p-4 rounded-lg">
         <h3 className="text-[#808591] text-sm mb-1">{title}</h3>
         <div className="flex items-end gap-2">
-            <span className="text-white text-lg font-mono">
-                {typeof value === 'number' ? value.toFixed(4) : value}
-            </span>
+            <span className="text-white text-lg font-mono">{value}</span>
             {change !== undefined && (
                 <span className={`text-sm font-mono ${change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {change > 0 ? '+' : ''}{change.toFixed(2)}%
@@ -36,6 +31,10 @@ export function TokenDetailsPage() {
     const { mintAddress } = useParams();
     const location = useLocation();
     const tokenType = location.state?.tokenType || 'dex';
+
+    // Add immediate logging when component mounts
+    console.log('TokenDetailsPage mounted:', { mintAddress, tokenType });
+
     const [token, setToken] = useState<TokenRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -67,57 +66,76 @@ export function TokenDetailsPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Add logging to state setters
+    const setTokenWithLogging = (newToken: TokenRecord | null) => {
+        console.log('Setting token:', newToken);
+        setToken(newToken);
+    };
+
+    const setCurrentPriceWithLogging = (newPrice: number | null) => {
+        console.log('Setting current price:', newPrice);
+        setCurrentPrice(newPrice);
+    };
+
+    useEffect(() => {
+        const fetchTokenDetails = async () => {
+            console.log('Fetching token details for:', mintAddress);
+            try {
+                setLoading(true);
+                if (!mintAddress) return;
+
+                console.log('Calling tokenService with:', { mintAddress, tokenType });
+                const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
+                console.log('Raw token data received:', tokenData);
+
+                setTokenWithLogging(tokenData);
+                setLoading(false);
+            } catch (error) {
+                console.error('Error in fetchTokenDetails:', error);
+                setError('Failed to fetch token details');
+                setLoading(false);
+            }
+        };
+
+        fetchTokenDetails();
+    }, [mintAddress, tokenType]);
+
     // Modify the WebSocket subscription to handle both price types
     useEffect(() => {
+        console.log('Price update effect triggered. Token:', token);
         if (!token?.mintAddress) return;
 
         let cleanup: (() => void) | undefined;
         const setupSubscription = async () => {
             const network = token.tokenType === 'custom' ? 'devnet' : 'mainnet';
+            console.log('Setting up price subscription:', {
+                network,
+                tokenType: token.tokenType,
+                mintAddress: token.mintAddress,
+                currentPrice: token.currentPrice  // Log the current price
+            });
 
-            // Check WebSocket connection
-            const isConnected = priceClient.isConnected(network);
-
-            // For dex tokens and migrated custom tokens, use current_price from database
-            if (token.tokenType === 'dex' || (token.tokenType === 'custom' && token.tokenSource === 'migrated')) {
-                setCurrentPrice(token.currentPrice || null);
-                updateTokenWithPrice(token.currentPrice || 0);
-                return;
+            // Always set the initial price from token data first
+            if (token.currentPrice) {
+                console.log('Setting initial price from token:', token.currentPrice);
+                setCurrentPriceWithLogging(token.currentPrice);
             }
 
-            // For custom tokens, get initial price from price history
-            try {
-                const history = await priceClient.getPriceHistory(token.mintAddress);
-                if (history?.length) {
-                    const lastPrice = history[history.length - 1].close;
-                    setCurrentPrice(lastPrice);
-                    updateTokenWithPrice(lastPrice);
-                }
-            } catch (error) {
-                console.error('Error fetching initial price:', error);
-            }
-
-            // Set up WebSocket subscription for real-time updates
-            cleanup = await priceClient.subscribeToPrice(
-                token.mintAddress,
-                (update) => {
-                    const price = update.price;
-                    setCurrentPrice(price);
-                    updateTokenWithPrice(price);
-                },
-                network
-            );
-        };
-
-        const updateTokenWithPrice = (price: number) => {
-            if (token?.supply && token.decimals !== undefined) {
-                const adjustedSupply = token.supply / Math.pow(10, token.decimals);
-                const newMarketCap = price * adjustedSupply;
-                setToken(prevToken => prevToken ? {
-                    ...prevToken,
-                    currentPrice: price,
-                    marketCapUsd: newMarketCap
-                } : null);
+            // Only set up websocket subscription if needed
+            if (token.tokenType === 'custom' && token.tokenSource !== 'migrated') {
+                cleanup = await priceClient.subscribeToPrice(
+                    token.mintAddress,
+                    (update) => {
+                        const price = update.price;
+                        console.log('Price update received:', {
+                            price,
+                            previousPrice: currentPrice,
+                            update
+                        });
+                        setCurrentPriceWithLogging(price);
+                    },
+                    network
+                );
             }
         };
 
@@ -126,29 +144,6 @@ export function TokenDetailsPage() {
             if (cleanup) cleanup();
         };
     }, [token?.mintAddress]);
-
-    useEffect(() => {
-        const fetchTokenDetails = async () => {
-            try {
-                setLoading(true);
-
-                // Use TokenService instead of direct fetch
-                if (!mintAddress) return;
-                const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
-
-                setToken(tokenData);
-                setLoading(false);
-            } catch (error) {
-                console.error('Error fetching token details:', error);
-                setError('Failed to fetch token details');
-                setLoading(false);
-            }
-        };
-
-        if (mintAddress) {
-            fetchTokenDetails();
-        }
-    }, [mintAddress, tokenType]);
 
     // Updated TokenSelector fetch
     useEffect(() => {
@@ -320,6 +315,14 @@ export function TokenDetailsPage() {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    // Add logging in render to see final values
+    console.log('Render values:', {
+        token,
+        currentPrice,
+        loading,
+        error
+    });
 
     if (loading) return <div className="p-4 text-[#808591] font-mono">Loading...</div>;
     if (error) return <div className="p-4 text-red-500 font-mono">Error: {error}</div>;

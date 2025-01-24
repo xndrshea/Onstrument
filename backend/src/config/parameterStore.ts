@@ -56,7 +56,6 @@ export class ParameterStore {
 
         parameters.forEach(param => {
             const name = param.Name?.split('/').pop() || '';
-            console.log('[STARTUP] Loading parameter:', name);
             if (param.Value) {
                 process.env[name] = param.Value;
             }
@@ -67,7 +66,6 @@ export class ParameterStore {
 
         try {
             if (process.env.NODE_ENV === 'development') {
-                console.log('[STARTUP] Development environment detected, loading .env.local');
                 dotenv.config({ path: '.env.local' });
                 this.initialized = true;
                 return;
@@ -75,8 +73,6 @@ export class ParameterStore {
 
             const parameters = await this.fetchAllParameters();
             this.setEnvironmentVariables(parameters);
-
-            console.log('[STARTUP] Parameter Store initialization complete');
             this.initialized = true;
 
         } catch (error) {

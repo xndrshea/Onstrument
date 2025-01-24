@@ -6,7 +6,7 @@ import { getBaseUrl } from '../config';
 class WebSocketClient {
     private static instance: WebSocketClient | null = null;
     private ws: WebSocket | null = null;
-    private subscribers: Map<string, Set<(update: { price: number; time: number }) => void>> = new Map();
+    private subscribers: Map<string, Set<(update: { price: number; time: number; volume?: number; isSell?: boolean }) => void>> = new Map();
     private clientId: string;
 
     private constructor() {
@@ -50,7 +50,7 @@ class WebSocketClient {
 
     async subscribeToPrice(
         mintAddress: string,
-        callback: (update: { price: number; time: number }) => void,
+        callback: (update: { price: number; time: number; volume?: number; isSell?: boolean }) => void,
         network: 'mainnet' | 'devnet' = import.meta.env.PROD ? 'mainnet' : 'devnet'
     ): Promise<() => void> {
         if (!this.subscribers.has(mintAddress)) {
@@ -98,7 +98,9 @@ class WebSocketClient {
 
             const update = {
                 price: Number(data.close || data.price),
-                time: Math.floor(Date.now() / 1000)
+                time: Math.floor(Date.now() / 1000),
+                volume: Number(data.volume || 0),
+                isSell: data.isSell
             };
 
             subscribers.forEach(callback => callback(update));
@@ -113,7 +115,7 @@ export const priceClient = {
 
     subscribeToPrice: (
         mintAddress: string,
-        callback: (update: { price: number; time: number }) => void,
+        callback: (update: { price: number; time: number; volume?: number; isSell?: boolean }) => void,
         network: 'mainnet' | 'devnet' = import.meta.env.PROD ? 'mainnet' : 'devnet'
     ) => WebSocketClient.getInstance().subscribeToPrice(mintAddress, callback, network),
 

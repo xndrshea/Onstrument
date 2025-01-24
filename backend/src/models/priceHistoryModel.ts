@@ -1,29 +1,7 @@
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
-import { UTCTimestamp } from 'lightweight-charts';
 
 export class PriceHistoryModel {
-    // Map TradingView intervals to our base aggregates
-    private static readonly TIMEFRAME_MAP = {
-        // Use 1m aggregate for <= 1h
-        '1': 'price_history_1m',
-        '3': 'price_history_1m',
-        '5': 'price_history_1m',
-        '15': 'price_history_1m',
-        '30': 'price_history_1m',
-        '60': 'price_history_1m',
-
-        // Use 1h aggregate for > 1h and < 1d
-        '120': 'price_history_1h',
-        '240': 'price_history_1h',
-        '360': 'price_history_1h',
-        '720': 'price_history_1h',
-
-        // Use 1d aggregate for >= 1d
-        'D': 'price_history_1d',
-        'W': 'price_history_1d',
-        'M': 'price_history_1d'
-    } as const;
 
     static async getOHLCV(
         tokenMintAddress: string,
@@ -76,27 +54,10 @@ export class PriceHistoryModel {
         }
     }
 
-    private static getTimeScaleInterval(resolution: string): string {
-        switch (resolution) {
-            case '1': return '1 minute';
-            case '3': return '3 minutes';
-            case '5': return '5 minutes';
-            case '15': return '15 minutes';
-            case '30': return '30 minutes';
-            case '60': return '1 hour';
-            case '120': return '2 hours';
-            case '240': return '4 hours';
-            case 'D': return '1 day';
-            case 'W': return '1 week';
-            case 'M': return '1 month';
-            default: return '1 minute';
-        }
-    }
-
     // This function runs after every trade to save the new price
     static async recordPrice(update: {
         mintAddress: string;
-        price: number;  // This will be used for all OHLC values if creating new record
+        price: number;
         marketCap?: number;
         volume?: number;
         timestamp?: Date;
@@ -109,54 +70,77 @@ export class PriceHistoryModel {
             const currentMinute = new Date(timestamp);
             currentMinute.setSeconds(0, 0);
 
-            // First try to update existing minute's data
-            const result = await pool().query(`
-                UPDATE onstrument.price_history 
-                SET 
-                    high = GREATEST(high, $3),
-                    low = LEAST(low, $3),
-                    close = $3,
-                    volume = volume + $4,
-                    trade_count = trade_count + 1,
-                    buy_count = buy_count + CASE WHEN $6 THEN 1 ELSE 0 END,
-                    sell_count = sell_count + CASE WHEN $6 THEN 0 ELSE 1 END,
-                    market_cap = $5
-                WHERE mint_address = $1 
-                AND time = $2
-                RETURNING *
-            `, [mintAddress, currentMinute, price, volume, marketCap, isBuy]);
+            // Start a transaction to ensure both updates happen or neither does
+            const client = await pool().connect();
+            try {
+                await client.query('BEGIN');
 
-            // If no existing record for this minute, create a new one
-            if (result.rows.length === 0) {
-                await pool().query(`
-                    INSERT INTO onstrument.price_history (
-                        time,
-                        mint_address,
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume,
-                        market_cap,
-                        is_buy,
-                        trade_count,
-                        buy_count,
-                        sell_count
-                    ) VALUES (
-                        $1,
-                        $2,
-                        $3,
-                        $3,
-                        $3,
-                        $3,
-                        $4,
-                        $5,
-                        $6,
-                        1,
-                        CASE WHEN $6 THEN 1 ELSE 0 END,
-                        CASE WHEN $6 THEN 0 ELSE 1 END
-                    )
-                `, [currentMinute, mintAddress, price, volume, marketCap, isBuy]);
+                // First try to update existing minute's data
+                const result = await client.query(`
+                    UPDATE onstrument.price_history 
+                    SET 
+                        high = GREATEST(high, $3),
+                        low = LEAST(low, $3),
+                        close = $3,
+                        volume = volume + $4,
+                        trade_count = trade_count + 1,
+                        buy_count = buy_count + CASE WHEN $6 THEN 1 ELSE 0 END,
+                        sell_count = sell_count + CASE WHEN $6 THEN 0 ELSE 1 END,
+                        market_cap = $5
+                    WHERE mint_address = $1 
+                    AND time = $2
+                    RETURNING *
+                `, [mintAddress, currentMinute, price, volume, marketCap, isBuy]);
+
+                // If no existing record for this minute, create a new one
+                if (result.rows.length === 0) {
+                    await client.query(`
+                        INSERT INTO onstrument.price_history (
+                            time,
+                            mint_address,
+                            open,
+                            high,
+                            low,
+                            close,
+                            volume,
+                            market_cap,
+                            is_buy,
+                            trade_count,
+                            buy_count,
+                            sell_count
+                        ) VALUES (
+                            $1,
+                            $2,
+                            $3,
+                            $3,
+                            $3,
+                            $3,
+                            $4,
+                            $5,
+                            $6,
+                            1,
+                            CASE WHEN $6 THEN 1 ELSE 0 END,
+                            CASE WHEN $6 THEN 0 ELSE 1 END
+                        )
+                    `, [currentMinute, mintAddress, price, volume, marketCap, isBuy]);
+                }
+
+                // Update the tokens table with the latest price and market cap
+                await client.query(`
+                    UPDATE onstrument.tokens
+                    SET 
+                        current_price = $2,
+                        market_cap_usd = $3,
+                        last_price_update = $4
+                    WHERE mint_address = $1
+                `, [mintAddress, price, marketCap, timestamp]);
+
+                await client.query('COMMIT');
+            } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
+            } finally {
+                client.release();
             }
         } catch (error) {
             logger.error('Error recording price:', error);

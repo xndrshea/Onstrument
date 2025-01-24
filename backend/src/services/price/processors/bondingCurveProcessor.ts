@@ -250,8 +250,7 @@ export class BondingCurveProcessor extends BaseProcessor {
                 isBuy: true
             });
 
-            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd);
-            logger.info('Buy price broadcast completed', { mint: mint.toString(), price: priceInUsd, volume: volumeUsd });
+            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd, false);
 
         } catch (error) {
             logger.error('Error handling buy event:', error);
@@ -290,8 +289,7 @@ export class BondingCurveProcessor extends BaseProcessor {
                 isBuy: false
             });
 
-            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd);
-            logger.info('Sell price broadcast completed', { mint: mint.toString(), price: priceInUsd, volume: volumeUsd });
+            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd, true);
 
         } catch (error) {
             logger.error('Error handling sell event:', error);

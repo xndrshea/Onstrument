@@ -7,12 +7,6 @@ export default defineConfig(() => {
 
     const isDocker = process.env.VITE_DOCKER === 'true'
 
-    console.log('Vite Config Environment:', {
-        VITE_DOCKER: process.env.VITE_DOCKER,
-        isDocker,
-        NODE_ENV: process.env.NODE_ENV
-    })
-
     const backendUrl = isDocker ? 'http://backend:3001' : 'http://localhost:3001'
     const wsUrl = isDocker ? 'ws://backend:3001' : 'ws://localhost:3001'
 
