@@ -34,7 +34,6 @@ export const getEnvironment = () => {
     return ENDPOINTS.docker;                             // Docker development (fallback)
 };
 
-// Remove the direct endpoints and update the connection functions
 export const getConnection = (isDevnet: boolean = false) => {
     const env = getEnvironment();
 
