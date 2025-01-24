@@ -278,6 +278,10 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     throw new Error(`Insufficient SOL. Need at least ${requiredSol.toFixed(4)} SOL (including fees)`)
                 }
 
+                if (!token.decimals) {
+                    throw new Error('Token decimals not found');
+                }
+
                 await dexService.executeTrade({
                     mintAddress: token.mintAddress,
                     amount: new BN(parseFloat(amount) * (isSelling ? (10 ** token.decimals) : LAMPORTS_PER_SOL)),
@@ -290,6 +294,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             } else if (bondingCurve && priceInfo) {
                 if (isSelling) {
                     // Selling uses token amounts
+                    if (!token.decimals) {
+                        throw new Error('Token decimals not found');
+                    }
                     const parsedAmount = new BN(parseFloat(amount) * (10 ** token.decimals))
                     const minReturn = new BN(Math.floor(priceInfo.totalCost * (1 - slippageTolerance)))
                     await bondingCurve.sell({
@@ -453,7 +460,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                         <div>
                             <span className="text-[#808591] text-sm">Balance</span>
                             <div className="font-mono text-white">
-                                {Number(userBalance) / (10 ** token.decimals)} {token.symbol}
+                                {token.decimals ? Number(userBalance) / (10 ** token.decimals) : 'Loading...'} {token.symbol}
                             </div>
                         </div>
                     </div>

@@ -95,7 +95,7 @@ export function TokenDetailsPage() {
                 setTokenWithLogging(tokenData);
 
                 // If it's a custom token with metadataUrl, fetch the metadata
-                if (tokenData.tokenType === 'custom' && tokenData.metadataUrl) {
+                if (tokenData?.tokenType === 'custom' && tokenData?.metadataUrl) {
                     await fetchMetadata(tokenData.metadataUrl);
                 }
 
@@ -116,24 +116,21 @@ export function TokenDetailsPage() {
 
         let cleanup: (() => void) | undefined;
         const setupSubscription = async () => {
-            const network = token.tokenType === 'custom' ? 'devnet' : 'mainnet';
+            const network = process.env.NODE_ENV === 'production' ? 'mainnet' : 'devnet';
 
             // Always set the initial price from token data first
             if (token.currentPrice) {
                 setCurrentPriceWithLogging(token.currentPrice);
             }
 
-            // Only set up websocket subscription if needed
-            if (token.tokenType === 'custom' && token.tokenSource !== 'migrated') {
-                cleanup = await priceClient.subscribeToPrice(
-                    token.mintAddress,
-                    (update) => {
-                        const price = update.price;
-                        setCurrentPriceWithLogging(price);
-                    },
-                    network
-                );
-            }
+            cleanup = await priceClient.subscribeToPrice(
+                token.mintAddress,
+                (update) => {
+                    const price = update.price;
+                    setCurrentPriceWithLogging(price);
+                },
+                network
+            );
         };
 
         setupSubscription();
@@ -287,7 +284,7 @@ export function TokenDetailsPage() {
                                     <img
                                         src={token.tokenType === 'custom' ? metadataImage! : token.imageUrl!}
                                         alt=""
-                                        className="w-5 h-5 rounded-full"
+                                        className="w-5 h- rounded-full"
                                         onError={(e) => {
                                             (e.target as HTMLImageElement).style.display = 'none';
                                         }}
