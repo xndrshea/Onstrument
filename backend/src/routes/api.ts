@@ -985,4 +985,43 @@ router.post('/tokens/update-metadata', async (req, res) => {
     }
 });
 
+// Add a new endpoint to check and update subscription status
+router.post('/users/:walletAddress/check-subscription', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+
+        // Update subscription status if expired
+        const result = await pool().query(`
+            UPDATE onstrument.users 
+            SET is_subscribed = CASE
+                WHEN subscription_expires_at IS NOT NULL 
+                AND subscription_expires_at <= CURRENT_TIMESTAMP 
+                THEN false
+                ELSE is_subscribed
+                END
+            WHERE wallet_address = $1
+            RETURNING is_subscribed, subscription_expires_at, subscription_tier
+        `, [walletAddress]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const user = result.rows[0];
+        const isExpired = user.subscription_expires_at &&
+            new Date(user.subscription_expires_at) <= new Date();
+
+        res.json({
+            isSubscribed: user.is_subscribed,
+            isExpired,
+            expiresAt: user.subscription_expires_at,
+            tier: user.subscription_tier
+        });
+
+    } catch (error) {
+        logger.error('Error checking subscription:', error);
+        res.status(500).json({ error: 'Failed to check subscription status' });
+    }
+});
+
 export default router; 
