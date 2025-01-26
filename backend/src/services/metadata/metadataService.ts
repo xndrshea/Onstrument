@@ -12,6 +12,7 @@ export class MetadataService {
     private processingQueue: Set<string> = new Set();
     private queueTimer: NodeJS.Timeout | null = null;
     private readonly QUEUE_PROCESS_INTERVAL = 30000; // 30 seconds
+    private readonly BATCH_SIZE = 800; // Large batch size since we'll flush on time anyway
 
     private constructor() {
         if (!config.HELIUS_RPC_URL) {
@@ -56,11 +57,10 @@ export class MetadataService {
 
     async queueMetadataUpdate(mintAddresses: string[], source: string = 'unknown'): Promise<void> {
         // Process in batches of 20
-        const BATCH_SIZE = 20;
         const batches: string[][] = [];
 
-        for (let i = 0; i < mintAddresses.length; i += BATCH_SIZE) {
-            batches.push(mintAddresses.slice(i, i + BATCH_SIZE));
+        for (let i = 0; i < mintAddresses.length; i += this.BATCH_SIZE) {
+            batches.push(mintAddresses.slice(i, i + this.BATCH_SIZE));
         }
 
         for (const batch of batches) {

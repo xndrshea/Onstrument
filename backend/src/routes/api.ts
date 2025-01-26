@@ -955,4 +955,34 @@ router.post('/users/:walletAddress/activate-subscription', async (req, res) => {
     }
 });
 
+router.post('/tokens/update-metadata', async (req, res) => {
+    try {
+        const { mint_address, twitter_url, telegram_url, website_url, image_url } = req.body;
+
+        const query = `
+            UPDATE onstrument.tokens 
+            SET 
+                twitter_url = COALESCE($1, twitter_url),
+                telegram_url = COALESCE($2, telegram_url),
+                website_url = COALESCE($3, website_url),
+                image_url = COALESCE($4, image_url)
+            WHERE mint_address = $5
+            RETURNING *;
+        `;
+
+        const result = await pool().query(query, [
+            twitter_url,
+            telegram_url,
+            website_url,
+            image_url,
+            mint_address
+        ]);
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error updating token metadata:', error);
+        res.status(500).json({ error: 'Failed to update token metadata' });
+    }
+});
+
 export default router; 
