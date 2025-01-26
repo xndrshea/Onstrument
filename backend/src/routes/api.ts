@@ -720,6 +720,18 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
         const { walletAddress } = req.params;
         const { mintAddress, totalVolume, isSelling } = req.body;
 
+        // Get SOL price from database
+        const solPriceResult = await pool().query(`
+            SELECT current_price 
+            FROM onstrument.tokens 
+            WHERE mint_address = 'So11111111111111111111111111111111111111112'
+            LIMIT 1
+        `);
+        const solPrice = solPriceResult.rows[0].current_price;
+
+        // Convert volume to USD
+        const volumeUsd = totalVolume * solPrice;
+
         // First get the user_id
         const userResult = await pool().query(`
             SELECT user_id FROM onstrument.users 
@@ -732,7 +744,7 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
 
         const userId = userResult.rows[0].user_id;
 
-        // Update trading stats
+        // Update trading stats with USD values
         await pool().query(`
             INSERT INTO onstrument.user_trading_stats (
                 user_id, 
@@ -756,9 +768,9 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
         `, [
             userId,
             mintAddress,
-            totalVolume, // Total volume in SOL
-            isSelling ? 0 : totalVolume, // Buy volume
-            isSelling ? totalVolume : 0  // Sell volume
+            volumeUsd,         // Total volume in USD
+            isSelling ? 0 : volumeUsd,  // Buy volume in USD
+            isSelling ? volumeUsd : 0   // Sell volume in USD
         ]);
 
         res.json({ success: true });

@@ -75,19 +75,19 @@ export function TradingStats() {
                 <div className="bg-[#2A2D31] p-4 rounded-lg">
                     <h3 className="text-sm text-gray-400">Total Volume</h3>
                     <p className="text-lg font-bold text-white">
-                        {Number(stats.reduce((acc, s) => acc + (Number(s.total_volume) || 0), 0)).toFixed(4)} SOL
+                        ${Number(stats.reduce((acc, s) => acc + (Number(s.total_volume) || 0), 0)).toFixed(2)}
                     </p>
                 </div>
                 <div className="bg-[#2A2D31] p-4 rounded-lg">
                     <h3 className="text-sm text-gray-400">Buy Volume</h3>
                     <p className="text-lg font-bold text-white">
-                        {Number(stats.reduce((acc, s) => acc + (Number(s.total_buy_volume) || 0), 0)).toFixed(4)} SOL
+                        ${Number(stats.reduce((acc, s) => acc + (Number(s.total_buy_volume) || 0), 0)).toFixed(2)}
                     </p>
                 </div>
                 <div className="bg-[#2A2D31] p-4 rounded-lg">
                     <h3 className="text-sm text-gray-400">Sell Volume</h3>
                     <p className="text-lg font-bold text-white">
-                        {Number(stats.reduce((acc, s) => acc + (Number(s.total_sell_volume) || 0), 0)).toFixed(4)} SOL
+                        ${Number(stats.reduce((acc, s) => acc + (Number(s.total_sell_volume) || 0), 0)).toFixed(2)}
                     </p>
                 </div>
             </div>
@@ -114,7 +114,7 @@ export function TradingStats() {
                                     {stat.total_trades || 0}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {Number(stat.total_volume || 0).toFixed(4)} SOL
+                                    ${Number(stat.total_volume || 0).toFixed(2)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                                     {new Date(stat.last_trade_at).toLocaleDateString()}

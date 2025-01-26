@@ -327,6 +327,19 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             setRawInput('')
             await updateBalances()
 
+            // Record trading stats (sending SOL amount, conversion happens in backend)
+            await fetch(`/api/users/${publicKey.toString()}/trading-stats`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    mintAddress: token.mintAddress,
+                    totalVolume: parseFloat(amount),
+                    isSelling
+                })
+            });
+
         } catch (error: any) {
             console.error('Transaction error:', error)
             setError(error.message || 'Transaction failed')
