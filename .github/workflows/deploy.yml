@@ -120,11 +120,11 @@ jobs:
             --region $AWS_REGION
 
   deploy-frontend:
-    needs: changes
+    needs: [changes, deploy-backend]
     if: |
       needs.changes.outputs.frontend == 'true' && (
-        needs.changes.outputs.backend == 'false' || 
-        always()
+        needs.changes.outputs.backend == 'false' ||
+        needs.deploy-backend.result == 'success'
       )
     runs-on: ubuntu-latest
     permissions:
