@@ -7,7 +7,7 @@ import { tokenService } from '../../services/tokenService';
 import { priceClient } from '../../services/priceClient';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
 import { filterService } from '../../services/filterService';
-import { Menu, MenuButton, MenuItem, MenuItems, Transition } from '@headlessui/react';
+import { Menu, MenuButton, MenuItem, MenuItems, Transition, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
 
 const MAINNET_USDC_ADDRESS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
@@ -25,6 +25,72 @@ const MetricsCard = ({ title, value, change }: { title: string; value: string | 
         </div>
     </div>
 );
+
+// Add this component inside TokenDetailsPage, after TradingInterface
+const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
+    if (!token) return null;
+
+    return (
+        <div className="mt-4">
+            <Disclosure>
+                {({ open }) => (
+                    <>
+                        <DisclosureButton className="flex w-full justify-between items-center px-4 py-2 bg-[#1E222D] hover:bg-[#2C3038] rounded-lg text-white">
+                            <span>Token Information</span>
+                            <svg
+                                className={`w-5 h-5 transform ${open ? 'rotate-180' : ''} transition-transform`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </DisclosureButton>
+
+                        <DisclosurePanel className="px-4 py-3 bg-[#1E222D] mt-1 rounded-lg">
+                            <div className="space-y-3 text-sm">
+                                <div>
+                                    <div className="text-[#808591]">Contract Address</div>
+                                    <div className="font-mono text-white break-all">{token.mintAddress}</div>
+                                </div>
+
+                                {token.websiteUrl && (
+                                    <div>
+                                        <div className="text-[#808591]">Website</div>
+                                        <a href={token.websiteUrl} target="_blank" rel="noopener noreferrer"
+                                            className="text-blue-400 hover:text-blue-300">
+                                            {token.websiteUrl}
+                                        </a>
+                                    </div>
+                                )}
+
+                                {token.twitterUrl && (
+                                    <div>
+                                        <div className="text-[#808591]">Twitter</div>
+                                        <a href={token.twitterUrl} target="_blank" rel="noopener noreferrer"
+                                            className="text-blue-400 hover:text-blue-300">
+                                            {token.twitterUrl}
+                                        </a>
+                                    </div>
+                                )}
+
+                                {token.telegramUrl && (
+                                    <div>
+                                        <div className="text-[#808591]">Telegram</div>
+                                        <a href={token.telegramUrl} target="_blank" rel="noopener noreferrer"
+                                            className="text-blue-400 hover:text-blue-300">
+                                            {token.telegramUrl}
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        </DisclosurePanel>
+                    </>
+                )}
+            </Disclosure>
+        </div>
+    );
+};
 
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
@@ -90,13 +156,51 @@ export function TokenDetailsPage() {
             try {
                 setLoading(true);
                 if (!mintAddress) return;
+
+                // First get token data from our database
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
                 console.log('tokenData', tokenData);
                 setTokenWithLogging(tokenData);
 
-                // If it's a custom token with metadataUrl, fetch the metadata
-                if (tokenData?.tokenType === 'custom' && tokenData?.metadataUrl) {
-                    await fetchMetadata(tokenData.metadataUrl);
+                // If we're missing social/website URLs, fetch from DexScreener
+                if (tokenData && (!tokenData.twitterUrl || !tokenData.telegramUrl || !tokenData.websiteUrl)) {
+                    try {
+                        const response = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${mintAddress}`);
+                        const dexData = await response.json();
+
+                        if (dexData.pairs && dexData.pairs.length > 0) {
+                            const pair = dexData.pairs[0];
+
+                            // Prepare update data for API (snake_case)
+                            const updateData = {
+                                mint_address: mintAddress,
+                                twitter_url: pair.info?.socials?.find((s: any) => s.type === 'twitter')?.url || null,
+                                telegram_url: pair.info?.socials?.find((s: any) => s.type === 'telegram')?.url || null,
+                                website_url: pair.info?.websites?.[0]?.url || null,
+                                image_url: pair.info?.imageUrl || null
+                            };
+
+                            // Update database
+                            await fetch('/api/tokens/update-metadata', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(updateData)
+                            });
+
+                            // Update local state with camelCase keys
+                            setTokenWithLogging({
+                                ...tokenData,
+                                twitterUrl: updateData.twitter_url,
+                                telegramUrl: updateData.telegram_url,
+                                websiteUrl: updateData.website_url,
+                                imageUrl: updateData.image_url
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error fetching DexScreener data:', error);
+                    }
                 }
 
                 setLoading(false);
@@ -369,6 +473,7 @@ export function TokenDetailsPage() {
                             </div>
                         </div>
                         <TradingInterface token={token} currentPrice={currentPrice} />
+                        <TokenInfoSection token={token} />
                     </div>
 
                     {/* Chart section */}

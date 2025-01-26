@@ -224,27 +224,28 @@ export class TokenDiscoveryService {
 
     private async ensureTokenMetadata(mintAddress: string): Promise<void> {
         try {
-            await pool().query(
-                `INSERT INTO onstrument.tokens 
-                (mint_address, metadata_status, created_at, last_metadata_fetch, token_type) 
-                VALUES ($1, 'pending', NOW(), NOW(), 'dex')
-                ON CONFLICT (mint_address) 
-                DO UPDATE SET 
-                    metadata_status = CASE 
-                        WHEN tokens.metadata_status != 'fetched' 
-                        THEN 'pending' 
-                        ELSE tokens.metadata_status 
-                    END`,
-                [mintAddress]
-            );
-
-            // Queue metadata update if not already fetched
-            const result = await pool().query(
+            // We should check FIRST if we already have fetched metadata
+            const existingToken = await pool().query(
                 'SELECT metadata_status FROM onstrument.tokens WHERE mint_address = $1',
                 [mintAddress]
             );
 
-            if (result.rows[0].metadata_status !== 'fetched') {
+            // Only proceed if we don't have the token or its metadata isn't fetched
+            if (!existingToken.rows.length || existingToken.rows[0].metadata_status !== 'fetched') {
+                await pool().query(
+                    `INSERT INTO onstrument.tokens 
+                    (mint_address, metadata_status, created_at, last_metadata_fetch, token_type) 
+                    VALUES ($1, 'pending', NOW(), NOW(), 'dex')
+                    ON CONFLICT (mint_address) 
+                    DO UPDATE SET 
+                        metadata_status = CASE 
+                            WHEN tokens.metadata_status != 'fetched' 
+                            THEN 'pending' 
+                            ELSE tokens.metadata_status 
+                        END`,
+                    [mintAddress]
+                );
+
                 await this.metadataService.queueMetadataUpdate([mintAddress], 'discovery_service');
             }
         } catch (error) {
