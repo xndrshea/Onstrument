@@ -321,6 +321,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 }
             }
 
+            // hello
             // Success - clear form and update balances
             setAmount('')
             setRawInput('')

@@ -49,6 +49,11 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
 
+      - name: Debug Filter Outputs
+        run: |
+          echo "Backend changes: ${{ steps.filter.outputs.backend }}"
+          echo "Frontend changes: ${{ steps.filter.outputs.frontend }}"
+
   deploy-backend:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
@@ -120,12 +125,8 @@ jobs:
             --region $AWS_REGION
 
   deploy-frontend:
-    needs: [changes, deploy-backend]
-    if: |
-      needs.changes.outputs.frontend == 'true' && (
-        needs.changes.outputs.backend == 'false' ||
-        needs.deploy-backend.result == 'success'
-      )
+    needs: [changes]
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
