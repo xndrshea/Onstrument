@@ -185,29 +185,36 @@ export class BondingCurveProcessor extends BaseProcessor {
 
     private async handleBuyEvent(buffer: Buffer) {
         try {
-            // Parse event data
             const mint = new PublicKey(buffer.subarray(8, 40));
             const amount = Number(buffer.readBigUInt64LE(40));
             const solAmount = Number(buffer.readBigUInt64LE(48));
 
-            // Wait for next block
             await this.waitForNextBlock();
 
-            // Calculate actual execution price in SOL
             const solPrice = solAmount / LAMPORTS_PER_SOL;
             const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
             const priceInSol = solPrice / tokenAmount;
 
-            // Get SOL/USD price
             const solUsdPrice = await this.getSolUsdPrice();
             const priceInUsd = priceInSol * solUsdPrice;
             const volumeUsd = solPrice * solUsdPrice;
 
-            // Record price and broadcast
+            // Get token supply and calculate market cap
+            const supplyResult = await pool().query(`
+                SELECT supply, decimals 
+                FROM onstrument.tokens 
+                WHERE mint_address = $1
+            `, [mint.toString()]);
+
+            const supply = Number(supplyResult.rows[0]?.supply || 0);
+            const decimals = Number(supplyResult.rows[0]?.decimals || TOKEN_DECIMALS);
+            const adjustedSupply = supply / (10 ** decimals);
+            const marketCap = adjustedSupply * priceInUsd;
+
             await PriceHistoryModel.recordPrice({
                 mintAddress: mint.toString(),
                 price: priceInUsd,
-                marketCap: 0, // We can calculate this separately if needed
+                marketCap,
                 volume: volumeUsd,
                 timestamp: new Date(),
                 isBuy: true
@@ -222,31 +229,38 @@ export class BondingCurveProcessor extends BaseProcessor {
 
     private async handleSellEvent(buffer: Buffer) {
         try {
-            // Parse event data
             const mint = new PublicKey(buffer.subarray(8, 40));
             const amount = Number(buffer.readBigUInt64LE(40));
             const solAmount = Number(buffer.readBigUInt64LE(48));
             const seller = new PublicKey(buffer.subarray(56, 88));
             const isSubscribed = buffer.readUInt8(88) === 1;
 
-            // Wait for next block
             await this.waitForNextBlock();
 
-            // Calculate actual execution price in SOL
             const solPrice = solAmount / LAMPORTS_PER_SOL;
             const tokenAmount = amount / TOKEN_DECIMAL_MULTIPLIER;
             const priceInSol = solPrice / tokenAmount;
 
-            // Get SOL/USD price
             const solUsdPrice = await this.getSolUsdPrice();
             const priceInUsd = priceInSol * solUsdPrice;
             const volumeUsd = solPrice * solUsdPrice;
 
-            // Record price and broadcast
+            // Get token supply and calculate market cap
+            const supplyResult = await pool().query(`
+                SELECT supply, decimals 
+                FROM onstrument.tokens 
+                WHERE mint_address = $1
+            `, [mint.toString()]);
+
+            const supply = Number(supplyResult.rows[0]?.supply || 0);
+            const decimals = Number(supplyResult.rows[0]?.decimals || TOKEN_DECIMALS);
+            const adjustedSupply = supply / (10 ** decimals);
+            const marketCap = adjustedSupply * priceInUsd;
+
             await PriceHistoryModel.recordPrice({
                 mintAddress: mint.toString(),
                 price: priceInUsd,
-                marketCap: 0, // We can calculate this separately if needed
+                marketCap,
                 volume: volumeUsd,
                 timestamp: new Date(),
                 isBuy: false

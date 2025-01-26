@@ -13,7 +13,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
     const [tokens, setTokens] = useState<TokenRecord[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCapUsd'>('marketCapUsd');
+    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCapUsd' | 'newest' | 'oldest'>('newest');
 
     const refreshTokens = () => {
         fetchTokens()
@@ -42,7 +42,7 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                 supply: token.supply,
                 totalSupply: token.totalSupply,
                 currentPrice: token.currentPrice,
-                marketCap: token.marketCap
+                marketCapUsd: token.marketCapUsd
             })));
 
         } catch (error) {

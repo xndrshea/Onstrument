@@ -64,13 +64,12 @@ export class PriceHistoryModel {
         isBuy?: boolean;
     }) {
         try {
-            const { mintAddress, price, volume, timestamp = new Date(), marketCap, isBuy } = update;
+            const { mintAddress, price, volume = 0, timestamp = new Date(), marketCap, isBuy } = update;
 
             // Round timestamp down to the start of the minute
             const currentMinute = new Date(timestamp);
             currentMinute.setSeconds(0, 0);
 
-            // Start a transaction to ensure both updates happen or neither does
             const client = await pool().connect();
             try {
                 await client.query('BEGIN');
@@ -92,7 +91,6 @@ export class PriceHistoryModel {
                     RETURNING *
                 `, [mintAddress, currentMinute, price, volume, marketCap, isBuy]);
 
-                // If no existing record for this minute, create a new one
                 if (result.rows.length === 0) {
                     await client.query(`
                         INSERT INTO onstrument.price_history (
@@ -130,7 +128,7 @@ export class PriceHistoryModel {
                     UPDATE onstrument.tokens
                     SET 
                         current_price = $2,
-                        market_cap_usd = COALESCE($3::numeric, ($2::numeric * (supply#>>'{}')::numeric)), 
+                        market_cap_usd = $3,
                         last_price_update = $4
                     WHERE mint_address = $1
                 `, [mintAddress, price, marketCap, timestamp]);

@@ -177,6 +177,7 @@ router.post('/tokens', async (req, res) => {
 router.get('/tokens', async (req, res) => {
     try {
         const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCap' || '24h';
+
         // Handle volume-based intervals
         const volumeInterval = {
             '5m': 'INTERVAL \'5 minutes\'',
@@ -204,22 +205,39 @@ router.get('/tokens', async (req, res) => {
             : ', 0 as volume';
 
         // Determine the ORDER BY clause based on sortBy
-        let orderByClause = 'ORDER BY volume DESC';
-        if (sortBy === 'newest') {
-            orderByClause = 'ORDER BY t.created_at DESC';
-        } else if (sortBy === 'oldest') {
-            orderByClause = 'ORDER BY t.created_at ASC';
-        } else if (sortBy === 'marketCap') {
-            orderByClause = 'ORDER BY t.market_cap_usd DESC NULLS LAST';
+        let orderByClause;
+        switch (sortBy) {
+            case 'newest':
+                orderByClause = 'ORDER BY t.created_at DESC';
+                break;
+            case 'oldest':
+                orderByClause = 'ORDER BY t.created_at ASC';
+                break;
+            case 'marketCap':
+                orderByClause = 'ORDER BY t.market_cap_usd DESC NULLS LAST';
+                break;
+            default:
+                orderByClause = 'ORDER BY volume DESC NULLS LAST';
         }
 
         const result = await pool().query(`
             SELECT 
-                t.*,
-                t.market_cap_usd
+                t.mint_address,
+                t.curve_address,
+                t.name,
+                t.symbol,
+                t.decimals,
+                t.description,
+                t.metadata_url,
+                t.curve_config,
+                t.created_at,
+                t.token_type,
+                t.supply,
+                t.current_price,
+                t.market_cap_usd as "marketCapUsd"
                 ${volumeSelect}
             FROM onstrument.tokens t
-            WHERE token_type = 'custom'
+            WHERE t.token_type = 'custom'
             ${orderByClause}
         `);
 
@@ -236,8 +254,9 @@ router.get('/tokens', async (req, res) => {
             tokenType: token.token_type,
             supply: token.supply,
             totalSupply: token.supply,
-            volume: token.volume,
-            marketCap: token.market_cap_usd ? Number(token.market_cap_usd) : null
+            volume: Number(token.volume || 0),
+            currentPrice: Number(token.current_price || 0),
+            marketCapUsd: token.marketCapUsd ? Number(token.marketCapUsd) : null
         }));
 
         res.json({ tokens });
