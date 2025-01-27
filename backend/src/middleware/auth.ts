@@ -32,10 +32,8 @@ export const generateNonce = (walletAddress: string) => {
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        // Check for token in both cookie and Authorization header
-        const tokenFromHeader = req.headers.authorization?.split(' ')[1];
-        const tokenFromCookie = req.cookies.authToken;
-        const token = tokenFromHeader || tokenFromCookie;
+        // Only check cookies, not headers
+        const token = req.cookies.authToken;
 
         if (!token) {
             return res.status(401).json({ error: 'No token provided' });
@@ -56,18 +54,21 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
             req.user = decoded;
 
-            // Refresh the token if it's close to expiring
+            // Refresh logic remains the same but only uses cookies
             const tokenExp = (jwt.decode(token) as any).exp;
             const now = Math.floor(Date.now() / 1000);
 
-            if (tokenExp - now < 3600) { // Less than 1 hour left
+            if (tokenExp - now < 3600) {
                 const newToken = jwt.sign({ walletAddress: decoded.walletAddress }, process.env.JWT_SECRET!, { expiresIn: '24h' });
                 res.cookie('authToken', newToken, {
                     httpOnly: true,
                     secure: process.env.NODE_ENV === 'production',
                     sameSite: 'lax',
+                    domain: process.env.NODE_ENV === 'production'
+                        ? '.onstrument.com'
+                        : 'localhost',
                     path: '/',
-                    maxAge: 86400000 // 24 hours
+                    maxAge: 86400000
                 });
             }
 

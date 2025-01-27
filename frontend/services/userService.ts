@@ -23,22 +23,27 @@ interface SubscriptionActivation {
 export class UserService {
     static async getOrCreateUser(walletAddress: string): Promise<User> {
         try {
-            const { headers: authHeaders } = await getAuthHeaders();
-            const csrfHeaders = await getCsrfHeaders();
+            const headers = await getFullHeaders();
+
             const response = await fetch(`/api/users`, {
                 method: 'POST',
                 headers: {
-                    ...authHeaders,
-                    ...csrfHeaders
+                    ...headers,
+                    'Content-Type': 'application/json'
                 },
                 credentials: 'include',
                 body: JSON.stringify({ walletAddress })
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('User service error:', errorText);
-                throw new Error('Failed to get/create user');
+                const errorData = await response.json().catch(() => null);
+                const errorMessage = errorData?.error || await response.text();
+                console.error('User service error:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorMessage
+                });
+                throw new Error(`Failed to get/create user: ${response.status} ${errorMessage}`);
             }
 
             const data = await response.json();

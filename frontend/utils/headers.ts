@@ -22,35 +22,23 @@ export async function getCsrfHeaders() {
 }
 
 export async function getFullHeaders(): Promise<Record<string, string>> {
-    // Get new CSRF token
     const csrfResponse = await fetch('/api/csrf-token', {
         credentials: 'include'
     });
     const { csrfToken } = await csrfResponse.json();
 
-    const headers: Record<string, string> = {
+    return {
         'Content-Type': 'application/json',
         'X-CSRF-Token': csrfToken
     };
-
-    // Add auth token if exists
-    const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-        const [key, value] = cookie.trim().split('=');
-        if (key && value) acc[key.trim()] = value.trim();
-        return acc;
-    }, {} as Record<string, string>);
-
-    if (cookies['authToken']) {
-        headers['Authorization'] = `Bearer ${cookies['authToken']}`;
-    }
-
-    return headers;
 }
 
-export async function getAuthHeaders() {
-    const headers = await getFullHeaders();
+export const getAuthHeaders = async () => {
     return {
-        headers,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': (await getFullHeaders())['X-CSRF-Token']
+        },
         credentials: 'include' as RequestCredentials
     };
-} 
+}; 

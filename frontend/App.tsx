@@ -32,28 +32,6 @@ function App() {
     const { setVisible } = useWalletModal()
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-    // First useEffect: Check authentication status on mount
-    useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                const headers = await getFullHeaders();
-                // Change verify-token to verify
-                const response = await fetch('/api/auth/verify', {
-                    method: 'POST',  // Change to POST since that's what your endpoint expects
-                    credentials: 'include',
-                    headers,
-                    body: JSON.stringify({}) // Empty body since verify endpoint expects POST
-                });
-                setIsAuthenticated(response.ok);
-            } catch (error) {
-                console.error('Auth check failed:', error);
-                setIsAuthenticated(false);
-            }
-        };
-        checkAuth();
-    }, []);
-
-    // Second useEffect: Handle user data and authentication
     useEffect(() => {
         const initializeUser = async () => {
             if (authInProgress || !connected || !publicKey) return;
@@ -61,26 +39,10 @@ function App() {
             try {
                 setAuthInProgress(true);
 
-                // Get CSRF token first
-                const csrfResponse = await fetch('/api/csrf-token', {
-                    credentials: 'include'
-                });
-                const { csrfToken } = await csrfResponse.json();
+                // Get CSRF headers
+                const headers = await getFullHeaders();
 
-                // Add CSRF token to headers
-                const headers = {
-                    ...await getFullHeaders(),
-                    'X-CSRF-Token': csrfToken
-                };
-
-                // If already authenticated, just get user data
-                if (isAuthenticated) {
-                    const userData = await UserService.getOrCreateUser(publicKey.toString());
-                    setUser(userData);
-                    return;
-                }
-
-                // Only proceed with full auth flow if not authenticated
+                // Start auth flow
                 const nonceResponse = await fetch('/api/auth/nonce', {
                     method: 'POST',
                     headers,
@@ -93,27 +55,18 @@ function App() {
                 }
 
                 const nonceData = await nonceResponse.json();
-
-                if (!signMessage) {
-                    throw new Error('Wallet does not support message signing');
-                }
-
                 const message = new TextEncoder().encode(
                     `Sign this message to verify your wallet ownership. Nonce: ${nonceData.nonce}`
                 );
-
-                const signature = await signMessage(message);
+                const signature = await signMessage?.(message);
 
                 if (!signature) {
                     throw new Error('No signature received');
                 }
 
-                const verifyHeaders = Object.fromEntries(
-                    Object.entries(await getFullHeaders())
-                ) as Record<string, string>;
                 const verifyResponse = await fetch('/api/auth/verify', {
                     method: 'POST',
-                    headers: verifyHeaders,
+                    headers,
                     credentials: 'include',
                     body: JSON.stringify({
                         signature: bs58.encode(signature),
@@ -123,25 +76,27 @@ function App() {
                 });
 
                 if (!verifyResponse.ok) {
-                    const errorText = await verifyResponse.text();
-                    throw new Error(`Failed to verify signature: ${errorText}`);
+                    throw new Error('Verification failed');
                 }
 
+                // User is now authenticated and created if needed
                 setIsAuthenticated(true);
-                const userData = await UserService.getOrCreateUser(publicKey.toString());
-                setUser(userData);
+
+                // Get user data from verify response
+                const { user } = await verifyResponse.json();
+                setUser(user);
 
             } catch (error) {
                 console.error('Initialization failed:', error);
-                setUser(null);
                 setIsAuthenticated(false);
+                setUser(null);
             } finally {
                 setAuthInProgress(false);
             }
         };
 
         initializeUser();
-    }, [connected, publicKey, signMessage, isAuthenticated]);
+    }, [connected, publicKey, signMessage]);
 
     const handleCreateClick = () => {
         if (!connected) {

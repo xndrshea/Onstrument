@@ -25,11 +25,12 @@ export function useSubscription() {
     async function checkSubscription() {
         try {
             if (publicKey && isAuthenticated) {
+                const headers = await getAuthHeaders();
                 const response = await fetch(
                     `/api/users/${publicKey.toString()}/check-subscription`,
                     {
                         method: 'POST',
-                        ...(await getAuthHeaders())
+                        ...headers
                     }
                 );
                 const data = await response.json();
