@@ -1139,4 +1139,9 @@ router.post('/users', csrfProtection, async (req, res) => {
     }
 });
 
+// Add health check endpoint
+router.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
+
 export default router; 
