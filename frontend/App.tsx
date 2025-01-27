@@ -59,6 +59,18 @@ function App() {
             try {
                 setAuthInProgress(true);
 
+                // Get CSRF token first
+                const csrfResponse = await fetch('/api/csrf-token', {
+                    credentials: 'include'
+                });
+                const { csrfToken } = await csrfResponse.json();
+
+                // Add CSRF token to headers
+                const headers = {
+                    ...await getFullHeaders(),
+                    'X-CSRF-Token': csrfToken
+                };
+
                 // If already authenticated, just get user data
                 if (isAuthenticated) {
                     const userData = await UserService.getOrCreateUser(publicKey.toString());
@@ -67,10 +79,6 @@ function App() {
                 }
 
                 // Only proceed with full auth flow if not authenticated
-                const headers = Object.fromEntries(
-                    Object.entries(await getFullHeaders())
-                ) as Record<string, string>;
-
                 const nonceResponse = await fetch('/api/auth/nonce', {
                     method: 'POST',
                     headers,

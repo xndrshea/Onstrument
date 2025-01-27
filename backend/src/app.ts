@@ -97,8 +97,8 @@ export function createApp() {
 
     // CORS setup first
     const allowedOrigins = process.env.NODE_ENV === 'production'
-        ? ['https://onstrument.com', 'https://www.onstrument.com']
-        : ['http://localhost:3000', 'http://localhost:5173'];
+        ? ['https://onstrument.com', 'https://www.onstrument.com', 'https://api.onstrument.com']
+        : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:3001'];
 
     app.use(cors({
         origin: (origin, callback) => {
@@ -114,7 +114,11 @@ export function createApp() {
         allowedHeaders: [
             'Content-Type',
             'Authorization',
-            'X-CSRF-Token'
+            'X-CSRF-Token',
+            'solana-client',
+            'x-requested-with',
+            'pinata-api-key',
+            'pinata-secret-api-key',
         ]
     }));
 
@@ -146,7 +150,10 @@ export function createApp() {
 
     // Apply CSRF protection to specific routes
     app.use('/api', (req, res, next) => {
-
+        // Skip CSRF for initial auth endpoints
+        if (req.path.startsWith('/auth/nonce')) {
+            return next();
+        }
 
         if ((req.path.startsWith('/auth') ||
             req.path.startsWith('/users') ||
