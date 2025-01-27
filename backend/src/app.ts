@@ -34,6 +34,11 @@ export function createApp() {
         throw new Error('Parameter store must be initialized before creating app');
     }
 
+    // Add health check BEFORE any middleware
+    app.get('/health', (req, res) => {
+        res.status(200).json({ status: 'healthy' });
+    });
+
     // Initialize all services
     initializeServices()
 
@@ -226,11 +231,6 @@ export function createApp() {
                 helius: HeliusManager.getInstance().getStatus()
             }
         });
-    });
-
-    // Add this near your other routes
-    app.get('/health', (req, res) => {
-        res.status(200).json({ status: 'healthy' });
     });
 
     // Initialize cron jobs
