@@ -19,7 +19,7 @@ import { TokenList } from './components/TokenList/TokenList'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import bs58 from 'bs58'
 import { AuthContext } from './contexts/AuthContext'
-import { getFullHeaders } from './utils/headers'
+import { getFullHeaders, getAuthHeaders } from './utils/headers'
 
 function App() {
     const { connected, publicKey, signMessage } = useWallet()
@@ -33,19 +33,44 @@ function App() {
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
     useEffect(() => {
-        const initializeUser = async () => {
-            if (authInProgress || !connected || !publicKey) return;
+        const checkPersistedAuth = async () => {
+            try {
+                // Check if we have existing auth
+                const { headers } = await getAuthHeaders();
+
+                // Use existing user endpoint
+                const userResponse = await fetch(`/api/users/${publicKey?.toString()}`, {
+                    method: 'GET',
+                    headers,
+                    credentials: 'include'
+                });
+
+                if (userResponse.ok) {
+                    const userData = await userResponse.json();
+                    setUser(userData);
+                    setIsAuthenticated(true);
+                    return true;
+                }
+            } catch (error) {
+                console.log('Persisted auth check failed:', error);
+            }
+            return false;
+        };
+
+        const initializeAuth = async () => {
+            if (!publicKey || !connected) return;
 
             try {
                 setAuthInProgress(true);
 
-                // Get CSRF headers
-                const headers = await getFullHeaders();
+                // First try silent auth
+                const hasValidSession = await checkPersistedAuth();
+                if (hasValidSession) return;
 
-                // Start auth flow
+                // Proceed with full auth flow
                 const nonceResponse = await fetch('/api/auth/nonce', {
                     method: 'POST',
-                    headers,
+                    headers: await getFullHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({ walletAddress: publicKey.toString() })
                 });
@@ -66,7 +91,7 @@ function App() {
 
                 const verifyResponse = await fetch('/api/auth/verify', {
                     method: 'POST',
-                    headers,
+                    headers: await getFullHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({
                         signature: bs58.encode(signature),
@@ -95,8 +120,8 @@ function App() {
             }
         };
 
-        initializeUser();
-    }, [connected, publicKey, signMessage]);
+        initializeAuth();
+    }, [publicKey, connected, signMessage]);
 
     const handleCreateClick = () => {
         if (!connected) {
