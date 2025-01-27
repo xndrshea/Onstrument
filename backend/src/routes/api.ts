@@ -77,7 +77,8 @@ router.post('/auth/verify', csrfProtection, async (req, res) => {
         res.cookie('authToken', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
+            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            domain: process.env.NODE_ENV === 'production' ? '.onstrument.com' : undefined,
             path: '/',
             maxAge: 86400000 // 24 hours
         });

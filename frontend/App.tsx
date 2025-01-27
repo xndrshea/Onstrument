@@ -37,7 +37,10 @@ function App() {
         const checkAuth = async () => {
             try {
                 const response = await fetch('/api/auth/verify-token', {
-                    credentials: 'include'
+                    credentials: 'include',  // Make sure cookies are sent
+                    headers: {
+                        'Authorization': `Bearer ${document.cookie.split('authToken=')[1]?.split(';')[0]}`
+                    }
                 });
                 setIsAuthenticated(response.ok);
             } catch (error) {
