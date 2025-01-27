@@ -105,6 +105,7 @@ export interface TokenRecord {
     reserveInUsd?: number;
     baseTokenPriceNativeCurrency?: number;
     quoteTokenPriceNativeCurrency?: number;
+    initialPrice?: number;
 }
 
 export interface TokenFormData {

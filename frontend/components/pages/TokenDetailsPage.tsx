@@ -8,6 +8,7 @@ import { priceClient } from '../../services/priceClient';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
 import { filterService } from '../../services/filterService';
 import { Menu, MenuButton, MenuItem, MenuItems, Transition, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
+import { getAuthHeaders } from '../../utils/headers';
 
 const MAINNET_USDC_ADDRESS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
@@ -217,9 +218,7 @@ export function TokenDetailsPage() {
                             // Update database
                             await fetch('/api/tokens/update-metadata', {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
+                                ...(await getAuthHeaders()),
                                 body: JSON.stringify(updateData)
                             });
 

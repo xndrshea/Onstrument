@@ -17,29 +17,118 @@ import { TermsOfService } from './components/pages/TermsOfService'
 import { TokenCreationForm } from './components/TokenCreation/TokenCreationForm'
 import { TokenList } from './components/TokenList/TokenList'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
+import bs58 from 'bs58'
+import { AuthContext } from './contexts/AuthContext'
+import { getFullHeaders } from './utils/headers'
 
 function App() {
-    const { connected, publicKey } = useWallet()
+    const { connected, publicKey, signMessage } = useWallet()
     const [isModalOpen, setIsModalOpen] = useState(false)
-    const [refreshTrigger, setRefreshTrigger] = useState(0)
     const [user, setUser] = useState<User | null>(null)
     const [isProfileOpen, setIsProfileOpen] = useState(false)
     const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false)
+    const [isAuthenticated, setIsAuthenticated] = useState(false)
+    const [authInProgress, setAuthInProgress] = useState(false)
     const { setVisible } = useWalletModal()
+    const [refreshTrigger, setRefreshTrigger] = useState(0)
 
+    // First useEffect: Check authentication status on mount
     useEffect(() => {
-        if (connected && publicKey) {
-            UserService.getOrCreateUser(publicKey.toString())
-                .then(userData => {
-                    setUser(userData)
-                })
-                .catch(error => {
-                    console.error('Failed to get/create user:', error)
-                })
-        } else {
-            setUser(null)
-        }
-    }, [connected, publicKey])
+        const checkAuth = async () => {
+            try {
+                const response = await fetch('/api/auth/verify-token', {
+                    credentials: 'include'
+                });
+                setIsAuthenticated(response.ok);
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                setIsAuthenticated(false);
+            }
+        };
+        checkAuth();
+    }, []);
+
+    // Second useEffect: Handle user data and authentication
+    useEffect(() => {
+        const initializeUser = async () => {
+            if (authInProgress || !connected || !publicKey) return;
+
+            try {
+                setAuthInProgress(true);
+
+                // If already authenticated, just get user data
+                if (isAuthenticated) {
+                    const userData = await UserService.getOrCreateUser(publicKey.toString());
+                    setUser(userData);
+                    return;
+                }
+
+                // Only proceed with full auth flow if not authenticated
+                const headers = Object.fromEntries(
+                    Object.entries(await getFullHeaders())
+                ) as Record<string, string>;
+
+                const nonceResponse = await fetch('/api/auth/nonce', {
+                    method: 'POST',
+                    headers,
+                    credentials: 'include',
+                    body: JSON.stringify({ walletAddress: publicKey.toString() })
+                });
+
+                if (!nonceResponse.ok) {
+                    throw new Error('Failed to get nonce');
+                }
+
+                const nonceData = await nonceResponse.json();
+
+                if (!signMessage) {
+                    throw new Error('Wallet does not support message signing');
+                }
+
+                const message = new TextEncoder().encode(
+                    `Sign this message to verify your wallet ownership. Nonce: ${nonceData.nonce}`
+                );
+
+                const signature = await signMessage(message);
+
+                if (!signature) {
+                    throw new Error('No signature received');
+                }
+
+                const verifyHeaders = Object.fromEntries(
+                    Object.entries(await getFullHeaders())
+                ) as Record<string, string>;
+                const verifyResponse = await fetch('/api/auth/verify', {
+                    method: 'POST',
+                    headers: verifyHeaders,
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        signature: bs58.encode(signature),
+                        walletAddress: publicKey.toString(),
+                        nonce: nonceData.nonce
+                    })
+                });
+
+                if (!verifyResponse.ok) {
+                    const errorText = await verifyResponse.text();
+                    throw new Error(`Failed to verify signature: ${errorText}`);
+                }
+
+                setIsAuthenticated(true);
+                const userData = await UserService.getOrCreateUser(publicKey.toString());
+                setUser(userData);
+
+            } catch (error) {
+                console.error('Initialization failed:', error);
+                setUser(null);
+                setIsAuthenticated(false);
+            } finally {
+                setAuthInProgress(false);
+            }
+        };
+
+        initializeUser();
+    }, [connected, publicKey, signMessage, isAuthenticated]);
 
     const handleCreateClick = () => {
         if (!connected) {
@@ -53,81 +142,100 @@ function App() {
         setIsSubscribeModalOpen(true)
     }
 
+    const contextValue = {
+        user,
+        isAuthenticated,
+        setUser,
+        logout: () => {
+            setUser(null);
+            setIsAuthenticated(false);
+            document.cookie = 'authToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        },
+        refreshUser: async () => {
+            if (publicKey) {
+                const userData = await UserService.getOrCreateUser(publicKey.toString());
+                setUser(userData);
+            }
+        }
+    };
+
     return (
         <Router>
-            <div style={{
-                minHeight: '100vh',
-                backgroundColor: '#1a1b1f',
-                display: 'flex',
-                flexDirection: 'column'
-            }}>
-                <Header
-                    onProfileClick={() => setIsProfileOpen(true)}
-                    onSubscribeClick={handleSubscribeClick}
-                />
-
-                <main style={{
-                    padding: '20px',
-                    color: 'white',
-                    flex: '1 1 auto',
-                    minHeight: 0  // Add this to prevent flex item from growing
+            <AuthContext.Provider value={contextValue}>
+                <div style={{
+                    minHeight: '100vh',
+                    backgroundColor: '#1a1b1f',
+                    display: 'flex',
+                    flexDirection: 'column'
                 }}>
-                    <Routes>
-                        <Route path="/" element={
-                            <TokenList
-                                onCreateClick={handleCreateClick}
-                                key={refreshTrigger}
+                    <Header
+                        onProfileClick={() => setIsProfileOpen(true)}
+                        onSubscribeClick={handleSubscribeClick}
+                    />
+
+                    <main style={{
+                        padding: '20px',
+                        color: 'white',
+                        flex: '1 1 auto',
+                        minHeight: 0  // Add this to prevent flex item from growing
+                    }}>
+                        <Routes>
+                            <Route path="/" element={
+                                <TokenList
+                                    onCreateClick={handleCreateClick}
+                                    key={refreshTrigger}
+                                />
+                            } />
+                            <Route path="/market" element={<MarketPage />} />
+                            <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
+                            <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
+                            <Route path="/profile" element={<ProfilePage />} />
+                            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                            <Route path="/terms-of-service" element={<TermsOfService />} />
+                        </Routes>
+                    </main>
+
+                    <Footer />
+
+                    {isModalOpen && !connected ? (
+                        <Modal isOpen={true} onClose={() => setIsModalOpen(false)}>
+                            <div className="connect-wallet-prompt" style={{ padding: '20px', textAlign: 'center' }}>
+                                <h2>Connect Wallet Required</h2>
+                                <p>Please connect your wallet to create a token.</p>
+                                <button
+                                    onClick={() => setVisible(true)}
+                                    className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
+                                >
+                                    Select Wallet
+                                </button>
+                            </div>
+                        </Modal>
+                    ) : (
+                        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+                            <TokenCreationForm
+                                onSuccess={() => setIsModalOpen(false)}
+                                onTokenCreated={() => {
+                                    setRefreshTrigger(prev => prev + 1)
+                                    setIsModalOpen(false)
+                                }}
                             />
-                        } />
-                        <Route path="/market" element={<MarketPage />} />
-                        <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
-                        <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
-                        <Route path="/profile" element={<ProfilePage />} />
-                        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                        <Route path="/terms-of-service" element={<TermsOfService />} />
-                    </Routes>
-                </main>
+                        </Modal>
+                    )}
 
-                <Footer />
-
-                {isModalOpen && !connected ? (
-                    <Modal isOpen={true} onClose={() => setIsModalOpen(false)}>
-                        <div className="connect-wallet-prompt" style={{ padding: '20px', textAlign: 'center' }}>
-                            <h2>Connect Wallet Required</h2>
-                            <p>Please connect your wallet to create a token.</p>
-                            <button
-                                onClick={() => setVisible(true)}
-                                className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
-                            >
-                                Select Wallet
-                            </button>
-                        </div>
-                    </Modal>
-                ) : (
-                    <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-                        <TokenCreationForm
-                            onSuccess={() => setIsModalOpen(false)}
-                            onTokenCreated={() => {
-                                setRefreshTrigger(prev => prev + 1)
-                                setIsModalOpen(false)
-                            }}
+                    {isProfileOpen && (
+                        <ProfileModal
+                            isOpen={isProfileOpen}
+                            onClose={() => setIsProfileOpen(false)}
                         />
-                    </Modal>
-                )}
-
-                {isProfileOpen && (
-                    <ProfileModal
-                        isOpen={isProfileOpen}
-                        onClose={() => setIsProfileOpen(false)}
-                    />
-                )}
-                {isSubscribeModalOpen && (
-                    <SubscribeModal
-                        isOpen={isSubscribeModalOpen}
-                        onClose={() => setIsSubscribeModalOpen(false)}
-                    />
-                )}
-            </div>
+                    )}
+                    {isSubscribeModalOpen && (
+                        <SubscribeModal
+                            isOpen={isSubscribeModalOpen}
+                            onClose={() => setIsSubscribeModalOpen(false)}
+                        />
+                    )}
+                </div>
+            </AuthContext.Provider>
         </Router>
     )
 }

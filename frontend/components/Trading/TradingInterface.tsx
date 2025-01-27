@@ -9,6 +9,7 @@ import { DexService } from '../../services/dexService'
 import { UserService } from '../../services/userService'
 import { TokenTransactionService } from '../../services/TokenTransactionService'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
+import { getFullHeaders } from '../../utils/headers'
 
 interface TradingInterfaceProps {
     token: TokenRecord
@@ -330,9 +331,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             // Record trading stats (sending SOL amount, conversion happens in backend)
             await fetch(`/api/users/${publicKey.toString()}/trading-stats`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: await getFullHeaders(),
                 body: JSON.stringify({
                     mintAddress: token.mintAddress,
                     totalVolume: parseFloat(amount),

@@ -7,7 +7,6 @@ export function initializeSolPriceJob(): void {
 
     // Run every 5 minutes
     const job = new CronJob('*/5 * * * *', async () => {
-        logger.info('Starting SOL price update job');
         await solPriceService.updateSolPrice();
     });
 
