@@ -31,48 +31,56 @@ function App() {
     const [authInProgress, setAuthInProgress] = useState(false)
     const { setVisible } = useWalletModal()
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    const [authCompleted, setAuthCompleted] = useState(false)
 
     useEffect(() => {
         const checkPersistedAuth = async () => {
             try {
-                // Check if we have existing auth
-                const { headers } = await getAuthHeaders();
+                // If no publicKey, don't even try
+                if (!publicKey) return false;
 
-                // Use existing user endpoint
-                const userResponse = await fetch(`/api/users/${publicKey?.toString()}`, {
+                // First try to get/create user without auth
+                const createUserResponse = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: await getFullHeaders(),
+                    credentials: 'include',
+                    body: JSON.stringify({ walletAddress: publicKey.toString() })
+                });
+
+                if (!createUserResponse.ok) {
+                    console.log('Failed to create/get user');
+                    return false;
+                }
+
+                // Now try the authenticated endpoint
+                const { headers } = await getAuthHeaders();
+                const response = await fetch(`/api/users/${publicKey.toString()}`, {
                     method: 'GET',
                     headers,
                     credentials: 'include'
                 });
 
-                if (userResponse.ok) {
-                    const userData = await userResponse.json();
-                    setUser(userData);
-                    setIsAuthenticated(true);
-                    return true;
+                if (response.ok) return true;
+
+                // Check for HTML response
+                const text = await response.text();
+                if (text.startsWith('<!DOCTYPE')) {
+                    throw new Error('Server error - received HTML response');
                 }
+                return false;
             } catch (error) {
                 console.log('Persisted auth check failed:', error);
+                return false;
             }
-            return false;
         };
 
-        const initializeAuth = async () => {
-            if (!publicKey || !connected) return;
-
+        const forceAuthFlow = async () => {
             try {
-                setAuthInProgress(true);
-
-                // First try silent auth
-                const hasValidSession = await checkPersistedAuth();
-                if (hasValidSession) return;
-
-                // Proceed with full auth flow
                 const nonceResponse = await fetch('/api/auth/nonce', {
                     method: 'POST',
                     headers: await getFullHeaders(),
                     credentials: 'include',
-                    body: JSON.stringify({ walletAddress: publicKey.toString() })
+                    body: JSON.stringify({ walletAddress: publicKey!.toString() })
                 });
 
                 if (!nonceResponse.ok) {
@@ -83,11 +91,12 @@ function App() {
                 const message = new TextEncoder().encode(
                     `Sign this message to verify your wallet ownership. Nonce: ${nonceData.nonce}`
                 );
-                const signature = await signMessage?.(message);
 
-                if (!signature) {
-                    throw new Error('No signature received');
-                }
+                // Show wallet modal immediately
+                setVisible(true);
+
+                const signature = await signMessage!(message);
+                if (!signature) throw new Error('No signature received');
 
                 const verifyResponse = await fetch('/api/auth/verify', {
                     method: 'POST',
@@ -95,7 +104,7 @@ function App() {
                     credentials: 'include',
                     body: JSON.stringify({
                         signature: bs58.encode(signature),
-                        walletAddress: publicKey.toString(),
+                        walletAddress: publicKey!.toString(),
                         nonce: nonceData.nonce
                     })
                 });
@@ -104,17 +113,41 @@ function App() {
                     throw new Error('Verification failed');
                 }
 
-                // User is now authenticated and created if needed
+                // Update auth state
+                const userData = await UserService.getUser(publicKey!.toString());
+                setUser(userData);
                 setIsAuthenticated(true);
-
-                // Get user data from verify response
-                const { user } = await verifyResponse.json();
-                setUser(user);
-
             } catch (error) {
-                console.error('Initialization failed:', error);
+                console.error('Forced auth failed:', error);
                 setIsAuthenticated(false);
                 setUser(null);
+            }
+        };
+
+        const initializeAuth = async () => {
+            if (!publicKey || !connected) return;
+
+            try {
+                setAuthInProgress(true);
+
+                // First try silent auth
+                const hasValidSession = await checkPersistedAuth();
+                if (hasValidSession) {
+                    const userData = await UserService.getUser(publicKey.toString());
+                    setUser(userData);
+                    setIsAuthenticated(true);
+                    setAuthCompleted(true);  // Set completed after successful auth
+                    return;
+                }
+
+                // If silent auth fails, force signing
+                await forceAuthFlow();
+                setAuthCompleted(true);  // Set completed after forced auth
+            } catch (error) {
+                console.error('Auth failed:', error);
+                setIsAuthenticated(false);
+                setUser(null);
+                setAuthCompleted(true);  // Set completed even on failure
             } finally {
                 setAuthInProgress(false);
             }
@@ -154,7 +187,11 @@ function App() {
 
     return (
         <Router>
-            <AuthContext.Provider value={contextValue}>
+            <AuthContext.Provider value={{
+                ...contextValue,
+                authCompleted,
+                setIsAuthenticated
+            }}>
                 <div style={{
                     minHeight: '100vh',
                     backgroundColor: '#1a1b1f',

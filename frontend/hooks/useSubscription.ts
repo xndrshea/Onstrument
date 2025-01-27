@@ -2,7 +2,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useState, useEffect, useContext } from 'react';
 import { toast } from 'react-hot-toast';
 import { AuthContext } from '../contexts/AuthContext';
-import { getAuthHeaders } from '../utils/headers';
+import { getAuthHeaders, getFullHeaders } from '../utils/headers';
 
 interface SubscriptionStatus {
     isSubscribed: boolean;
@@ -13,7 +13,7 @@ interface SubscriptionStatus {
 
 export function useSubscription() {
     const { publicKey } = useWallet();
-    const { isAuthenticated } = useContext(AuthContext);
+    const { isAuthenticated, authCompleted } = useContext(AuthContext);
     const [status, setStatus] = useState<SubscriptionStatus>({
         isSubscribed: false,
         isExpired: false,
@@ -22,52 +22,45 @@ export function useSubscription() {
     });
     const [isLoading, setIsLoading] = useState(true);
 
-    async function checkSubscription() {
+    const checkSubscription = async () => {
+        if (!publicKey || !authCompleted) return; // Wait for auth
+
         try {
-            if (publicKey && isAuthenticated) {
-                const headers = await getAuthHeaders();
-                const response = await fetch(
-                    `/api/users/${publicKey.toString()}/check-subscription`,
-                    {
-                        method: 'POST',
-                        ...headers
-                    }
+            const response = await fetch(
+                `/api/users/${publicKey.toString()}/check-subscription`,
+                {
+                    method: 'POST',
+                    headers: await getFullHeaders(),
+                    credentials: 'include'
+                }
+            );
+            const data = await response.json();
+            setStatus(data);
+
+            // Notify user if subscription is expired
+            if (data.isExpired) {
+                toast.error(
+                    'Your subscription has expired. Please renew to continue accessing premium features.',
+                    { duration: 5000 }
                 );
-                const data = await response.json();
-                setStatus(data);
+            }
 
-                // Notify user if subscription is expired
-                if (data.isExpired) {
-                    toast.error(
-                        'Your subscription has expired. Please renew to continue accessing premium features.',
-                        { duration: 5000 }
-                    );
+            // Notify user if subscription is about to expire
+            else if (data.expiresAt) {
+                const daysUntilExpiry = Math.ceil(
+                    (new Date(data.expiresAt).getTime() - new Date().getTime())
+                    / (1000 * 60 * 60 * 24)
+                );
+
+                if (daysUntilExpiry <= 7) {
+                    toast(`Your subscription will expire in ${daysUntilExpiry} days. Please renew soon.`, {
+                        duration: 5000,
+                        icon: '⚠️'
+                    });
                 }
-
-                // Notify user if subscription is about to expire
-                else if (data.expiresAt) {
-                    const daysUntilExpiry = Math.ceil(
-                        (new Date(data.expiresAt).getTime() - new Date().getTime())
-                        / (1000 * 60 * 60 * 24)
-                    );
-
-                    if (daysUntilExpiry <= 7) {
-                        toast(`Your subscription will expire in ${daysUntilExpiry} days. Please renew soon.`, {
-                            duration: 5000,
-                            icon: '⚠️'
-                        });
-                    }
-                }
-            } else {
-                setStatus({
-                    isSubscribed: false,
-                    isExpired: false,
-                    expiresAt: null,
-                    tier: null
-                });
             }
         } catch (error) {
-            console.error('Error checking subscription:', error);
+            console.error('Subscription check failed:', error);
             setStatus({
                 isSubscribed: false,
                 isExpired: false,
@@ -77,11 +70,11 @@ export function useSubscription() {
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     useEffect(() => {
         checkSubscription();
-    }, [publicKey, isAuthenticated]);
+    }, [publicKey, isAuthenticated, authCompleted]);
 
     return { ...status, isLoading };
 } 

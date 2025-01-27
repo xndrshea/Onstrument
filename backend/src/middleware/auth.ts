@@ -32,10 +32,10 @@ export const generateNonce = (walletAddress: string) => {
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        // Only check cookies, not headers
         const token = req.cookies.authToken;
 
         if (!token) {
+            // Return JSON even for auth failures
             return res.status(401).json({ error: 'No token provided' });
         }
 
@@ -78,8 +78,8 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
     } catch (error) {
-        logger.error('Auth middleware error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
+        // Ensure JSON error response
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 

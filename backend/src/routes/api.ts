@@ -1077,30 +1077,32 @@ router.post('/tokens/update-metadata', csrfProtection, async (req, res) => {
 });
 
 // Add a new endpoint to check and update subscription status
-router.post('/users/:walletAddress/check-subscription', [authMiddleware, csrfProtection], async (req, res) => {
+router.post('/users/:walletAddress/check-subscription', csrfProtection, async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
-        // Update subscription status if expired
-        const result = await pool().query(`
-            UPDATE onstrument.users 
-            SET is_subscribed = CASE
-                WHEN subscription_expires_at IS NOT NULL 
-                AND subscription_expires_at <= CURRENT_TIMESTAMP 
-                THEN false
-                ELSE is_subscribed
-                END
-            WHERE wallet_address = $1
+        // First check if user exists, create if not
+        const userResult = await pool().query(`
+            INSERT INTO onstrument.users (wallet_address)
+            VALUES ($1)
+            ON CONFLICT (wallet_address) 
+            DO UPDATE SET last_seen = CURRENT_TIMESTAMP
             RETURNING is_subscribed, subscription_expires_at, subscription_tier
         `, [walletAddress]);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const user = result.rows[0];
+        const user = userResult.rows[0];
         const isExpired = user.subscription_expires_at &&
             new Date(user.subscription_expires_at) <= new Date();
+
+        // If subscription is expired, update the subscription status
+        if (isExpired) {
+            await pool().query(`
+                UPDATE onstrument.users 
+                SET is_subscribed = false
+                WHERE wallet_address = $1
+            `, [walletAddress]);
+            user.is_subscribed = false;
+        }
 
         res.json({
             isSubscribed: user.is_subscribed,
@@ -1119,7 +1121,7 @@ router.post('/users', csrfProtection, async (req, res) => {
     try {
         const { walletAddress } = req.body;
 
-        // Temporary auth bypass for initial user creation
+        // Only create/update the user, don't generate auth token
         const result = await pool().query(`
             INSERT INTO onstrument.users (wallet_address)
             VALUES ($1)
@@ -1128,22 +1130,7 @@ router.post('/users', csrfProtection, async (req, res) => {
             RETURNING *
         `, [walletAddress]);
 
-        // Generate new token for the created user
-        const newToken = jwt.sign({ walletAddress }, process.env.JWT_SECRET!, {
-            expiresIn: '24h'
-        });
-
-        res.cookie('authToken', newToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            domain: process.env.NODE_ENV === 'production'
-                ? '.onstrument.com'
-                : 'localhost',
-            path: '/',
-            maxAge: 86400000
-        });
-
+        // Remove the token generation and cookie setting
         res.status(201).json(result.rows[0]);
 
     } catch (error) {

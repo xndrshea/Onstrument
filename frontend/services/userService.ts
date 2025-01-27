@@ -63,17 +63,22 @@ export class UserService {
         }
     }
 
-    static async getUser(walletAddress: string): Promise<User | null> {
+    static async getUser(walletAddress: string): Promise<User> {
         try {
             const response = await fetch(`/api/users/${walletAddress}`, {
-                headers: await getFullHeaders(),
+                headers: {
+                    'Accept': 'application/json',
+                    ...(await getFullHeaders())
+                },
                 credentials: 'include'
             });
 
-            if (response.status === 404) {
-                return null;
+            // Validate response format
+            const contentType = response.headers.get('content-type');
+            if (!contentType?.includes('application/json')) {
+                const text = await response.text();
+                throw new Error(`Invalid response: ${text.slice(0, 100)}`);
             }
-
             if (!response.ok) {
                 throw new Error('Failed to fetch user');
             }

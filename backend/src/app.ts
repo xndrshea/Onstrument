@@ -15,6 +15,7 @@ import { Express } from 'express'
 import { initializeSolPriceJob } from './jobs/solPriceJob'
 import csrf from 'csurf'
 import cookieParser from 'cookie-parser'
+import path from 'path'
 
 // Add at the top of the file
 declare global {
@@ -201,6 +202,16 @@ export function createApp() {
 
     // Routes
     app.use('/api', apiRouter)
+
+    // Add API 404 handler before SPA fallback
+    apiRouter.use((req, res) => {
+        res.status(404).json({ error: 'API endpoint not found' });
+    });
+
+    // SPA fallback LAST
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
+    });
 
     // Error handling
     app.use(errorHandler)
