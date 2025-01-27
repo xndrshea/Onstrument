@@ -3,6 +3,7 @@ import { User, UserService } from '../../services/userService';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TradingStats } from './TradingStats';
+import { getAuthHeaders } from '../../utils/headers';
 
 interface TradingStatsRecord {
     mint_address: string;
@@ -43,18 +44,28 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         }
     }, [publicKey]);
 
-    // Add new effect for fetching trading stats
+    // Updated effect for fetching trading stats
     useEffect(() => {
         async function fetchStats() {
             if (!publicKey || !isOpen) return;
 
             try {
                 setIsLoadingStats(true);
-                const response = await fetch(`/api/users/${publicKey.toString()}/trading-stats`);
-                if (response.ok) {
-                    const data = await response.json();
-                    setStats(data);
+                const response = await fetch(
+                    `/api/users/${publicKey.toString()}/trading-stats`,
+                    {
+                        headers: (await getAuthHeaders()).headers,
+                        credentials: 'include'
+                    }
+                );
+
+                if (!response.ok) {
+                    console.error('Trading stats response not ok:', await response.text());
+                    return;
                 }
+
+                const data = await response.json();
+                setStats(data);
             } catch (error) {
                 console.error('Error fetching trading stats:', error);
             } finally {

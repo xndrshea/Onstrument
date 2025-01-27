@@ -13,7 +13,17 @@ import { HeliusManager } from './services/price/websocket/heliusManager'
 import { parameterStore } from './config/parameterStore'
 import { Express } from 'express'
 import { initializeSolPriceJob } from './jobs/solPriceJob'
+import csrf from 'csurf'
+import cookieParser from 'cookie-parser'
 
+// Add at the top of the file
+declare global {
+    namespace Express {
+        interface Request {
+            csrfToken(): string;
+        }
+    }
+}
 
 export function createApp() {
     const app = express()
@@ -82,6 +92,9 @@ export function createApp() {
         crossOriginOpenerPolicy: false,
     }))
 
+    // Add cookie-parser before CSRF
+    app.use(cookieParser())
+
     // CORS setup first
     const allowedOrigins = process.env.NODE_ENV === 'production'
         ? ['https://onstrument.com', 'https://www.onstrument.com']
@@ -97,7 +110,8 @@ export function createApp() {
             'solana-client',
             'x-requested-with',
             'pinata-api-key',
-            'pinata-secret-api-key'
+            'pinata-secret-api-key',
+            'x-csrf-token'
         ],
         optionsSuccessStatus: 200
     }));
@@ -111,6 +125,54 @@ export function createApp() {
         message: 'Too many requests from this IP, please try again later.'
     }));
 
+    // Add express.json before CSRF
+    app.use(express.json())
+
+    // Single CSRF setup
+    const csrfProtection = csrf({
+        cookie: {
+            key: '_csrf',
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax'
+        }
+    });
+
+    // CSRF token endpoint
+    app.get('/api/csrf-token', csrfProtection, (req, res) => {
+        res.json({ csrfToken: req.csrfToken() });
+    });
+
+    // Apply CSRF protection to specific routes
+    app.use('/api', (req, res, next) => {
+
+
+        if ((req.path.startsWith('/auth') ||
+            req.path.startsWith('/users') ||
+            req.path.startsWith('/tokens')) &&
+            ['POST', 'PUT', 'DELETE'].includes(req.method)) {
+
+            return csrfProtection(req, res, next);
+        }
+
+        // Skip CSRF for WebSocket routes
+        if (req.path.startsWith('/api/ws')) {
+            return next();
+        }
+
+        // Skip CSRF for file upload routes
+        if (req.path.startsWith('/api/upload')) {
+            return next();
+        }
+
+        // Skip CSRF for Helius proxy routes
+        if (req.path.startsWith('/api/helius')) {
+            return next();
+        }
+
+        // All other routes skip CSRF
+        next();
+    });
+
     // Update the WebSocket route handling
     app.get('/api/ws', (req, res, next) => {
         // Only handle actual WebSocket upgrade requests
@@ -121,8 +183,6 @@ export function createApp() {
         // Let the WebSocketManager handle the upgrade
         wsManager.handleUpgrade(req, res);
     });
-
-    app.use(express.json())
 
     // Routes
     app.use('/api', apiRouter)

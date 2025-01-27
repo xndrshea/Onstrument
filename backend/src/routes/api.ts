@@ -11,6 +11,13 @@ import { pinataService } from '../services/pinataService';
 import { heliusService as heliusRestService } from '../services/heliusService';
 import { heliusService } from '../services/heliusService';
 import { wsManager } from '../services/websocket/WebSocketManager';
+import { generateNonce, authMiddleware, verifyWalletOwnership } from '../middleware/auth';
+import { PublicKey } from '@solana/web3.js';
+import jwt from 'jsonwebtoken';
+import bs58 from 'bs58';
+import * as nacl from 'tweetnacl';
+import { verify } from 'tweetnacl';
+import { csrfProtection } from '../middleware/csrfProtection';
 
 
 const router = Router();
@@ -22,6 +29,69 @@ const getHeliusManager = () => {
     }
     return heliusManagerInstance;
 };
+
+// Authentication routes
+router.post('/auth/nonce', async (req, res) => {
+    try {
+        const { walletAddress } = req.body;
+
+        if (!walletAddress) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Wallet address is required'
+            });
+        }
+
+        const nonce = generateNonce(walletAddress);
+
+        return res.json({ nonce });
+    } catch (error) {
+        console.error('Nonce generation error:', error);
+        return res.status(500).json({
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Something went wrong'
+        });
+    }
+});
+
+router.post('/auth/verify', csrfProtection, async (req, res) => {
+    try {
+        const { walletAddress, signature, nonce } = req.body;
+
+        // Verify the signature
+        const message = new TextEncoder().encode(
+            `Sign this message to verify your wallet ownership. Nonce: ${nonce}`
+        );
+
+        const publicKey = new PublicKey(walletAddress);
+        const signatureUint8 = bs58.decode(signature);
+
+        if (!nacl.sign.detached.verify(message, signatureUint8, publicKey.toBytes())) {
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
+
+        // Generate JWT token with longer expiration
+        const token = jwt.sign({ walletAddress }, process.env.JWT_SECRET!, { expiresIn: '24h' });
+
+        // Set cookie with proper options
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 86400000 // 24 hours
+        });
+
+        // Send token in response for backup storage
+        res.json({ success: true, token });
+    } catch (error) {
+        logger.error('Error verifying signature:', error);
+        res.status(500).json({
+            error: 'Failed to verify signature',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
 
 // System status monitoring endpoint
 router.get('/system/status', async (_req, res) => {
@@ -42,7 +112,7 @@ router.get('/system/status', async (_req, res) => {
 });
 
 // Token creation endpoint
-router.post('/tokens', async (req, res) => {
+router.post('/tokens', authMiddleware, async (req, res) => {
     try {
 
         const {
@@ -667,9 +737,14 @@ router.get('/pools/:mintAddress', async (req, res) => {
     }
 });
 
-router.post('/users', async (req, res) => {
+router.post('/users', [authMiddleware, csrfProtection], async (req, res) => {
     try {
         const { walletAddress } = req.body;
+
+        // Verify that the authenticated user matches the wallet address being modified
+        if (req.user?.walletAddress !== walletAddress) {
+            return res.status(403).json({ error: 'Unauthorized: Cannot modify other users' });
+        }
 
         const result = await pool().query(`
             INSERT INTO onstrument.users (wallet_address)
@@ -686,7 +761,7 @@ router.post('/users', async (req, res) => {
     }
 });
 
-router.get('/users/:walletAddress', async (req, res) => {
+router.get('/users/:walletAddress', [authMiddleware, verifyWalletOwnership], async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
@@ -707,7 +782,7 @@ router.get('/users/:walletAddress', async (req, res) => {
     }
 });
 
-router.post('/users/:walletAddress/toggle-subscription', async (req, res) => {
+router.post('/users/:walletAddress/toggle-subscription', [authMiddleware, verifyWalletOwnership], async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
@@ -799,7 +874,7 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
     }
 });
 
-router.get('/users/:walletAddress/trading-stats', async (req, res) => {
+router.get('/users/:walletAddress/trading-stats', [authMiddleware, verifyWalletOwnership], async (req, res) => {
     try {
         const { walletAddress } = req.params;
         const { mintAddress } = req.query;
@@ -986,7 +1061,7 @@ router.post('/users/:walletAddress/activate-subscription', async (req, res) => {
     }
 });
 
-router.post('/tokens/update-metadata', async (req, res) => {
+router.post('/tokens/update-metadata', csrfProtection, async (req, res) => {
     try {
         const { mint_address, twitter_url, telegram_url, website_url, image_url } = req.body;
 
@@ -1017,7 +1092,7 @@ router.post('/tokens/update-metadata', async (req, res) => {
 });
 
 // Add a new endpoint to check and update subscription status
-router.post('/users/:walletAddress/check-subscription', async (req, res) => {
+router.post('/users/:walletAddress/check-subscription', [authMiddleware, csrfProtection], async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
@@ -1053,6 +1128,10 @@ router.post('/users/:walletAddress/check-subscription', async (req, res) => {
         logger.error('Error checking subscription:', error);
         res.status(500).json({ error: 'Failed to check subscription status' });
     }
+});
+
+router.get('/auth/verify-token', authMiddleware, (req, res) => {
+    res.json({ valid: true });
 });
 
 export default router; 

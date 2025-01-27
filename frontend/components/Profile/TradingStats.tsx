@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { getAuthHeaders } from '../../utils/headers';
 
 interface TradingStatsRecord {
     mint_address: string;
@@ -25,7 +26,10 @@ export function TradingStats() {
 
             try {
                 setIsLoading(true);
-                const response = await fetch(`/api/users/${publicKey.toString()}/trading-stats`);
+                const response = await fetch(`/api/users/${publicKey.toString()}/trading-stats`, {
+                    headers: (await getAuthHeaders()).headers,
+                    credentials: 'include'
+                });
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch trading stats');

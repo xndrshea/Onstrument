@@ -91,7 +91,6 @@ export class WebSocketManager extends EventEmitter {
             case 'unsubscribe':
                 if (message.mintAddress) {
                     client.subscriptions.delete(message.mintAddress);
-                    logger.info(`Client ${client.id} unsubscribed from ${message.mintAddress}`);
                 }
                 break;
         }

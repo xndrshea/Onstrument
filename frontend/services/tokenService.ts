@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import BN from 'bn.js';
 import { TOKEN_DECIMALS } from './bondingCurve';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
+import { getAuthHeaders } from '../utils/headers';
 
 const API_BASE_URL = '/api';
 
@@ -58,8 +59,8 @@ export class TokenService {
                 name: token.name,
                 symbol: token.symbol,
                 description: token.description || '',
-                metadataUri: token.metadataUri || '',
-                totalSupply: token.totalSupply?.toString() || '0',
+                metadataUri: token.metadataUrl || '',
+                totalSupply: token.supply?.toString() || '0',
                 decimals: token.decimals,
                 curveConfig: token.curveConfig,
                 initialPrice: token.initialPrice,
@@ -70,12 +71,10 @@ export class TokenService {
                 tokenVault: token.tokenVault
             };
 
-
             const response = await fetch(`${API_BASE_URL}/tokens`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: (await getAuthHeaders()).headers,
+                credentials: 'include',
                 body: JSON.stringify(requestData),
             });
 

@@ -1,3 +1,5 @@
+import { getAuthHeaders, getCsrfHeaders, getFullHeaders } from '../utils/headers';
+
 export interface User {
     userId: string;
     walletAddress: string;
@@ -21,15 +23,21 @@ interface SubscriptionActivation {
 export class UserService {
     static async getOrCreateUser(walletAddress: string): Promise<User> {
         try {
+            const { headers: authHeaders } = await getAuthHeaders();
+            const csrfHeaders = await getCsrfHeaders();
             const response = await fetch(`/api/users`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    ...authHeaders,
+                    ...csrfHeaders
                 },
+                credentials: 'include',
                 body: JSON.stringify({ walletAddress })
             });
 
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('User service error:', errorText);
                 throw new Error('Failed to get/create user');
             }
 
@@ -52,7 +60,10 @@ export class UserService {
 
     static async getUser(walletAddress: string): Promise<User | null> {
         try {
-            const response = await fetch(`/api/users/${walletAddress}`);
+            const response = await fetch(`/api/users/${walletAddress}`, {
+                headers: await getFullHeaders(),
+                credentials: 'include'
+            });
 
             if (response.status === 404) {
                 return null;
@@ -81,11 +92,17 @@ export class UserService {
 
     static async toggleSubscription(walletAddress: string): Promise<User> {
         try {
+            const { headers: authHeaders } = await getAuthHeaders();
+            const csrfHeaders = await getCsrfHeaders();
+
             const response = await fetch(`/api/users/${walletAddress}/toggle-subscription`, {
                 method: 'POST',
                 headers: {
+                    ...authHeaders,
+                    ...csrfHeaders,
                     'Content-Type': 'application/json'
-                }
+                },
+                credentials: 'include'
             });
 
             if (!response.ok) {
@@ -111,11 +128,17 @@ export class UserService {
 
     static async activateSubscription(params: SubscriptionActivation): Promise<User> {
         try {
+            const { headers: authHeaders } = await getAuthHeaders();
+            const csrfHeaders = await getCsrfHeaders();
+
             const response = await fetch(`/api/users/${params.walletAddress}/activate-subscription`, {
                 method: 'POST',
                 headers: {
+                    ...authHeaders,
+                    ...csrfHeaders,
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify(params)
             });
 
