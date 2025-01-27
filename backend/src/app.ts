@@ -101,19 +101,21 @@ export function createApp() {
         : ['http://localhost:3000', 'http://localhost:5173'];
 
     app.use(cors({
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                console.error('Not allowed by CORS:', origin);
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: [
             'Content-Type',
             'Authorization',
-            'solana-client',
-            'x-requested-with',
-            'pinata-api-key',
-            'pinata-secret-api-key',
-            'x-csrf-token'
-        ],
-        optionsSuccessStatus: 200
+            'X-CSRF-Token'
+        ]
     }));
 
     // Rate limiting after CORS
