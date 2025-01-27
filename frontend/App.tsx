@@ -36,11 +36,13 @@ function App() {
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                const response = await fetch('/api/auth/verify-token', {
-                    credentials: 'include',  // Make sure cookies are sent
-                    headers: {
-                        'Authorization': `Bearer ${document.cookie.split('authToken=')[1]?.split(';')[0]}`
-                    }
+                const headers = await getFullHeaders();
+                // Change verify-token to verify
+                const response = await fetch('/api/auth/verify', {
+                    method: 'POST',  // Change to POST since that's what your endpoint expects
+                    credentials: 'include',
+                    headers,
+                    body: JSON.stringify({}) // Empty body since verify endpoint expects POST
                 });
                 setIsAuthenticated(response.ok);
             } catch (error) {
