@@ -44,7 +44,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         }
     }, [publicKey]);
 
-    // Updated effect for fetching trading stats
+    // Updated effect for fetching trading stats test
     useEffect(() => {
         async function fetchStats() {
             if (!publicKey || !isOpen) return;
