@@ -130,7 +130,7 @@ export function MarketPage() {
                                         )}
                                     </td>
                                     <td className="py-4 text-right w-[20%] text-white">
-                                        ${formatMarketCap(token.marketCapUsd || 0)}
+                                        {formatMarketCap(token.marketCapUsd || 0)}
                                     </td>
                                 </tr>
                             ))}
