@@ -105,12 +105,8 @@ export class BondingCurve {
         try {
             const mintKeypair = Keypair.generate();
 
-            // Get provider first, before any transaction setup
+            // Get provider first
             const provider = getProvider(this.wallet!, this.connection);
-            console.log('Token creation provider:', {
-                isPhantom: Boolean((window as any).phantom?.solana?.isPhantom),
-                usingPhantom: provider === (window as any).phantom?.solana
-            });
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -187,19 +183,9 @@ export class BondingCurve {
             tx.feePayer = this.wallet!.publicKey!;
             tx.recentBlockhash = blockhash;
             tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
-
-            // Sign with mintKeypair first
             tx.partialSign(mintKeypair);
 
-            // Use provider's signAndSendTransaction
-            const { signature } = await provider.signAndSendTransaction(tx);
-
-            return {
-                mint: mintKeypair.publicKey,
-                curve: curveAddress,
-                tokenVault: tokenVault,
-                signature
-            };
+            return await this.buildAndSendTransaction([createTokenIx, createMetadataIx, createAdminAtaIx], [mintKeypair]);
         } catch (err) {
             console.error('Token creation error:', err);
             throw err;
