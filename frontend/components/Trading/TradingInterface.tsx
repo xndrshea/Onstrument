@@ -328,13 +328,13 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             setRawInput('')
             await updateBalances()
 
-            // Record trading stats (sending SOL amount, conversion happens in backend)
+            // Record trading stats (sending SOL amount)
             await fetch(`/api/users/${publicKey.toString()}/trading-stats`, {
                 method: 'POST',
                 headers: await getFullHeaders(),
                 body: JSON.stringify({
                     mintAddress: token.mintAddress,
-                    totalVolume: parseFloat(amount),
+                    totalVolume: isSelling ? (priceInfo?.totalCost || 0) : parseFloat(amount),
                     isSelling
                 })
             });

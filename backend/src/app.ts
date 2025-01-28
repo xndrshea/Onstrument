@@ -92,49 +92,57 @@ export function createApp() {
 
     // Security middleware
     app.use(helmet({
-        // Allow WebSocket connections
         crossOriginEmbedderPolicy: false,
         crossOriginResourcePolicy: false,
         crossOriginOpenerPolicy: false,
     }))
 
-    // Add cookie-parser before CSRF
+    // 1. Cookie parser needs to be before any CSRF middleware
     app.use(cookieParser())
 
-    // CORS setup first
-    const allowedOrigins = process.env.NODE_ENV === 'production'
-        ? [
-            'https://onstrument.com',
-            'https://www.onstrument.com',
-            'https://api.onstrument.com',
-            'http://localhost:3000', // For local testing
-            'http://localhost:5173'
-        ]
-        : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:3001'];
+    // 2. express.json() middleware before CSRF
+    app.use(express.json())
 
+    // 3. Single CSRF middleware configuration
+    const csrfProtection = csrf({
+        cookie: {
+            key: '_csrf',
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            httpOnly: true
+        }
+    });
+
+    // 4. CSRF token endpoint
+    app.get('/api/csrf-token', csrfProtection, (req, res) => {
+        res.json({ csrfToken: req.csrfToken() });
+    });
+
+    // CORS setup
     app.use(cors({
-        origin: (origin, callback) => {
-            if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, true);
-            } else {
-                console.error('Not allowed by CORS:', origin);
-                callback(new Error('Not allowed by CORS'));
-            }
-        },
+        origin: process.env.NODE_ENV === 'production'
+            ? 'https://onstrument.com'
+            : 'http://localhost:3000',
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: [
             'Content-Type',
             'Authorization',
             'X-CSRF-Token',
+            'x-csrf-token', // Some frameworks send lowercase
             'solana-client',
             'x-requested-with',
             'pinata-api-key',
-            'pinata-secret-api-key',
+            'pinata-secret-api-key'
+        ],
+        exposedHeaders: [
+            'X-CSRF-Token',
+            'Set-Cookie',
+            'Authorization'
         ]
     }));
 
-    // Rate limiting after CORS
+    // Rate limiting
     app.use(rateLimit({
         windowMs: 1 * 60 * 1000,    // 1 minute window (more appropriate for trading)
         max: process.env.NODE_ENV === 'development'
@@ -143,54 +151,25 @@ export function createApp() {
         message: 'Too many requests from this IP, please try again later.'
     }));
 
-    // Add express.json before CSRF
-    app.use(express.json())
-
-    // Single CSRF setup
-    const csrfProtection = csrf({
-        cookie: {
-            key: '_csrf',
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax'
-        }
-    });
-
-    // CSRF token endpoint
-    app.get('/api/csrf-token', csrfProtection, (req, res) => {
-        res.json({ csrfToken: req.csrfToken() });
-    });
-
-    // Apply CSRF protection to specific routes
+    // 5. Apply CSRF protection to API routes
     app.use('/api', (req, res, next) => {
-        // Skip CSRF for initial auth endpoints
-        if (req.path.startsWith('/auth/nonce')) {
+        // Skip CSRF for these endpoints
+        if (req.path.startsWith('/auth/nonce') ||
+            req.path.startsWith('/auth/verify-silent') ||
+            req.path.startsWith('/ws') ||
+            req.path.startsWith('/upload/') ||
+            req.path.startsWith('/helius/') ||
+            req.path.startsWith('/market/tokens') ||  // Add market data
+            req.path.startsWith('/tokens') && req.method === 'GET' ||  // Add public token info
+            req.path === '/csrf-token') {
             return next();
         }
 
-        if ((req.path.startsWith('/auth') ||
-            req.path.startsWith('/users') ||
-            req.path.startsWith('/tokens')) &&
-            ['POST', 'PUT', 'DELETE'].includes(req.method)) {
-
+        // Apply CSRF to state-changing methods
+        if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
             return csrfProtection(req, res, next);
         }
 
-        // Skip CSRF for WebSocket routes
-        if (req.path.startsWith('/api/ws')) {
-            return next();
-        }
-
-        // Skip CSRF for file upload routes
-        if (req.path.startsWith('/api/upload')) {
-            return next();
-        }
-
-        // Skip CSRF for Helius proxy routes
-        if (req.path.startsWith('/api/helius')) {
-            return next();
-        }
-
-        // All other routes skip CSRF
         next();
     });
 

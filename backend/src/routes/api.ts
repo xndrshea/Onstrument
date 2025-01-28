@@ -31,7 +31,7 @@ const getHeliusManager = () => {
 };
 
 // Authentication routes
-router.post('/auth/nonce', csrfProtection, async (req, res) => {
+router.post('/auth/nonce', async (req, res) => {
     try {
         const { walletAddress } = req.body;
 
@@ -42,11 +42,18 @@ router.post('/auth/nonce', csrfProtection, async (req, res) => {
             });
         }
 
-        const nonce = generateNonce(walletAddress);
-
-        return res.json({ nonce });
+        try {
+            const nonce = generateNonce(walletAddress);
+            return res.json({ nonce });
+        } catch (nonceError) {
+            console.error('Nonce generation error:', nonceError);
+            return res.status(500).json({
+                status: 'error',
+                message: 'Failed to generate nonce'
+            });
+        }
     } catch (error) {
-        console.error('Nonce generation error:', error);
+        console.error('Nonce endpoint error:', error);
         return res.status(500).json({
             status: 'error',
             message: error instanceof Error ? error.message : 'Something went wrong'
@@ -54,7 +61,7 @@ router.post('/auth/nonce', csrfProtection, async (req, res) => {
     }
 });
 
-router.post('/auth/verify', csrfProtection, async (req, res) => {
+router.post('/auth/verify', async (req, res) => {
     try {
         const { walletAddress, signature, nonce } = req.body;
 
@@ -70,8 +77,15 @@ router.post('/auth/verify', csrfProtection, async (req, res) => {
             return res.status(401).json({ error: 'Invalid signature' });
         }
 
+        // Add timestamp and random session ID to make token unique
+        const tokenPayload = {
+            walletAddress,
+            timestamp: Date.now(),
+            sessionId: Math.random().toString(36).substring(2)
+        };
+
         // After successful verification
-        const token = jwt.sign({ walletAddress }, process.env.JWT_SECRET!, { expiresIn: '24h' });
+        const token = jwt.sign(tokenPayload, process.env.JWT_SECRET!, { expiresIn: '24h' });
 
         res.cookie('authToken', token, {
             httpOnly: true,
@@ -79,7 +93,7 @@ router.post('/auth/verify', csrfProtection, async (req, res) => {
             sameSite: 'lax',
             domain: process.env.NODE_ENV === 'production'
                 ? '.onstrument.com'
-                : 'localhost',
+                : undefined,
             path: '/',
             maxAge: 86400000
         });
@@ -746,7 +760,7 @@ router.get('/pools/:mintAddress', async (req, res) => {
     }
 });
 
-router.get('/users/:walletAddress', [authMiddleware, verifyWalletOwnership], async (req, res) => {
+router.get('/users/:walletAddress', async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
@@ -767,7 +781,7 @@ router.get('/users/:walletAddress', [authMiddleware, verifyWalletOwnership], asy
     }
 });
 
-router.post('/users/:walletAddress/toggle-subscription', [authMiddleware, verifyWalletOwnership], async (req, res) => {
+router.post('/users/:walletAddress/toggle-subscription', ...[authMiddleware, verifyWalletOwnership], async (req, res) => {
     try {
         const { walletAddress } = req.params;
 
@@ -794,7 +808,7 @@ router.post('/users/:walletAddress/toggle-subscription', [authMiddleware, verify
     }
 });
 
-router.post('/users/:walletAddress/trading-stats', async (req, res) => {
+router.post('/users/:walletAddress/trading-stats', ...[authMiddleware, verifyWalletOwnership], async (req, res) => {
     try {
         const { walletAddress } = req.params;
         const { mintAddress, totalVolume, isSelling } = req.body;
@@ -859,7 +873,7 @@ router.post('/users/:walletAddress/trading-stats', async (req, res) => {
     }
 });
 
-router.get('/users/:walletAddress/trading-stats', [authMiddleware, verifyWalletOwnership], async (req, res) => {
+router.get('/users/:walletAddress/trading-stats', ...[authMiddleware, verifyWalletOwnership], async (req, res) => {
     try {
         const { walletAddress } = req.params;
         const { mintAddress } = req.query;
@@ -898,12 +912,39 @@ router.post('/upload/image', upload.single('file'), async (req, res) => {
 // Metadata upload endpoint
 router.post('/upload/metadata', async (req, res) => {
     try {
+        if (!req.body) {
+            return res.status(400).json({ error: 'No metadata provided' });
+        }
+
         const metadata = req.body;
+        logger.debug('Attempting to upload metadata:', {
+            metadata: {
+                ...metadata,
+                image: metadata.image ? '[TRUNCATED]' : null // Don't log full image data
+            }
+        });
+
         const metadataUrl = await pinataService.uploadMetadata(metadata);
+
+        if (!metadataUrl) {
+            throw new Error('Failed to get metadata URL from Pinata');
+        }
+
         res.json({ url: metadataUrl });
     } catch (error) {
-        console.error('Metadata upload error:', error);
-        res.status(500).json({ error: 'Failed to upload metadata' });
+        logger.error('Metadata upload error:', {
+            error: error instanceof Error ? {
+                message: error.message,
+                stack: error.stack
+            } : error,
+            body: req.body
+        });
+
+        // Send more specific error message
+        res.status(500).json({
+            error: error instanceof Error ? error.message : 'Failed to upload metadata',
+            details: 'Error occurred while uploading to Pinata'
+        });
     }
 });
 
@@ -1136,6 +1177,42 @@ router.post('/users', csrfProtection, async (req, res) => {
     } catch (error) {
         logger.error('User creation error:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/auth/logout', csrfProtection, (req, res) => {
+    try {
+        res.header('Access-Control-Allow-Origin', process.env.NODE_ENV === 'production'
+            ? 'https://onstrument.com'
+            : 'http://localhost:3000');
+        res.header('Access-Control-Allow-Credentials', 'true');
+
+        res.clearCookie('authToken', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            domain: process.env.NODE_ENV === 'production'
+                ? '.onstrument.com'
+                : 'localhost',
+            path: '/'
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('Logout error:', error);
+        res.status(500).json({ error: 'Failed to logout' });
+    }
+});
+
+router.get('/auth/verify-silent', async (req, res) => {
+    try {
+        const token = req.cookies.authToken;
+        if (!token) return res.json({ valid: false });
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { walletAddress: string };
+        res.json({ valid: decoded.walletAddress === req.query.wallet });
+    } catch (error) {
+        res.json({ valid: false });
     }
 });
 

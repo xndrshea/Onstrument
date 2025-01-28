@@ -4,6 +4,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TradingStats } from './TradingStats';
 import { getAuthHeaders } from '../../utils/headers';
+import { useAuth } from '../../hooks/useAuthQuery';
+import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface TradingStatsRecord {
     mint_address: string;
@@ -23,7 +25,9 @@ interface ProfileModalProps {
 }
 
 export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
+    useScrollLock(isOpen);
     const { publicKey } = useWallet();
+    const { isAuthenticated } = useAuth();
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [stats, setStats] = useState<TradingStatsRecord[]>([]);
@@ -47,21 +51,22 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     // Updated effect for fetching trading stats test
     useEffect(() => {
         async function fetchStats() {
-            if (!publicKey || !isOpen) return;
+            if (!publicKey || !isOpen || !isAuthenticated) return;
 
             try {
                 setIsLoadingStats(true);
+                const headers = await getAuthHeaders();
                 const response = await fetch(
                     `/api/users/${publicKey.toString()}/trading-stats`,
                     {
-                        headers: (await getAuthHeaders()).headers,
-                        credentials: 'include'
+                        headers: headers.headers,
+                        credentials: 'include',
+                        method: 'GET'
                     }
                 );
 
                 if (!response.ok) {
-                    console.error('Trading stats response not ok:', await response.text());
-                    return;
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
                 const data = await response.json();
@@ -74,7 +79,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         }
 
         fetchStats();
-    }, [publicKey, isOpen]);
+    }, [publicKey, isOpen, isAuthenticated]);
 
     const handleToggleSubscription = async () => {
         if (!user) return;

@@ -1,3 +1,5 @@
+import { getCsrfHeaders } from '../utils/headers';
+
 export const pinataService = {
     async uploadImage(file: File): Promise<string> {
         const formData = new FormData();
@@ -8,6 +10,7 @@ export const pinataService = {
 
         const response = await fetch(url, {
             method: 'POST',
+            headers: await getCsrfHeaders(),
             body: formData,
         });
 
@@ -22,17 +25,41 @@ export const pinataService = {
     },
 
     async uploadMetadata(metadata: any): Promise<string> {
-        const response = await fetch(`/api/upload/metadata`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(metadata),
-        });
+        try {
+            const response = await fetch(`/api/upload/metadata`, {
+                method: 'POST',
+                headers: await getCsrfHeaders(),
+                body: JSON.stringify(metadata),
+            });
 
-        if (!response.ok) {
-            throw new Error('Failed to upload metadata');
+            if (!response.ok) {
+                const errorText = await response.text();
+                let errorMessage;
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.error || errorJson.message || errorText;
+                } catch {
+                    errorMessage = errorText;
+                }
+
+                console.error('Metadata upload failed:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorMessage
+                });
+
+                throw new Error(`Failed to upload metadata: ${response.status} ${errorMessage}`);
+            }
+
+            const data = await response.json();
+            if (!data.url) {
+                throw new Error('Invalid response: missing URL');
+            }
+
+            return data.url;
+        } catch (error) {
+            console.error('Metadata upload error:', error);
+            throw error;
         }
-
-        const data = await response.json();
-        return data.url;
     }
 };

@@ -2,6 +2,7 @@ import axios from 'axios';
 import { config } from '../config/env';
 import type { Request } from 'express';
 import FormData from 'form-data';
+import { logger } from '../utils/logger';
 
 export const pinataService = {
     async uploadImage(file: Request['file']): Promise<string> {
@@ -34,17 +35,26 @@ export const pinataService = {
     },
 
     async uploadMetadata(metadata: any): Promise<string> {
-        const res = await axios.post(
-            "https://api.pinata.cloud/pinning/pinJSONToIPFS",
-            metadata,
-            {
-                headers: {
-                    'Authorization': `Bearer ${config.PINATA_JWT}`,
-                    'Content-Type': 'application/json'
+        try {
+            const res = await axios.post(
+                "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+                metadata,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${config.PINATA_JWT}`,
+                        'Content-Type': 'application/json'
+                    }
                 }
-            }
-        );
+            );
 
-        return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+            return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+        } catch (error) {
+            logger.error('Pinata metadata upload failed:', {
+                error: (error as any).response?.data || (error as any).message,
+                status: (error as any).response?.status,
+                metadata: metadata
+            });
+            throw new Error(`Failed to upload metadata:`);
+        }
     }
 };

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { useNavigate } from 'react-router-dom';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
+import { getCsrfHeaders } from '../../utils/headers';
 
 interface Asset {
     interface: string;
@@ -52,7 +53,8 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
 
                 const response = await fetch(`/api/helius/assets`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getCsrfHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ walletAddress, isDevnet })
                 });
 

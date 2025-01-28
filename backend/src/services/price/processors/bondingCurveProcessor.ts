@@ -97,15 +97,6 @@ export class BondingCurveProcessor extends BaseProcessor {
                 programDataEntries.forEach((buffer: Buffer, index: number) => {
                     const discriminator = buffer.subarray(0, 8).toString('hex');
 
-                    logger.info(`Processing event ${index + 1}/${programDataEntries.length}:`, {
-                        discriminator,
-                        matches: {
-                            migration: discriminator === EVENT_DISCRIMINATORS.MIGRATION,
-                            buy: discriminator === EVENT_DISCRIMINATORS.BUY,
-                            sell: discriminator === EVENT_DISCRIMINATORS.SELL
-                        }
-                    });
-
                     switch (discriminator) {
                         case EVENT_DISCRIMINATORS.MIGRATION:
                             this.handleMigrationEvent(buffer);
@@ -128,7 +119,6 @@ export class BondingCurveProcessor extends BaseProcessor {
 
     private async waitForNextBlock(): Promise<number> {
         const currentSlot = await this.connection.getSlot('finalized');
-        logger.info('Waiting for next block, current slot:', currentSlot);
 
         let newSlot = currentSlot;
         let attempts = 0;
@@ -136,20 +126,8 @@ export class BondingCurveProcessor extends BaseProcessor {
             await new Promise(resolve => setTimeout(resolve, 500));
             newSlot = await this.connection.getSlot('finalized');
             attempts++;
-            logger.info('Block check attempt:', {
-                attempt: attempts,
-                currentSlot,
-                newSlot,
-                difference: newSlot - currentSlot
-            });
         }
 
-        logger.info('Block confirmation complete:', {
-            startingSlot: currentSlot,
-            endingSlot: newSlot,
-            slotDifference: newSlot - currentSlot,
-            attempts
-        });
         return newSlot;
     }
 

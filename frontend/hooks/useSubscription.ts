@@ -1,7 +1,7 @@
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { AuthContext } from '../contexts/AuthContext';
+import { useAuth } from './useAuthQuery';
 import { getAuthHeaders, getFullHeaders } from '../utils/headers';
 
 interface SubscriptionStatus {
@@ -13,7 +13,7 @@ interface SubscriptionStatus {
 
 export function useSubscription() {
     const { publicKey } = useWallet();
-    const { isAuthenticated, authCompleted } = useContext(AuthContext);
+    const { isAuthenticated, isLoading: authCompleted } = useAuth();
     const [status, setStatus] = useState<SubscriptionStatus>({
         isSubscribed: false,
         isExpired: false,

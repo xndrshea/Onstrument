@@ -65,5 +65,5 @@ export async function checkDatabaseSetup() {
     }
 }
 
-// Export the getter function
+// Export the getter function test
 export { getPool as pool }

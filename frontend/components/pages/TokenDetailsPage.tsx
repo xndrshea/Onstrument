@@ -194,7 +194,6 @@ export function TokenDetailsPage() {
 
                 // First get token data from our database
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
-                console.log('tokenData', tokenData);
                 setTokenWithLogging(tokenData);
 
                 // If we're missing social/website URLs, fetch from DexScreener

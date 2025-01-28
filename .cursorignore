@@ -6,3 +6,6 @@ target/release
 target/sbf-solana-solana
 target/
 node_modules
+
+
+frontend/public/charting_library

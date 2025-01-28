@@ -5,6 +5,7 @@ import { Transaction, SystemProgram, PublicKey } from '@solana/web3.js';
 import { toast } from 'react-hot-toast';
 import { UserService } from '../../services/userService';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface SubscriptionTier {
     id: string;
@@ -61,6 +62,7 @@ interface SubscribeModalProps {
 const DEVNET_TREASURY_WALLET = "nmcvZkzyojoi5KNAsdGrRSgwVsNWS3voBQnEVBqBvtM";
 
 export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
+    useScrollLock(isOpen);
     const { publicKey, sendTransaction } = useWallet();
     const { connection } = useConnection();
     const { setVisible } = useWalletModal();
