@@ -25,12 +25,13 @@ function getProvider(wallet: WalletContextState, connection: Connection) {
     // Try Phantom first
     if ('phantom' in window) {
         const provider = (window as any).phantom?.solana;
-        if (provider?.isPhantom) {
+        if (provider?.isPhantom && wallet?.wallet?.adapter?.name === 'Phantom') {
+            console.log('Using Phantom provider');
             return provider;
         }
     }
 
-    // Fallback to standard wallet adapter
+    console.log('Using fallback provider');
     return {
         signAndSendTransaction: async (tx: Transaction) => {
             const signature = await wallet.sendTransaction(tx, connection);
@@ -201,6 +202,10 @@ export class BondingCurve {
     ): Promise<string> {
         try {
             const provider = getProvider(this.wallet!, this.connection);
+            console.log('Transaction provider:', {
+                isPhantom: provider === (window as any).phantom?.solana,
+                type: 'buildAndSendTransaction'
+            });
 
             const computeUnitIx = ComputeBudgetProgram.setComputeUnitLimit({
                 units: 300_000
