@@ -182,23 +182,25 @@ export class BondingCurve {
                 microLamports: 500_000
             });
 
-            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
             const tx = new Transaction();
             tx.feePayer = this.wallet!.publicKey!;
             tx.recentBlockhash = blockhash;
             tx.add(computeUnitIx, priorityFeeIx, ...instructions);
 
-            // Only sign with additional signers, don't sign with wallet yet
+            // First sign with additional signers
             if (signers.length > 0) {
                 tx.partialSign(...signers);
             }
 
-            const signature = await this.wallet!.sendTransaction(tx, this.connection);
+            // Use signAndSendTransaction from Phantom
+            // @ts-ignore - Phantom's method might not be in the type definitions
+            const { signature } = await this.wallet!.signAndSendTransaction(tx);
 
-            // Poll for confirmation
+            // ... rest of confirmation logic ...
             let done = false;
-            let retries = 30; // 30 second timeout
+            let retries = 30;
             while (!done && retries > 0) {
                 const status = await this.connection.getSignatureStatus(signature);
 
