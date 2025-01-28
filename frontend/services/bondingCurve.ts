@@ -76,8 +76,6 @@ export class BondingCurve {
 
     async createTokenWithCurve(params: createTokenParams) {
         try {
-
-
             const mintKeypair = Keypair.generate();
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -86,13 +84,11 @@ export class BondingCurve {
                 this.program.programId
             );
 
-
             const [tokenVault] = PublicKey.findProgramAddressSync(
                 [Buffer.from("token_vault"), mintKeypair.publicKey.toBuffer()],
                 this.program.programId
             );
 
-            // Derive metadata address
             const [metadataAddress] = PublicKey.findProgramAddressSync(
                 [
                     Buffer.from("metadata"),
@@ -120,7 +116,6 @@ export class BondingCurve {
                     systemProgram: SystemProgram.programId,
                     rent: SYSVAR_RENT_PUBKEY,
                 } as any)
-                .signers([mintKeypair])
                 .instruction();
 
             const createMetadataIx = await this.program.methods
@@ -140,29 +135,57 @@ export class BondingCurve {
                 } as any)
                 .instruction();
 
-            // Create admin token account instruction
             const adminTokenAccount = await getAssociatedTokenAddress(
                 mintKeypair.publicKey,
                 migrationAdmin
             );
             const createAdminAtaIx = createAssociatedTokenAccountInstruction(
-                this.wallet!.publicKey!,  // payer
+                this.wallet!.publicKey!,
                 adminTokenAccount,
-                migrationAdmin,           // owner
-                mintKeypair.publicKey     // mint
+                migrationAdmin,
+                mintKeypair.publicKey
             );
 
-            // Build and send transaction
-            const tx = await this.buildAndSendTransaction(
-                [createTokenIx, createMetadataIx, createAdminAtaIx],
-                [mintKeypair]
-            );
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+
+            const tx = new Transaction();
+            tx.feePayer = this.wallet!.publicKey!;
+            tx.recentBlockhash = blockhash;
+            tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
+
+            // Only sign with mintKeypair, let wallet handle its own signing
+            tx.partialSign(mintKeypair);
+
+            const signature = await this.wallet!.sendTransaction(tx, this.connection);
+
+            // Poll for confirmation
+            let done = false;
+            let retries = 30; // 30 second timeout
+            while (!done && retries > 0) {
+                const status = await this.connection.getSignatureStatus(signature);
+
+                if (status?.value?.confirmationStatus === 'confirmed') {
+                    done = true;
+                } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    retries--;
+                } else if (!status?.value) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    retries--;
+                } else {
+                    throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
+                }
+            }
+
+            if (!done) {
+                throw new Error('Transaction confirmation timeout');
+            }
 
             return {
                 mint: mintKeypair.publicKey,
                 curve: curveAddress,
                 tokenVault: tokenVault,
-                signature: tx
+                signature
             };
 
         } catch (err: any) {
