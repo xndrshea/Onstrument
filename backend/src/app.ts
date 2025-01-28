@@ -155,12 +155,13 @@ export function createApp() {
     app.use('/api', (req, res, next) => {
         // Skip CSRF for these endpoints
         if (req.path.startsWith('/auth/nonce') ||
+            req.path.startsWith('/auth/verify') ||
             req.path.startsWith('/auth/verify-silent') ||
             req.path.startsWith('/ws') ||
             req.path.startsWith('/upload/') ||
             req.path.startsWith('/helius/') ||
-            req.path.startsWith('/market/tokens') ||  // Add market data
-            req.path.startsWith('/tokens') && req.method === 'GET' ||  // Add public token info
+            req.path.startsWith('/market/tokens') ||
+            req.path.startsWith('/tokens') && req.method === 'GET' ||
             req.path === '/csrf-token') {
             return next();
         }
