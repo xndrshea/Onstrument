@@ -93,8 +93,8 @@ export function TokenList({ onCreateClick }: TokenListProps) {
                         <option value="12h">12h Volume</option>
                         <option value="24h">24h Volume</option>
                         <option value="all">All Time Volume</option>
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
+                        <option value="newest">New</option>
+                        <option value="oldest">Old</option>
                     </select>
                 </div>
 
