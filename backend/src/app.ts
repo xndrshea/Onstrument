@@ -100,8 +100,9 @@ export function createApp() {
     // 1. Cookie parser needs to be before any CSRF middleware
     app.use(cookieParser())
 
-    // 2. express.json() middleware before CSRF
-    app.use(express.json())
+    // 2. Body parsing middleware
+    app.use(express.json({ limit: '10mb' }))  // Handle JSON
+    app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
     // 3. Single CSRF middleware configuration
     const csrfProtection = csrf({
@@ -153,25 +154,27 @@ export function createApp() {
 
     // 5. Apply CSRF protection to API routes
     app.use('/api', (req, res, next) => {
-        // Skip CSRF for these endpoints
-        if (req.path.startsWith('/auth/nonce') ||
-            req.path.startsWith('/auth/verify') ||
-            req.path.startsWith('/auth/verify-silent') ||
-            req.path.startsWith('/ws') ||
-            req.path.startsWith('/upload/') ||
-            req.path.startsWith('/helius/') ||
-            req.path.startsWith('/market/tokens') ||
-            req.path.startsWith('/tokens') && req.method === 'GET' ||
-            req.path === '/csrf-token') {
+        // Always allow GET requests (read-only)
+        if (req.method === 'GET') {
             return next();
         }
 
-        // Apply CSRF to state-changing methods
-        if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
-            return csrfProtection(req, res, next);
+        // Exempt only essential endpoints that have their own auth
+        const csrfExemptPaths = [
+            '/auth/nonce',           // Uses wallet signature
+            '/auth/verify',          // Uses wallet signature
+            '/auth/verify-silent',   // Uses JWT
+            '/ws',                   // WebSocket connection
+            '/helius',               // Proxied RPC calls
+            '/upload/*'          // Uses Pinata auth
+        ];
+
+        if (csrfExemptPaths.some(path => req.path.startsWith(path))) {
+            return next();
         }
 
-        next();
+        // Apply CSRF protection to all other POST/PUT/DELETE requests
+        return csrfProtection(req, res, next);
     });
 
     // Update the WebSocket route handling

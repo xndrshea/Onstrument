@@ -40,8 +40,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     // Skip auth for these paths
     if (req.path.startsWith('/auth/nonce') ||
         req.path.startsWith('/auth/verify-silent') ||
-        req.path.startsWith('/upload/') ||
-        req.path.startsWith('/helius/') ||
+        req.path.includes('/helius/') ||
         req.path.startsWith('/market/tokens') ||  // Add market data
         (req.path.startsWith('/tokens') && req.method === 'GET') ||  // Add public token info
         req.path === '/system/status') {  // Add system status

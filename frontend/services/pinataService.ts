@@ -1,4 +1,4 @@
-import { getCsrfHeaders } from '../utils/headers';
+import { getAuthHeaders, getFullHeaders } from '../utils/headers';
 
 export const pinataService = {
     async uploadImage(file: File): Promise<string> {
@@ -8,9 +8,16 @@ export const pinataService = {
         const url = `/api/upload/image`;
         console.log('Attempting upload to:', url);
 
+        const headers = await getFullHeaders();
+        delete headers['Content-Type']; // Remove only the Content-Type, keep CSRF token
+
         const response = await fetch(url, {
             method: 'POST',
-            headers: await getCsrfHeaders(),
+            headers: {
+                ...headers,
+                'Accept': 'application/json',
+            },
+            credentials: 'include',
             body: formData,
         });
 
@@ -26,9 +33,15 @@ export const pinataService = {
 
     async uploadMetadata(metadata: any): Promise<string> {
         try {
+            const headers = await getFullHeaders();
             const response = await fetch(`/api/upload/metadata`, {
                 method: 'POST',
-                headers: await getCsrfHeaders(),
+                headers: {
+                    ...headers,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                credentials: 'include',
                 body: JSON.stringify(metadata),
             });
 
