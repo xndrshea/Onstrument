@@ -65,16 +65,57 @@ router.post('/auth/verify', async (req, res) => {
     try {
         const { walletAddress, signature, nonce } = req.body;
 
-        // Verify the signature
-        const message = new TextEncoder().encode(
-            `Sign this message to verify your wallet ownership. Nonce: ${nonce}`
-        );
+        // Log incoming data
+        logger.info('Verify attempt:', {
+            hasWalletAddress: !!walletAddress,
+            hasSignature: !!signature,
+            hasNonce: !!nonce,
+            walletAddressLength: walletAddress?.length,
+            signatureLength: signature?.length
+        });
 
-        const publicKey = new PublicKey(walletAddress);
-        const signatureUint8 = bs58.decode(signature);
+        if (!walletAddress || !signature || !nonce) {
+            logger.error('Missing required fields:', { walletAddress, signature, nonce });
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
 
-        if (!nacl.sign.detached.verify(message, signatureUint8, publicKey.toBytes())) {
-            return res.status(401).json({ error: 'Invalid signature' });
+        try {
+            // Verify the signature
+            const message = new TextEncoder().encode(
+                `Sign this message to verify your wallet ownership. Nonce: ${nonce}`
+            );
+
+            const publicKey = new PublicKey(walletAddress);
+            const signatureUint8 = bs58.decode(signature);
+
+            logger.info('Verification details:', {
+                messageLength: message.length,
+                message: Buffer.from(message).toString('hex'),
+                publicKeyBytes: publicKey.toBytes().length,
+                signatureBytes: signatureUint8.length
+            });
+
+            const isValid = nacl.sign.detached.verify(
+                message,
+                signatureUint8,
+                publicKey.toBytes()
+            );
+
+            if (!isValid) {
+                logger.error('Invalid signature:', {
+                    message: Buffer.from(message).toString('hex'),
+                    signature: Buffer.from(signatureUint8).toString('hex'),
+                    publicKey: publicKey.toString()
+                });
+                return res.status(401).json({ error: 'Invalid signature' });
+            }
+
+        } catch (verifyError) {
+            logger.error('Signature verification error:', {
+                error: verifyError instanceof Error ? verifyError.message : 'Unknown error',
+                stack: verifyError instanceof Error ? verifyError.stack : undefined
+            });
+            return res.status(500).json({ error: 'Signature verification failed' });
         }
 
         // Add timestamp and random session ID to make token unique
@@ -111,7 +152,11 @@ router.post('/auth/verify', async (req, res) => {
             user: userResult.rows[0] || { walletAddress }
         });
     } catch (error) {
-        logger.error('Verification error:', error);
+        logger.error('Auth endpoint error:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            body: req.body
+        });
         res.status(500).json({ error: 'Internal server error' });
     }
 });
