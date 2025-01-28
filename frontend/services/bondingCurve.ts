@@ -98,6 +98,15 @@ export class BondingCurve {
                 METADATA_PROGRAM_ID
             );
 
+            // Add compute budget instructions
+            const computeUnitIx = ComputeBudgetProgram.setComputeUnitLimit({
+                units: 300_000
+            });
+
+            const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
+                microLamports: 500_000
+            });
+
             const createTokenIx = await this.program.methods
                 .createToken({
                     curveConfig: {
@@ -146,17 +155,19 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
-            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
 
             const tx = new Transaction();
             tx.feePayer = this.wallet!.publicKey!;
             tx.recentBlockhash = blockhash;
-            tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
+            tx.add(computeUnitIx, priorityFeeIx, createTokenIx, createMetadataIx, createAdminAtaIx);
 
-            // Only sign with mintKeypair, let wallet handle its own signing
+            // Only sign with mintKeypair
             tx.partialSign(mintKeypair);
 
-            const signature = await this.wallet!.sendTransaction(tx, this.connection);
+            const signature = await this.wallet!.sendTransaction(tx, this.connection, {
+                skipPreflight: true  // Add this to help with token creation
+            });
 
             // Poll for confirmation
             let done = false;
