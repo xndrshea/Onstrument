@@ -104,6 +104,14 @@ export class BondingCurve {
     async createTokenWithCurve(params: createTokenParams) {
         try {
             const mintKeypair = Keypair.generate();
+
+            // Get provider first, before any transaction setup
+            const provider = getProvider(this.wallet!, this.connection);
+            console.log('Token creation provider:', {
+                isPhantom: Boolean((window as any).phantom?.solana?.isPhantom),
+                usingPhantom: provider === (window as any).phantom?.solana
+            });
+
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
             const [curveAddress] = PublicKey.findProgramAddressSync(
@@ -180,12 +188,10 @@ export class BondingCurve {
             tx.recentBlockhash = blockhash;
             tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
 
-            const signers = [mintKeypair];
-            if (signers.length > 0) {
-                tx.partialSign(...signers);
-            }
+            // Sign with mintKeypair first
+            tx.partialSign(mintKeypair);
 
-            const provider = getProvider(this.wallet!, this.connection);
+            // Use provider's signAndSendTransaction
             const { signature } = await provider.signAndSendTransaction(tx);
 
             return {
