@@ -167,7 +167,14 @@ export class DexService {
             const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
             // @ts-ignore - Use Phantom's signAndSendTransaction
-            const { signature } = await wallet.signAndSendTransaction(transaction);
+            if (wallet.adapter?.signAndSendTransaction) {
+                // @ts-ignore
+                const { signature } = await wallet.adapter.signAndSendTransaction(transaction);
+                return signature;
+            }
+
+            // Fallback for non-Phantom wallets
+            const signature = await wallet.sendTransaction(transaction, connection);
 
             let done = false;
             let retries = 30;

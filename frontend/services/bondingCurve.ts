@@ -189,14 +189,19 @@ export class BondingCurve {
             tx.recentBlockhash = blockhash;
             tx.add(computeUnitIx, priorityFeeIx, ...instructions);
 
-            // First sign with additional signers
             if (signers.length > 0) {
                 tx.partialSign(...signers);
             }
 
-            // Use signAndSendTransaction from Phantom
-            // @ts-ignore - Phantom's method might not be in the type definitions
-            const { signature } = await this.wallet!.signAndSendTransaction(tx);
+            // @ts-ignore - Use Phantom's signAndSendTransaction
+            if (this.wallet?.adapter?.signAndSendTransaction) {
+                // @ts-ignore
+                const { signature } = await this.wallet.adapter.signAndSendTransaction(tx);
+                return signature;
+            }
+
+            // Fallback for non-Phantom wallets
+            const signature = await this.wallet!.sendTransaction(tx, this.connection);
 
             // ... rest of confirmation logic ...
             let done = false;
