@@ -131,7 +131,6 @@ export class DexService {
         try {
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
-
             const platformFeeBps = isSubscribed ? 0 : 100;
 
             const quoteResponse = await fetch(
@@ -164,23 +163,30 @@ export class DexService {
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            if (!wallet.signTransaction) {
-                throw new Error('Wallet does not support signing');
+            const signature = await wallet.sendTransaction(transaction, connection);
+
+            // Poll for confirmation using the same logic as bondingCurve
+            let done = false;
+            let retries = 30; // 30 second timeout
+            while (!done && retries > 0) {
+                const status = await connection.getSignatureStatus(signature);
+
+                if (status?.value?.confirmationStatus === 'confirmed') {
+                    done = true;
+                } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    retries--;
+                } else if (!status?.value) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    retries--;
+                } else {
+                    throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
+                }
             }
 
-            const signedTx = await wallet.signTransaction(transaction);
-            const latestBlockhash = await getConnectionForToken({ tokenType: 'dex' }).getLatestBlockhash();
-
-            const signature = await getConnectionForToken({ tokenType: 'dex' }).sendRawTransaction(signedTx.serialize(), {
-                skipPreflight: true,
-                maxRetries: 2
-            });
-
-            await getConnectionForToken({ tokenType: 'dex' }).confirmTransaction({
-                signature,
-                blockhash: latestBlockhash.blockhash,
-                lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
-            });
+            if (!done) {
+                throw new Error('Transaction confirmation timeout');
+            }
 
             return signature;
 
