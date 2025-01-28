@@ -166,10 +166,8 @@ export class DexService {
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            const signature = await wallet.sendTransaction(transaction, connection, {
-                skipPreflight: true,
-                maxRetries: 3
-            });
+            // @ts-ignore - Use Phantom's signAndSendTransaction
+            const { signature } = await wallet.signAndSendTransaction(transaction);
 
             let done = false;
             let retries = 30;
