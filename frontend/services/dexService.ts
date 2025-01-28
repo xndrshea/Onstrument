@@ -139,7 +139,9 @@ export class DexService {
                 `&outputMint=${outputMint}` +
                 `&amount=${amount}` +
                 `&slippageBps=${Math.floor(slippageTolerance * 10000)}` +
-                `&platformFeeBps=${platformFeeBps}`
+                `&platformFeeBps=${platformFeeBps}` +
+                `&computeUnitPriceMicroLamports=500000` +
+                `&asLegacyTransaction=true`
             ).then(res => res.json());
 
             if (!quoteResponse || quoteResponse.error) {
@@ -154,20 +156,23 @@ export class DexService {
                     userPublicKey: wallet.publicKey!.toString(),
                     wrapAndUnwrapSol: true,
                     feeAccount: platformFeeBps > 0 ? 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L' : undefined,
-                    dynamicSlippage: { maxBps: Math.floor(slippageTolerance * 10000) },
-                    dynamicComputeUnitLimit: true,
-                    prioritizationFeeLamports: 'auto'
+                    computeUnitLimit: 300000,
+                    computeUnitPrice: 500000,
+                    asLegacyTransaction: true,
+                    dynamicComputeUnitLimit: true
                 })
             }).then(res => res.json());
 
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            const signature = await wallet.sendTransaction(transaction, connection);
+            const signature = await wallet.sendTransaction(transaction, connection, {
+                skipPreflight: true,
+                maxRetries: 3
+            });
 
-            // Poll for confirmation using the same logic as bondingCurve
             let done = false;
-            let retries = 30; // 30 second timeout
+            let retries = 30;
             while (!done && retries > 0) {
                 const status = await connection.getSignatureStatus(signature);
 
