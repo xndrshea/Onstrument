@@ -173,22 +173,19 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
-            // Build the transaction first
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+
             const tx = new Transaction();
             tx.feePayer = this.wallet!.publicKey!;
-
-            // Add all instructions
+            tx.recentBlockhash = blockhash;
             tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
 
-            // Add mintKeypair to signers
             const signers = [mintKeypair];
             if (signers.length > 0) {
                 tx.partialSign(...signers);
             }
 
-            // Get the provider before sending
             const provider = getProvider(this.wallet!, this.connection);
-
             const { signature } = await provider.signAndSendTransaction(tx);
 
             return {
