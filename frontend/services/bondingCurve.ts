@@ -20,6 +20,25 @@ const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
 // Required Program IDs
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 
+// Add at the top of the file
+function getProvider(wallet: WalletContextState, connection: Connection) {
+    // Try Phantom first
+    if ('phantom' in window) {
+        const provider = (window as any).phantom?.solana;
+        if (provider?.isPhantom) {
+            return provider;
+        }
+    }
+
+    // Fallback to standard wallet adapter
+    return {
+        signAndSendTransaction: async (tx: Transaction) => {
+            const signature = await wallet.sendTransaction(tx, connection);
+            return { signature };
+        }
+    };
+}
+
 export class BondingCurve {
     public readonly program: Program<BondingCurveIDL>;
     private connection: Connection;
@@ -71,6 +90,13 @@ export class BondingCurve {
             idl as BondingCurveIDL,
             provider
         );
+
+        console.log('Wallet details:', {
+            wallet: this.wallet,
+            connected: this.wallet?.connected,
+            publicKey: this.wallet?.publicKey?.toString(),
+            methods: Object.keys(this.wallet || {})
+        });
     }
 
 
@@ -174,6 +200,8 @@ export class BondingCurve {
         signers: Keypair[]
     ): Promise<string> {
         try {
+            const provider = getProvider(this.wallet!, this.connection);
+
             const computeUnitIx = ComputeBudgetProgram.setComputeUnitLimit({
                 units: 300_000
             });
@@ -193,17 +221,9 @@ export class BondingCurve {
                 tx.partialSign(...signers);
             }
 
-            // @ts-ignore - Use Phantom's signAndSendTransaction
-            if (this.wallet?.adapter?.signAndSendTransaction) {
-                // @ts-ignore
-                const { signature } = await this.wallet.adapter.signAndSendTransaction(tx);
-                return signature;
-            }
+            const { signature } = await provider.signAndSendTransaction(tx);
 
-            // Fallback for non-Phantom wallets
-            const signature = await this.wallet!.sendTransaction(tx, this.connection);
-
-            // ... rest of confirmation logic ...
+            // Keep confirmation logic
             let done = false;
             let retries = 30;
             while (!done && retries > 0) {
@@ -227,12 +247,8 @@ export class BondingCurve {
             }
 
             return signature;
-
-        } catch (error: any) {
-            console.error('Transaction failed:', {
-                message: error.message,
-                logs: error.logs
-            });
+        } catch (error) {
+            console.error('Transaction failed:', error);
             throw error;
         }
     }

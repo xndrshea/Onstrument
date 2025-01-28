@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuthQuery';
 import { useNavigate } from 'react-router-dom';
 
 export function Wallet({ onProfileClick }: { onProfileClick: () => void }) {
-    const { connected, publicKey, disconnect } = useWallet();
+    const { connected, publicKey, disconnect, wallet } = useWallet();
     const { setVisible } = useWalletModal();
     const { isAuthenticated, isLoading, logout } = useAuth();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -21,6 +21,15 @@ export function Wallet({ onProfileClick }: { onProfileClick: () => void }) {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        // Debug log to see wallet info
+        console.log('Wallet info:', {
+            name: wallet?.adapter?.name,
+            isPhantom: wallet?.adapter?.name === 'Phantom',
+            wallet
+        });
+    }, [wallet]);
 
     const handleConnect = () => {
         setVisible(true);

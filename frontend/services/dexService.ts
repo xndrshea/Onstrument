@@ -1,5 +1,5 @@
 import type { Connection } from '@solana/web3.js';
-import { VersionedTransaction, PublicKey } from '@solana/web3.js';
+import { VersionedTransaction, PublicKey, Transaction } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { NATIVE_SOL_MINT } from '../constants';
 import type { BN } from '@project-serum/anchor';
@@ -22,6 +22,24 @@ type PriceQuote = {
     outAmount: string | number;
     isSelling: boolean;
 };
+
+function getProvider(wallet: WalletContextState, connection: Connection) {
+    // Try Phantom first
+    if ('phantom' in window) {
+        const provider = (window as any).phantom?.solana;
+        if (provider?.isPhantom) {
+            return provider;
+        }
+    }
+
+    // Fallback to standard wallet adapter
+    return {
+        signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
+            const signature = await wallet.sendTransaction(tx, connection);
+            return { signature };
+        }
+    };
+}
 
 export class DexService {
     constructor() {
@@ -163,18 +181,11 @@ export class DexService {
                 })
             }).then(res => res.json());
 
+            const provider = getProvider(wallet, connection);
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            // @ts-ignore - Use Phantom's signAndSendTransaction
-            if (wallet.adapter?.signAndSendTransaction) {
-                // @ts-ignore
-                const { signature } = await wallet.adapter.signAndSendTransaction(transaction);
-                return signature;
-            }
-
-            // Fallback for non-Phantom wallets
-            const signature = await wallet.sendTransaction(transaction, connection);
+            const { signature } = await provider.signAndSendTransaction(transaction);
 
             let done = false;
             let retries = 30;
