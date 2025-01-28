@@ -164,6 +164,7 @@ export function createApp() {
             '/auth/nonce',           // Uses wallet signature
             '/auth/verify',          // Uses wallet signature
             '/auth/verify-silent',   // Uses JWT
+            '/auth/logout',          // Uses JWT
             '/ws',                   // WebSocket connection
             '/helius',               // Proxied RPC calls
             '/upload/*'          // Uses Pinata auth

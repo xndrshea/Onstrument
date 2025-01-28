@@ -98,15 +98,6 @@ export class BondingCurve {
                 METADATA_PROGRAM_ID
             );
 
-            // Add compute budget instructions
-            const computeUnitIx = ComputeBudgetProgram.setComputeUnitLimit({
-                units: 300_000
-            });
-
-            const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-                microLamports: 500_000
-            });
-
             const createTokenIx = await this.program.methods
                 .createToken({
                     curveConfig: {
@@ -155,42 +146,10 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
-            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
-
-            const tx = new Transaction();
-            tx.feePayer = this.wallet!.publicKey!;
-            tx.recentBlockhash = blockhash;
-            tx.add(computeUnitIx, priorityFeeIx, createTokenIx, createMetadataIx, createAdminAtaIx);
-
-            // Only sign with mintKeypair
-            tx.partialSign(mintKeypair);
-
-            const signature = await this.wallet!.sendTransaction(tx, this.connection, {
-                skipPreflight: true  // Add this to help with token creation
-            });
-
-            // Poll for confirmation
-            let done = false;
-            let retries = 30; // 30 second timeout
-            while (!done && retries > 0) {
-                const status = await this.connection.getSignatureStatus(signature);
-
-                if (status?.value?.confirmationStatus === 'confirmed') {
-                    done = true;
-                } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else if (!status?.value) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else {
-                    throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
-                }
-            }
-
-            if (!done) {
-                throw new Error('Transaction confirmation timeout');
-            }
+            const signature = await this.buildAndSendTransaction(
+                [createTokenIx, createMetadataIx, createAdminAtaIx],
+                [mintKeypair]
+            );
 
             return {
                 mint: mintKeypair.publicKey,

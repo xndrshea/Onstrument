@@ -1225,7 +1225,7 @@ router.post('/users', csrfProtection, async (req, res) => {
     }
 });
 
-router.post('/auth/logout', csrfProtection, (req, res) => {
+router.post('/auth/logout', (req, res) => {
     try {
         res.header('Access-Control-Allow-Origin', process.env.NODE_ENV === 'production'
             ? 'https://onstrument.com'
