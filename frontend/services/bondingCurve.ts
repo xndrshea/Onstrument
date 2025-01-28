@@ -173,10 +173,23 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
-            const signature = await this.buildAndSendTransaction(
-                [createTokenIx, createMetadataIx, createAdminAtaIx],
-                [mintKeypair]
-            );
+            // Build the transaction first
+            const tx = new Transaction();
+            tx.feePayer = this.wallet!.publicKey!;
+
+            // Add all instructions
+            tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
+
+            // Add mintKeypair to signers
+            const signers = [mintKeypair];
+            if (signers.length > 0) {
+                tx.partialSign(...signers);
+            }
+
+            // Get the provider before sending
+            const provider = getProvider(this.wallet!, this.connection);
+
+            const { signature } = await provider.signAndSendTransaction(tx);
 
             return {
                 mint: mintKeypair.publicKey,
@@ -184,14 +197,8 @@ export class BondingCurve {
                 tokenVault: tokenVault,
                 signature
             };
-
-        } catch (err: any) {
-            console.error('Detailed error:', {
-                error: err,
-                message: err.message,
-                logs: err.logs,
-                programError: err.programError
-            });
+        } catch (err) {
+            console.error('Token creation error:', err);
             throw err;
         }
     }
