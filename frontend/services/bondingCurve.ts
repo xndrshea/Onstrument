@@ -196,14 +196,12 @@ export class BondingCurve {
             tx.recentBlockhash = blockhash;
             tx.add(computeUnitIx, priorityFeeIx, ...instructions);
 
-            if (!this.wallet?.signTransaction) {
-                throw new Error('Wallet does not support signing');
+            // Only sign with additional signers, don't sign with wallet yet
+            if (signers.length > 0) {
+                tx.partialSign(...signers);
             }
 
-            const signedTx = await this.wallet.signTransaction(tx);
-            signers.forEach(signer => signedTx.partialSign(signer));
-
-            const signature = await this.connection.sendRawTransaction(signedTx.serialize());
+            const signature = await this.wallet!.sendTransaction(tx, this.connection);
 
             // Poll for confirmation
             let done = false;
@@ -265,7 +263,7 @@ export class BondingCurve {
                 tx.add(createAtaIx);
 
                 const signedTx = await this.wallet!.signTransaction!(tx);
-                const signature = await this.connection.sendRawTransaction(signedTx.serialize());
+                const signature = await this.wallet!.sendTransaction(signedTx, this.connection);
                 await this.connection.confirmTransaction({
                     signature,
                     blockhash: tx.recentBlockhash,
