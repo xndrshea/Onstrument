@@ -119,7 +119,7 @@ export class BondingCurve {
 
             const provider = getProvider();
             const mintKeypair = Keypair.generate();
-            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -143,125 +143,89 @@ export class BondingCurve {
             );
 
             // Convert totalSupply to raw units if it's not already
+            console.log('Input totalSupply:', {
+                value: params.totalSupply,
+                type: typeof params.totalSupply,
+                isBN: params.totalSupply instanceof BN
+            });
+
             const rawTotalSupply = typeof params.totalSupply === 'number'
                 ? new BN(params.totalSupply * TOKEN_DECIMAL_MULTIPLIER)
                 : params.totalSupply;
 
-            const createTokenIx = await this.program.methods
-                .createToken({
-                    curveConfig: {
-                        migrationStatus: { active: {} },
-                        isSubscribed: params.curveConfig.isSubscribed,
-                        developer: this.wallet!.publicKey!
-                    },
-                    totalSupply: rawTotalSupply
-                })
-                .accounts({
-                    creator: this.wallet!.publicKey!,
-                    // @ts-ignore - Anchor types mismatch
-                    curve: curveAddress,
+            console.log('Processed totalSupply:', {
+                value: rawTotalSupply.toString(),
+                isBN: rawTotalSupply instanceof BN
+            });
+
+            let signature: string;
+            try {
+                const createTokenIx = await this.program.methods
+                    .createToken({
+                        curveConfig: {
+                            migrationStatus: { active: {} },
+                            isSubscribed: params.curveConfig.isSubscribed,
+                            developer: this.wallet!.publicKey!
+                        },
+                        totalSupply: rawTotalSupply
+                    })
+                    .accounts({
+                        creator: this.wallet!.publicKey!,
+                        // @ts-ignore - Anchor types mismatch
+                        curve: curveAddress,
+                        mint: mintKeypair.publicKey,
+                        tokenVault: tokenVault,
+                        tokenProgram: TOKEN_PROGRAM_ID,
+                        systemProgram: SystemProgram.programId,
+                        rent: SYSVAR_RENT_PUBKEY,
+                    })
+                    .instruction();
+
+                const messageV0 = new TransactionMessage({
+                    payerKey: this.wallet!.publicKey!,
+                    recentBlockhash: blockhash,
+                    instructions: [createTokenIx]
+                }).compileToV0Message();
+
+                // Simulate first to catch any potential errors
+                const simResult = await this.connection.simulateTransaction(
+                    new VersionedTransaction(messageV0)
+                );
+
+                if (simResult.value.err) {
+                    console.error('Simulation failed:', simResult.value.err);
+                    throw new Error(`Transaction simulation failed: ${simResult.value.err}`);
+                }
+
+                const tx = new VersionedTransaction(messageV0);
+                tx.sign([mintKeypair]);
+                const { signature: sig } = await provider.signAndSendTransaction(tx);
+                signature = sig;
+
+                // Wait for confirmation using getSignatureStatus
+                let confirmed = false;
+                while (!confirmed) {
+                    const status = await this.connection.getSignatureStatus(signature);
+                    if (status.value?.err) {
+                        throw new Error(`Transaction failed: ${status.value.err}`);
+                    }
+                    if (status.value?.confirmationStatus === 'confirmed') {
+                        confirmed = true;
+                    } else {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+
+                return {
                     mint: mintKeypair.publicKey,
+                    curve: curveAddress,
                     tokenVault: tokenVault,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    systemProgram: SystemProgram.programId,
-                    rent: SYSVAR_RENT_PUBKEY,
-                })
-                .instruction();
-
-            const createMetadataIx = await this.program.methods
-                .createMetadata({
-                    name: params.name,
-                    symbol: params.symbol,
-                    uri: params.metadataUri
-                })
-                .accounts({
-                    creator: this.wallet!.publicKey!,
-                    // @ts-ignore - Anchor types mismatch
-                    curve: curveAddress,
-                    mint: mintKeypair.publicKey,
-                    metadata: metadataAddress,
-                    metadataProgram: METADATA_PROGRAM_ID,
-                    systemProgram: SystemProgram.programId,
-                    rent: SYSVAR_RENT_PUBKEY,
-                })
-                .instruction();
-
-            const adminTokenAccount = await getAssociatedTokenAddress(
-                mintKeypair.publicKey,
-                migrationAdmin
-            );
-
-            const createAdminAtaIx = createAssociatedTokenAccountInstruction(
-                this.wallet!.publicKey!,
-                adminTokenAccount,
-                migrationAdmin,
-                mintKeypair.publicKey
-            );
-
-            // Create both transactions
-            const transactions = [
-                new VersionedTransaction(
-                    new TransactionMessage({
-                        payerKey: this.wallet!.publicKey!,
-                        recentBlockhash: blockhash,
-                        instructions: [createTokenIx]
-                    }).compileToV0Message()
-                ),
-                new VersionedTransaction(
-                    new TransactionMessage({
-                        payerKey: this.wallet!.publicKey!,
-                        recentBlockhash: blockhash,
-                        instructions: [createMetadataIx, createAdminAtaIx]
-                    }).compileToV0Message()
-                )
-            ];
-
-            // First, let Phantom sign the transactions
-            const signedTransactions = await provider.signAllTransactions(transactions);
-
-            // Then have mintKeypair sign the first transaction
-            signedTransactions[0].sign([mintKeypair]);
-
-            // Send first transaction (create mint)
-            const signature = await this.connection.sendRawTransaction(signedTransactions[0].serialize(), {
-                skipPreflight: false,
-                preflightCommitment: 'confirmed'
-            });
-
-            // Poll until confirmed
-            let done = false;
-            while (!done) {
-                const signatureStatus = await this.connection.getSignatureStatus(signature);
-                if (signatureStatus.value?.confirmationStatus === 'confirmed') {
-                    done = true;
-                } else {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
+                    signature
+                };
+            } catch (err) {
+                console.error('Failed to send transaction:', err);
+                throw new Error('Failed to create token - transaction failed');
             }
-
-            // Send second transaction (create metadata)
-            const sig2 = await this.connection.sendRawTransaction(signedTransactions[1].serialize(), {
-                skipPreflight: false,
-                preflightCommitment: 'confirmed'
-            });
-
-            // Poll until confirmed
-            done = false;
-            while (!done) {
-                const signatureStatus = await this.connection.getSignatureStatus(sig2);
-                if (signatureStatus.value?.confirmationStatus === 'confirmed') {
-                    done = true;
-                } else {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
-
-            return {
-                mint: mintKeypair.publicKey,
-                curve: curveAddress,
-                tokenVault: tokenVault,
-                signatures: [signature, sig2]
-            };
         } catch (err) {
             console.error('Token creation error:', err);
             throw new Error(`Failed to create token: ${err instanceof Error ? err.message : String(err)}`);

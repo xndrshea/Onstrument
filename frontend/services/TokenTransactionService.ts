@@ -40,17 +40,17 @@ export class TokenTransactionService {
     ): Promise<TokenRecord> {
         try {
             // Create token with bonding curve
-            const { mint, curve, tokenVault, signatures } = await this.bondingCurve.createTokenWithCurve(params);
+            const { mint, curve, tokenVault, signature } = await this.bondingCurve.createTokenWithCurve(params);
 
-            if (!signatures?.[0] || !mint || !curve || !tokenVault) {
-                console.error('Missing parameters:', { signatures, mint, curve, tokenVault });
+            if (!signature || !mint || !curve || !tokenVault) {
+                console.error('Missing parameters:', { signature, mint, curve, tokenVault });
                 throw new Error('Failed to create token - missing required parameters');
             }
 
             // Instead of using confirmTransaction, use getSignatureStatus in a polling loop
             let retries = 0;
             while (retries < 30) {
-                const status = await this.connection.getSignatureStatus(signatures[0]);
+                const status = await this.connection.getSignatureStatus(signature);
 
                 if (status?.value?.confirmationStatus === 'processed' ||
                     status?.value?.confirmationStatus === 'confirmed' ||
