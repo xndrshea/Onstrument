@@ -95,6 +95,7 @@ export class BondingCurve {
         try {
             const mintKeypair = Keypair.generate();
             const provider = getProvider(this.wallet!, this.connection);
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -164,9 +165,6 @@ export class BondingCurve {
                 migrationAdmin,
                 mintKeypair.publicKey
             );
-
-            // Convert to VersionedTransaction
-            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
             // Create first transaction with mintKeypair operations
             const messageV0_1 = new TransactionMessage({
@@ -243,10 +241,10 @@ export class BondingCurve {
                 instructions: instructions
             }).compileToV0Message();
 
-            const transaction = new VersionedTransaction(messageV0);
+            const versionedTx = new VersionedTransaction(messageV0);
 
             // Use Phantom's preferred signing method
-            const { signature } = await provider.signAndSendTransaction(transaction);
+            const { signature } = await provider.signAndSendTransaction(versionedTx);
 
             // Keep confirmation logic
             let done = false;
@@ -305,10 +303,10 @@ export class BondingCurve {
                     instructions: [createAtaIx]
                 }).compileToV0Message();
 
-                const tx = new VersionedTransaction(messageV0);
+                const versionedTx = new VersionedTransaction(messageV0);
 
                 const provider = getProvider(this.wallet!, this.connection);
-                const { signature } = await provider.signAndSendTransaction(tx);
+                const { signature } = await provider.signAndSendTransaction(versionedTx);
                 await this.connection.confirmTransaction(signature);
             }
             return buyerTokenAccount;

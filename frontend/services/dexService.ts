@@ -1,5 +1,5 @@
 import type { Connection } from '@solana/web3.js';
-import { VersionedTransaction, PublicKey, Transaction, TransactionMessage } from '@solana/web3.js';
+import { VersionedTransaction, PublicKey, Transaction, TransactionMessage, VersionedMessage } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { NATIVE_SOL_MINT } from '../constants';
 import type { BN } from '@project-serum/anchor';
@@ -193,13 +193,8 @@ export class DexService {
 
             // Convert to VersionedTransaction FIRST
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-            const legacyTx = Transaction.from(swapTransactionBuf);
-            const messageV0 = new TransactionMessage({
-                payerKey: wallet.publicKey!,
-                recentBlockhash: legacyTx.recentBlockhash!,
-                instructions: legacyTx.instructions
-            }).compileToV0Message();
-            const versionedTx = new VersionedTransaction(messageV0);
+            const versionedMessage = VersionedMessage.deserialize(swapTransactionBuf);
+            const versionedTx = new VersionedTransaction(versionedMessage);
 
             // Send using Phantom's preferred method
             const provider = getProvider(wallet, connection);
