@@ -24,11 +24,18 @@ type PriceQuote = {
 };
 
 function getProvider(wallet: WalletContextState, connection: Connection) {
+    // Enhanced provider detection with Phantom priority
     const phantomProvider = (window as any).phantom?.solana;
-    if (phantomProvider?.isPhantom) {
-        return phantomProvider;
-    }
-    throw new Error('Phantom provider not found');
+    if (phantomProvider?.isPhantom) return phantomProvider;
+
+    // Fallback for non-Phantom wallets
+    return {
+        signAndSendTransaction: async (transaction: VersionedTransaction) => {
+            const signed = await wallet.signTransaction!(transaction);
+            const rawTransaction = signed.serialize();
+            return connection.sendRawTransaction(rawTransaction);
+        }
+    };
 }
 
 export class DexService {
@@ -137,30 +144,24 @@ export class DexService {
         isSubscribed
     }: TradeParams) => {
         try {
-            const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
-            const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
-            const platformFeeBps = isSubscribed ? 0 : 100;
+            const provider = getProvider(wallet, connection);
+            if (!provider) throw new Error('Wallet provider not available');
 
-            // Get quote from Jupiter V6 API
-            const quoteResponse = await fetch(
-                `https://quote-api.jup.ag/v6/quote?` +
-                `inputMint=${inputMint}` +
-                `&outputMint=${outputMint}` +
-                `&amount=${amount}` +
-                `&slippageBps=${Math.floor(slippageTolerance * 10000)}` +
-                `&platformFeeBps=${platformFeeBps}`
-            ).then(res => res.json());
+            // Get fresh blockhash for each transaction
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
 
-            if (!quoteResponse || quoteResponse.error) {
-                throw new Error(quoteResponse.error || 'Failed to get quote');
-            }
-
-            // Enhanced swap request with priority fees and error handling
+            // Enhanced swap request with proper blockhash usage
             const { swapTransaction } = await fetch('https://quote-api.jup.ag/v6/swap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    quoteResponse,
+                    quoteResponse: await this.getQuoteResponse(
+                        mintAddress,
+                        amount,
+                        isSelling,
+                        slippageTolerance,
+                        isSubscribed
+                    ),
                     userPublicKey: wallet.publicKey!.toString(),
                     wrapAndUnwrapSol: true,
                     dynamicComputeUnitLimit: true,
@@ -170,39 +171,69 @@ export class DexService {
                             priorityLevel: "high"
                         }
                     },
-                    feeAccount: platformFeeBps > 0 ? 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L' : undefined,
+                    feeAccount: isSubscribed ? undefined : 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L',
                 })
             }).then(async res => {
                 const response = await res.json();
                 if (response.simulationError) {
-                    throw new Error(`Simulation failed: ${response.simulationError}`);
+                    throw new Error(`Swap simulation failed: ${response.simulationError}`);
                 }
                 return response;
             });
 
-            // Improved transaction confirmation
+            // Deserialize with versioned transaction validation
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             const versionedTx = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            const provider = getProvider(wallet, connection);
+            // Validate transaction structure
+            if (!(versionedTx instanceof VersionedTransaction)) {
+                throw new Error('Invalid transaction format from Jupiter API');
+            }
+
+            // Sign and send with proper blockhash context
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
-            // Use proper confirmation method
+            // Confirm with transaction-specific blockhash
             const confirmation = await connection.confirmTransaction({
                 signature,
-                blockhash: versionedTx.message.recentBlockhash,
-                lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight
-            });
+                blockhash,
+                lastValidBlockHeight
+            }, 'confirmed');
 
             if (confirmation.value.err) {
-                throw new Error('Transaction failed');
+                throw new Error('Transaction failed on-chain execution');
             }
 
             return signature;
-
         } catch (error) {
-            console.error('Swap error:', error);
-            throw new Error('Failed to execute swap');
+            console.error('Swap execution error:', error);
+            throw new Error(`Swap failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
+
+    private getQuoteResponse = async (
+        mintAddress: string,
+        amount: BN,
+        isSelling: boolean,
+        slippageTolerance: number,
+        isSubscribed: boolean
+    ) => {
+        const mint = await getMint(getConnection(), new PublicKey(mintAddress));
+        const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
+        const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
+        const calculatedAmount = isSelling
+            ? amount.toNumber()
+            : amount.toNumber() * 1e9;
+
+        const response = await fetch(
+            `https://quote-api.jup.ag/v6/quote?` +
+            `inputMint=${inputMint}` +
+            `&outputMint=${outputMint}` +
+            `&amount=${calculatedAmount}` +
+            `&slippageBps=${Math.floor(slippageTolerance * 100)}` +
+            `&swapMode=ExactIn`
+        );
+
+        return response.json();
+    };
 }

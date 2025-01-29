@@ -22,8 +22,18 @@ const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt
 
 // Add at the top of the file
 function getProvider(wallet: WalletContextState, connection: Connection) {
-    // Directly use Phantom's provider if available
-    return (window as any).phantom?.solana;
+    // Proper Phantom provider detection with fallback
+    const phantomProvider = (window as any).phantom?.solana;
+    if (phantomProvider?.isPhantom) return phantomProvider;
+
+    // Fallback for other wallets using standard web3.js transactions
+    return {
+        signAndSendTransaction: async (transaction: VersionedTransaction) => {
+            const signed = await wallet.signTransaction!(transaction);
+            const rawTransaction = signed.serialize();
+            return connection.sendRawTransaction(rawTransaction);
+        }
+    };
 }
 
 export class BondingCurve {
@@ -230,10 +240,9 @@ export class BondingCurve {
     ): Promise<string> {
         try {
             const provider = getProvider(this.wallet!, this.connection);
-            if (!provider) throw new Error('Phantom provider not found');
 
-            // Convert to VersionedTransaction
-            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+            // Always use VersionedTransaction
+            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
             const messageV0 = new TransactionMessage({
                 payerKey: this.wallet!.publicKey!,
                 recentBlockhash: blockhash,
@@ -242,30 +251,18 @@ export class BondingCurve {
 
             const versionedTx = new VersionedTransaction(messageV0);
 
-            // Use Phantom's preferred signing method directly
+            // Phantom-compatible signing
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
-            // Keep confirmation logic
-            let done = false;
-            let retries = 30;
-            while (!done && retries > 0) {
-                const status = await this.connection.getSignatureStatus(signature);
+            // Proper confirmation using native method
+            const confirmation = await this.connection.confirmTransaction({
+                signature,
+                blockhash,
+                lastValidBlockHeight
+            }, 'confirmed');
 
-                if (status?.value?.confirmationStatus === 'confirmed') {
-                    done = true;
-                } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else if (!status?.value) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else {
-                    throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
-                }
-            }
-
-            if (!done) {
-                throw new Error('Transaction confirmation timeout');
+            if (confirmation.value.err) {
+                throw new Error('Transaction failed');
             }
 
             return signature;
@@ -284,35 +281,32 @@ export class BondingCurve {
             this.wallet!.publicKey!
         );
 
-        try {
-            const tokenAccountInfo = await this.connection.getAccountInfo(buyerTokenAccount);
-            if (!tokenAccountInfo) {
-                const createAtaIx = createAssociatedTokenAccountInstruction(
-                    this.wallet!.publicKey!,
-                    buyerTokenAccount,
-                    this.wallet!.publicKey!,
-                    this.mintAddress
-                );
+        const tokenAccountInfo = await this.connection.getAccountInfo(buyerTokenAccount);
+        if (!tokenAccountInfo) {
+            const createAtaIx = createAssociatedTokenAccountInstruction(
+                this.wallet!.publicKey!,
+                buyerTokenAccount,
+                this.wallet!.publicKey!,
+                this.mintAddress
+            );
 
-                // Use VersionedTransaction
-                const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
-                const messageV0 = new TransactionMessage({
-                    payerKey: this.wallet!.publicKey!,
-                    recentBlockhash: blockhash,
-                    instructions: [createAtaIx]
-                }).compileToV0Message();
+            // Use VersionedTransaction
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+            const messageV0 = new TransactionMessage({
+                payerKey: this.wallet!.publicKey!,
+                recentBlockhash: blockhash,
+                instructions: [createAtaIx]
+            }).compileToV0Message();
 
-                const versionedTx = new VersionedTransaction(messageV0);
+            const versionedTx = new VersionedTransaction(messageV0);
 
-                const provider = getProvider(this.wallet!, this.connection);
-                const { signature } = await provider.signAndSendTransaction(versionedTx);
-                await this.connection.confirmTransaction(signature);
-            }
-            return buyerTokenAccount;
-        } catch (error) {
-            console.error('Error ensuring token account:', error);
-            throw error;
+            const provider = getProvider(this.wallet!, this.connection);
+            const { signature } = await provider.signAndSendTransaction(versionedTx);
+
+            // Wait for confirmation
+            await this.connection.confirmTransaction(signature, 'confirmed');
         }
+        return buyerTokenAccount;
     }
 
     async buy(params: {
