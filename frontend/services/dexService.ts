@@ -1,5 +1,5 @@
 import type { Connection } from '@solana/web3.js';
-import { VersionedTransaction, PublicKey, Transaction } from '@solana/web3.js';
+import { VersionedTransaction, PublicKey, Transaction, TransactionMessage } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { NATIVE_SOL_MINT } from '../constants';
 import type { BN } from '@project-serum/anchor';
@@ -31,10 +31,23 @@ function getProvider(wallet: WalletContextState, connection: Connection) {
         }
     }
 
-    // Match Phantom's signAndSendTransaction signature exactly
     return {
-        signAndSendTransaction: async (tx: Transaction) => {
-            const signedTx = await wallet.signTransaction!(tx);
+        signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
+            // Preserve VersionedTransaction format for modern wallets
+            let transactionToSend = tx;
+
+            // Only convert if it's a legacy transaction
+            if (tx instanceof Transaction) {
+                const messageV0 = new TransactionMessage({
+                    payerKey: wallet.publicKey!,
+                    recentBlockhash: tx.recentBlockhash!,
+                    instructions: tx.instructions
+                }).compileToV0Message();
+
+                transactionToSend = new VersionedTransaction(messageV0);
+            }
+
+            const signedTx = await wallet.signTransaction!(transactionToSend as Transaction);
             const signature = await wallet.sendTransaction(signedTx, connection);
             return { signature };
         }
@@ -181,10 +194,19 @@ export class DexService {
                 })
             }).then(res => res.json());
 
-            const provider = getProvider(wallet, connection);
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-            const transaction = Transaction.from(swapTransactionBuf);
 
+            // Convert legacy transaction to VersionedTransaction
+            const legacyTransaction = Transaction.from(swapTransactionBuf);
+            const messageV0 = new TransactionMessage({
+                payerKey: wallet.publicKey!,
+                recentBlockhash: legacyTransaction.recentBlockhash!,
+                instructions: legacyTransaction.instructions
+            }).compileToV0Message();
+
+            const transaction = new VersionedTransaction(messageV0);
+
+            const provider = getProvider(wallet, connection);
             const { signature } = await provider.signAndSendTransaction(transaction);
 
             let done = false;

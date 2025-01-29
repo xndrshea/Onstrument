@@ -30,8 +30,14 @@ function getProvider(wallet: WalletContextState, connection: Connection) {
     }
 
     return {
-        signAndSendTransaction: async (tx: Transaction) => {
-            const signedTx = await wallet.signTransaction!(tx);
+        signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
+            // Convert VersionedTransaction to legacy Transaction for non-Phantom wallets
+            let transactionToSend = tx;
+            if (tx instanceof VersionedTransaction) {
+                transactionToSend = Transaction.from(tx.message.serialize());
+            }
+
+            const signedTx = await wallet.signTransaction!(transactionToSend as Transaction);
             const signature = await wallet.sendTransaction(signedTx, connection);
             return { signature };
         }
@@ -175,16 +181,18 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
+            // Convert to VersionedTransaction
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+            const messageV0 = new TransactionMessage({
+                payerKey: this.wallet!.publicKey!,
+                recentBlockhash: blockhash,
+                instructions: [createTokenIx, createMetadataIx, createAdminAtaIx]
+            }).compileToV0Message();
 
-            // Build single transaction with all instructions
-            const tx = new Transaction();
-            tx.feePayer = this.wallet!.publicKey!;
-            tx.recentBlockhash = blockhash;
-            tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
-            tx.partialSign(mintKeypair);
+            const tx = new VersionedTransaction(messageV0);
+            tx.sign([mintKeypair]); // Only sign with mint keypair
 
-            // Use provider's signAndSendTransaction directly instead of buildAndSendTransaction
+            // Use Phantom's preferred signing method
             const { signature } = await provider.signAndSendTransaction(tx);
 
             // Wait for confirmation
@@ -271,10 +279,17 @@ export class BondingCurve {
                     this.mintAddress
                 );
 
-                const provider = getProvider(this.wallet!, this.connection);
-                const tx = new Transaction().add(createAtaIx);
+                // Use VersionedTransaction
+                const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+                const messageV0 = new TransactionMessage({
+                    payerKey: this.wallet!.publicKey!,
+                    recentBlockhash: blockhash,
+                    instructions: [createAtaIx]
+                }).compileToV0Message();
 
-                // Use provider's signAndSendTransaction instead of direct wallet methods
+                const tx = new VersionedTransaction(messageV0);
+
+                const provider = getProvider(this.wallet!, this.connection);
                 const { signature } = await provider.signAndSendTransaction(tx);
                 await this.connection.confirmTransaction(signature);
             }
