@@ -172,27 +172,60 @@ export class BondingCurve {
 
             // Convert to VersionedTransaction
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
-            const messageV0 = new TransactionMessage({
+
+            // Create first transaction with mintKeypair operations
+            const messageV0_1 = new TransactionMessage({
                 payerKey: this.wallet!.publicKey!,
                 recentBlockhash: blockhash,
-                instructions: [createTokenIx, createMetadataIx, createAdminAtaIx]
+                instructions: [createTokenIx]
             }).compileToV0Message();
 
-            const tx = new VersionedTransaction(messageV0);
+            // Create second transaction with metadata operations
+            const messageV0_2 = new TransactionMessage({
+                payerKey: this.wallet!.publicKey!,
+                recentBlockhash: blockhash,
+                instructions: [createMetadataIx, createAdminAtaIx]
+            }).compileToV0Message();
 
-            // Phantom-compatible signing flow
-            const { signature } = await provider.signAndSendTransaction(tx, {
-                signers: [mintKeypair]  // Add required signers here
-            });
+            const tx1 = new VersionedTransaction(messageV0_1);
+            const tx2 = new VersionedTransaction(messageV0_2);
 
-            // Wait for confirmation
-            await this.connection.confirmTransaction(signature);
+            // Sign with mintKeypair where needed
+            tx1.sign([mintKeypair]);
+
+            // Use Phantom's preferred multiple transaction signing
+            const { signatures } = await provider.signAndSendAllTransactions([tx1, tx2]);
+
+            // Wait for all confirmations
+            await Promise.all(signatures.map(async (sig: string) => {
+                let done = false;
+                let retries = 30;
+                while (!done && retries > 0) {
+                    const status = await this.connection.getSignatureStatus(sig);
+
+                    if (status?.value?.confirmationStatus === 'confirmed') {
+                        done = true;
+                    } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        retries--;
+                    } else if (!status?.value) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        retries--;
+                    } else {
+                        throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
+                    }
+                }
+
+                if (!done) {
+                    throw new Error('Transaction confirmation timeout');
+                }
+            }));
 
             return {
                 mint: mintKeypair.publicKey,
                 curve: curveAddress,
                 tokenVault: tokenVault,
-                signature
+                signatures
             };
         } catch (err) {
             console.error('Token creation error:', err);
