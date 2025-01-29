@@ -22,22 +22,19 @@ const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt
 
 // Add at the top of the file
 function getProvider(wallet: WalletContextState, connection: Connection) {
-    if ('phantom' in window) {
-        const provider = (window as any).phantom?.solana;
-        if (provider?.isPhantom) {
-            return provider;
-        }
+    const phantomProvider = (window as any).phantom?.solana;
+    if (phantomProvider?.isPhantom) {
+        return {
+            ...phantomProvider,
+            signAndSendTransaction: async (tx: VersionedTransaction, options?: any) => {
+                return phantomProvider.signAndSendTransaction(tx, options);
+            }
+        };
     }
 
     return {
-        signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
-            // Convert VersionedTransaction to legacy Transaction for non-Phantom wallets
-            let transactionToSend = tx;
-            if (tx instanceof VersionedTransaction) {
-                transactionToSend = Transaction.from(tx.message.serialize());
-            }
-
-            const signedTx = await wallet.signTransaction!(transactionToSend as Transaction);
+        signAndSendTransaction: async (tx: VersionedTransaction, options?: any) => {
+            const signedTx = await wallet.signTransaction!(tx);
             const signature = await wallet.sendTransaction(signedTx, connection);
             return { signature };
         }
@@ -108,8 +105,6 @@ export class BondingCurve {
     async createTokenWithCurve(params: createTokenParams) {
         try {
             const mintKeypair = Keypair.generate();
-
-            // Get provider first
             const provider = getProvider(this.wallet!, this.connection);
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
@@ -190,10 +185,11 @@ export class BondingCurve {
             }).compileToV0Message();
 
             const tx = new VersionedTransaction(messageV0);
-            tx.sign([mintKeypair]); // Only sign with mint keypair
 
-            // Use Phantom's preferred signing method
-            const { signature } = await provider.signAndSendTransaction(tx);
+            // Phantom-compatible signing flow
+            const { signature } = await provider.signAndSendTransaction(tx, {
+                signers: [mintKeypair]  // Add required signers here
+            });
 
             // Wait for confirmation
             await this.connection.confirmTransaction(signature);

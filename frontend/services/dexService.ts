@@ -24,31 +24,30 @@ type PriceQuote = {
 };
 
 function getProvider(wallet: WalletContextState, connection: Connection) {
-    if ('phantom' in window) {
-        const provider = (window as any).phantom?.solana;
-        if (provider?.isPhantom) {
-            return provider;
-        }
+    const phantomProvider = (window as any).phantom?.solana;
+    if (phantomProvider?.isPhantom) {
+        return phantomProvider;
     }
 
     return {
         signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
-            // Preserve VersionedTransaction format for modern wallets
+            // Always convert to VersionedTransaction for modern wallets
             let transactionToSend = tx;
-
-            // Only convert if it's a legacy transaction
             if (tx instanceof Transaction) {
                 const messageV0 = new TransactionMessage({
                     payerKey: wallet.publicKey!,
                     recentBlockhash: tx.recentBlockhash!,
                     instructions: tx.instructions
                 }).compileToV0Message();
-
                 transactionToSend = new VersionedTransaction(messageV0);
             }
 
-            const signedTx = await wallet.signTransaction!(transactionToSend as Transaction);
-            const signature = await wallet.sendTransaction(signedTx, connection);
+            // Use wallet-adapter's native sendTransaction
+            const signature = await wallet.sendTransaction(
+                transactionToSend as VersionedTransaction,
+                connection,
+                { skipPreflight: true }
+            );
             return { signature };
         }
     };
@@ -194,20 +193,19 @@ export class DexService {
                 })
             }).then(res => res.json());
 
+            // Convert to VersionedTransaction FIRST
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-
-            // Convert legacy transaction to VersionedTransaction
-            const legacyTransaction = Transaction.from(swapTransactionBuf);
+            const legacyTx = Transaction.from(swapTransactionBuf);
             const messageV0 = new TransactionMessage({
                 payerKey: wallet.publicKey!,
-                recentBlockhash: legacyTransaction.recentBlockhash!,
-                instructions: legacyTransaction.instructions
+                recentBlockhash: legacyTx.recentBlockhash!,
+                instructions: legacyTx.instructions
             }).compileToV0Message();
+            const versionedTx = new VersionedTransaction(messageV0);
 
-            const transaction = new VersionedTransaction(messageV0);
-
+            // Send using Phantom's preferred method
             const provider = getProvider(wallet, connection);
-            const { signature } = await provider.signAndSendTransaction(transaction);
+            const { signature } = await provider.signAndSendTransaction(versionedTx);
 
             let done = false;
             let retries = 30;
