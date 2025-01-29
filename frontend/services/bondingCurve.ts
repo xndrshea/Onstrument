@@ -24,18 +24,12 @@ const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt
 function getProvider(wallet: WalletContextState, connection: Connection) {
     const phantomProvider = (window as any).phantom?.solana;
     if (phantomProvider?.isPhantom) {
-        return {
-            ...phantomProvider,
-            signAndSendTransaction: async (tx: VersionedTransaction, options?: any) => {
-                return phantomProvider.signAndSendTransaction(tx, options);
-            }
-        };
+        return phantomProvider;
     }
 
     return {
         signAndSendTransaction: async (tx: VersionedTransaction, options?: any) => {
-            const signedTx = await wallet.signTransaction!(tx);
-            const signature = await wallet.sendTransaction(signedTx, connection);
+            const signature = await wallet.sendTransaction(tx, connection);
             return { signature };
         }
     };
