@@ -23,14 +23,6 @@ type PriceQuote = {
     isSelling: boolean;
 };
 
-function getProvider(wallet: WalletContextState, connection: Connection) {
-    const phantomProvider = (window as any).phantom?.solana;
-    if (phantomProvider?.isPhantom) {
-        return phantomProvider;
-    }
-    throw new Error('Phantom provider not found');
-}
-
 export class DexService {
     constructor() {
         // No need to create connection here
@@ -137,6 +129,12 @@ export class DexService {
         isSubscribed
     }: TradeParams) => {
         try {
+            // Get Phantom provider directly
+            const phantomProvider = (window as any).phantom?.solana;
+            if (!phantomProvider?.isPhantom) {
+                throw new Error('Phantom wallet not found');
+            }
+
             const inputMint = isSelling ? mintAddress : NATIVE_SOL_MINT;
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
             const platformFeeBps = isSubscribed ? 0 : 100;
@@ -184,8 +182,8 @@ export class DexService {
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             const versionedTx = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            const provider = getProvider(wallet, connection);
-            const { signature } = await provider.signAndSendTransaction(versionedTx);
+            // Use Phantom provider directly
+            const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
 
             // Use proper confirmation method
             const confirmation = await connection.confirmTransaction({

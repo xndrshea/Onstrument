@@ -239,9 +239,14 @@ export class BondingCurve {
             // Sign with mintKeypair first
             versionedTx.sign([mintKeypair]);
 
-            // Get provider and send transaction directly
-            const provider = getProvider(this.wallet!, this.connection);
-            const { signature } = await provider.signAndSendTransaction(versionedTx);
+            // Get Phantom provider directly
+            const phantomProvider = (window as any).phantom?.solana;
+            if (!phantomProvider?.isPhantom) {
+                throw new Error('Phantom wallet not found');
+            }
+
+            // Use Phantom's provider directly instead of the wrapper
+            const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
 
             // Add retry logic for confirmation
             const MAX_RETRIES = 5;
@@ -368,6 +373,12 @@ export class BondingCurve {
                 this.mintAddress
             );
 
+            // Get Phantom provider directly
+            const phantomProvider = (window as any).phantom?.solana;
+            if (!phantomProvider?.isPhantom) {
+                throw new Error('Phantom wallet not found');
+            }
+
             // Use VersionedTransaction
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
             const messageV0 = new TransactionMessage({
@@ -378,8 +389,8 @@ export class BondingCurve {
 
             const versionedTx = new VersionedTransaction(messageV0);
 
-            const provider = getProvider(this.wallet!, this.connection);
-            const { signature } = await provider.signAndSendTransaction(versionedTx);
+            // Use Phantom's provider directly
+            const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
 
             // Wait for confirmation
             await this.connection.confirmTransaction(signature, 'confirmed');
