@@ -97,8 +97,43 @@ export class BondingCurve {
 
     async createTokenWithCurve(params: createTokenParams) {
         try {
+            // Debug logging
+            console.log('Received params:', {
+                name: params?.name,
+                symbol: params?.symbol,
+                totalSupply: params?.totalSupply?.toString(),
+                metadataUri: params?.metadataUri,
+                curveConfig: params?.curveConfig
+            });
+
+            // Validate required parameters
+            if (!params) {
+                throw new Error('Params object is required');
+            }
+
+            // Validate individual required fields
+            const requiredFields = {
+                'name': params.name,
+                'symbol': params.symbol,
+                'metadataUri': params.metadataUri,
+                'totalSupply': params.totalSupply,
+                'curveConfig': params.curveConfig
+            };
+
+            for (const [field, value] of Object.entries(requiredFields)) {
+                if (value === undefined || value === null) {
+                    console.error(`Missing field: ${field}, value:`, value);
+                    throw new Error(`Missing required parameter: ${field}`);
+                }
+            }
+
+            // Validate curveConfig fields
+            if (!params.curveConfig || typeof params.curveConfig.isSubscribed !== 'boolean') {
+                console.error('Invalid curveConfig:', params.curveConfig);
+                throw new Error('Invalid curveConfig: isSubscribed must be a boolean');
+            }
+
             const mintKeypair = Keypair.generate();
-            const provider = getProvider(this.wallet!, this.connection);
             const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
@@ -122,6 +157,11 @@ export class BondingCurve {
                 METADATA_PROGRAM_ID
             );
 
+            // Convert totalSupply to raw units if it's not already
+            const rawTotalSupply = typeof params.totalSupply === 'number'
+                ? new BN(params.totalSupply * TOKEN_DECIMAL_MULTIPLIER)
+                : params.totalSupply;
+
             const createTokenIx = await this.program.methods
                 .createToken({
                     curveConfig: {
@@ -129,17 +169,18 @@ export class BondingCurve {
                         isSubscribed: params.curveConfig.isSubscribed,
                         developer: this.wallet!.publicKey!
                     },
-                    totalSupply: params.totalSupply
+                    totalSupply: rawTotalSupply
                 })
                 .accounts({
                     creator: this.wallet!.publicKey!,
+                    // @ts-ignore - Anchor types mismatch
                     curve: curveAddress,
                     mint: mintKeypair.publicKey,
                     tokenVault: tokenVault,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                     rent: SYSVAR_RENT_PUBKEY,
-                } as any)
+                })
                 .instruction();
 
             const createMetadataIx = await this.program.methods
@@ -150,19 +191,21 @@ export class BondingCurve {
                 })
                 .accounts({
                     creator: this.wallet!.publicKey!,
+                    // @ts-ignore - Anchor types mismatch
                     curve: curveAddress,
                     mint: mintKeypair.publicKey,
                     metadata: metadataAddress,
                     metadataProgram: METADATA_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                     rent: SYSVAR_RENT_PUBKEY,
-                } as any)
+                })
                 .instruction();
 
             const adminTokenAccount = await getAssociatedTokenAddress(
                 mintKeypair.publicKey,
                 migrationAdmin
             );
+
             const createAdminAtaIx = createAssociatedTokenAccountInstruction(
                 this.wallet!.publicKey!,
                 adminTokenAccount,
@@ -170,8 +213,11 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
-            // Combine all instructions into a single array
+            // Create array of instructions
             const instructions = [
+                ComputeBudgetProgram.setComputeUnitLimit({
+                    units: 1000000
+                }),
                 ComputeBudgetProgram.setComputeUnitPrice({
                     microLamports: 50000
                 }),
@@ -180,34 +226,59 @@ export class BondingCurve {
                 createAdminAtaIx
             ];
 
+            // Create v0 compatible message
             const messageV0 = new TransactionMessage({
                 payerKey: this.wallet!.publicKey!,
                 recentBlockhash: blockhash,
                 instructions
             }).compileToV0Message();
 
+            // Create versioned transaction
             const versionedTx = new VersionedTransaction(messageV0);
+
+            // Sign with mintKeypair
             versionedTx.sign([mintKeypair]);
 
+            // Get provider and send transaction
+            const provider = getProvider(this.wallet!, this.connection);
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
-            // Improved confirmation handling
-            const confirmation = await this.connection.confirmTransaction({
-                signature,
-                blockhash,
-                lastValidBlockHeight
-            }, 'confirmed');
+            // Add retry logic for confirmation
+            const MAX_RETRIES = 5;
+            const RETRY_DELAY = 1000; // 1 second
+            let retries = 0;
 
-            if (confirmation.value.err) {
-                throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
+            while (retries < MAX_RETRIES) {
+                try {
+                    const confirmation = await this.connection.getSignatureStatus(signature);
+
+                    if (confirmation.value?.err) {
+                        throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
+                    }
+
+                    if (confirmation.value?.confirmationStatus === 'confirmed' ||
+                        confirmation.value?.confirmationStatus === 'finalized') {
+                        return {
+                            mint: mintKeypair.publicKey,
+                            curve: curveAddress,
+                            tokenVault: tokenVault,
+                            signatures: [signature]
+                        };
+                    }
+
+                    // If not confirmed yet, wait and retry
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+                    retries++;
+                } catch (error) {
+                    if (retries === MAX_RETRIES - 1) {
+                        throw new Error(`Failed to confirm transaction after ${MAX_RETRIES} attempts`);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+                    retries++;
+                }
             }
 
-            return {
-                mint: mintKeypair.publicKey,
-                curve: curveAddress,
-                tokenVault: tokenVault,
-                signatures: [signature]
-            };
+            throw new Error('Transaction confirmation timeout');
         } catch (err) {
             console.error('Token creation error:', err);
             throw new Error(`Failed to create token: ${err instanceof Error ? err.message : String(err)}`);
@@ -234,18 +305,37 @@ export class BondingCurve {
             // Phantom-compatible signing
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
-            // Proper confirmation using native method
-            const confirmation = await this.connection.confirmTransaction({
-                signature,
-                blockhash,
-                lastValidBlockHeight
-            }, 'confirmed');
+            // Add retry logic for confirmation
+            const MAX_RETRIES = 5;
+            const RETRY_DELAY = 3000; // 3 seconds
+            let retries = 0;
 
-            if (confirmation.value.err) {
-                throw new Error('Transaction failed');
+            while (retries < MAX_RETRIES) {
+                try {
+                    const confirmation = await this.connection.getSignatureStatus(signature);
+
+                    if (confirmation.value?.err) {
+                        throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
+                    }
+
+                    if (confirmation.value?.confirmationStatus === 'confirmed' ||
+                        confirmation.value?.confirmationStatus === 'finalized') {
+                        return signature;
+                    }
+
+                    // If not confirmed yet, wait and retry
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+                    retries++;
+                } catch (error) {
+                    if (retries === MAX_RETRIES - 1) {
+                        throw new Error(`Failed to confirm transaction after ${MAX_RETRIES} attempts`);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+                    retries++;
+                }
             }
 
-            return signature;
+            throw new Error('Transaction confirmation timeout');
         } catch (error) {
             console.error('Transaction failed:', error);
             throw error;
