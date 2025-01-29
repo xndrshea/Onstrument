@@ -99,7 +99,7 @@ export class BondingCurve {
         try {
             const mintKeypair = Keypair.generate();
             const provider = getProvider(this.wallet!, this.connection);
-            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -172,17 +172,14 @@ export class BondingCurve {
 
             // Combine all instructions into a single array
             const instructions = [
-                // Add priority fee instruction first
                 ComputeBudgetProgram.setComputeUnitPrice({
                     microLamports: 50000
                 }),
-                // Then our token instructions
                 createTokenIx,
                 createMetadataIx,
                 createAdminAtaIx
             ];
 
-            // Create single versioned transaction
             const messageV0 = new TransactionMessage({
                 payerKey: this.wallet!.publicKey!,
                 recentBlockhash: blockhash,
@@ -190,34 +187,19 @@ export class BondingCurve {
             }).compileToV0Message();
 
             const versionedTx = new VersionedTransaction(messageV0);
-
-            // Sign with mintKeypair
             versionedTx.sign([mintKeypair]);
 
-            // Send single transaction
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
-            // Wait for all confirmations
-            let done = false;
-            let retries = 30;
-            while (!done && retries > 0) {
-                const status = await this.connection.getSignatureStatus(signature);
+            // Improved confirmation handling
+            const confirmation = await this.connection.confirmTransaction({
+                signature,
+                blockhash,
+                lastValidBlockHeight
+            }, 'confirmed');
 
-                if (status?.value?.confirmationStatus === 'confirmed') {
-                    done = true;
-                } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else if (!status?.value) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else {
-                    throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
-                }
-            }
-
-            if (!done) {
-                throw new Error('Transaction confirmation timeout');
+            if (confirmation.value.err) {
+                throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
             }
 
             return {
@@ -228,7 +210,7 @@ export class BondingCurve {
             };
         } catch (err) {
             console.error('Token creation error:', err);
-            throw err;
+            throw new Error(`Failed to create token: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 
