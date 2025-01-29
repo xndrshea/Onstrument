@@ -119,7 +119,7 @@ export class BondingCurve {
 
             const provider = getProvider();
             const mintKeypair = Keypair.generate();
-            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -198,41 +198,69 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
-            // Create separate transactions for token creation and metadata
-            const createTokenTx = new VersionedTransaction(
-                new TransactionMessage({
-                    payerKey: this.wallet!.publicKey!,
-                    recentBlockhash: blockhash,
-                    instructions: [createTokenIx]
-                }).compileToV0Message()
-            );
+            // Create both transactions
+            const transactions = [
+                new VersionedTransaction(
+                    new TransactionMessage({
+                        payerKey: this.wallet!.publicKey!,
+                        recentBlockhash: blockhash,
+                        instructions: [createTokenIx]
+                    }).compileToV0Message()
+                ),
+                new VersionedTransaction(
+                    new TransactionMessage({
+                        payerKey: this.wallet!.publicKey!,
+                        recentBlockhash: blockhash,
+                        instructions: [createMetadataIx, createAdminAtaIx]
+                    }).compileToV0Message()
+                )
+            ];
 
-            const createMetadataTx = new VersionedTransaction(
-                new TransactionMessage({
-                    payerKey: this.wallet!.publicKey!,
-                    recentBlockhash: blockhash,
-                    instructions: [createMetadataIx, createAdminAtaIx]
-                }).compileToV0Message()
-            );
+            // First, let Phantom sign the transactions
+            const signedTransactions = await provider.signAllTransactions(transactions);
 
-            // Sign with mintKeypair first
-            createTokenTx.sign([mintKeypair]);
+            // Then have mintKeypair sign the first transaction
+            signedTransactions[0].sign([mintKeypair]);
 
-            // Send both transactions
-            const { signatures } = await provider.signAndSendAllTransactions([
-                createTokenTx,
-                createMetadataTx
-            ]);
+            // Send first transaction (create mint)
+            const signature = await this.connection.sendRawTransaction(signedTransactions[0].serialize(), {
+                skipPreflight: false,
+                preflightCommitment: 'confirmed'
+            });
 
-            // Wait for confirmations
-            await this.connection.confirmTransaction(signatures[0], 'confirmed');
-            await this.connection.confirmTransaction(signatures[1], 'confirmed');
+            // Poll until confirmed
+            let done = false;
+            while (!done) {
+                const signatureStatus = await this.connection.getSignatureStatus(signature);
+                if (signatureStatus.value?.confirmationStatus === 'confirmed') {
+                    done = true;
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+
+            // Send second transaction (create metadata)
+            const sig2 = await this.connection.sendRawTransaction(signedTransactions[1].serialize(), {
+                skipPreflight: false,
+                preflightCommitment: 'confirmed'
+            });
+
+            // Poll until confirmed
+            done = false;
+            while (!done) {
+                const signatureStatus = await this.connection.getSignatureStatus(sig2);
+                if (signatureStatus.value?.confirmationStatus === 'confirmed') {
+                    done = true;
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
 
             return {
                 mint: mintKeypair.publicKey,
                 curve: curveAddress,
                 tokenVault: tokenVault,
-                signatures
+                signatures: [signature, sig2]
             };
         } catch (err) {
             console.error('Token creation error:', err);
@@ -301,7 +329,7 @@ export class BondingCurve {
             const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
 
             // Wait for confirmation
-            await this.connection.confirmTransaction(signature, 'confirmed');
+            await this.connection.getSignatureStatus(signature);
         }
         return buyerTokenAccount;
     }
