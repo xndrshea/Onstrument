@@ -9,7 +9,11 @@ pub struct GetPrice<'info> {
     
     /// The bonding curve account
     #[account(
-        seeds = [b"bonding_curve", mint.key().as_ref()],
+        seeds = [
+            b"bonding_curve",
+            curve.config.developer.as_ref(),
+            curve.token_seed.as_ref()
+        ],
         bump = curve.bump,
         has_one = mint,
     )]
@@ -17,7 +21,11 @@ pub struct GetPrice<'info> {
 
     /// The token vault that holds the liquidity
     #[account(
-        seeds = [b"token_vault", mint.key().as_ref()],
+        seeds = [
+            b"token_vault",
+            curve.config.developer.as_ref(),
+            curve.token_seed.as_ref()
+        ],
         bump,
         token::mint = mint,
         token::authority = curve,

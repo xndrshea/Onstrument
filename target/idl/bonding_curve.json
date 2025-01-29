@@ -65,7 +65,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -93,7 +99,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -184,7 +196,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -212,7 +230,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -294,7 +318,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -324,7 +354,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -391,7 +427,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -421,7 +463,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -484,7 +532,11 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
               }
             ]
           }
@@ -559,7 +611,11 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
               }
             ]
           }
@@ -567,7 +623,33 @@
         {
           "name": "mint",
           "writable": true,
-          "signer": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
+              }
+            ]
+          }
         },
         {
           "name": "token_vault",
@@ -592,7 +674,11 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
               }
             ]
           }
@@ -667,7 +753,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -699,7 +791,13 @@
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "BondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "BondingCurve"
               }
             ]
           }
@@ -897,6 +995,10 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "token_seed",
+            "type": "string"
           }
         ]
       }
@@ -945,6 +1047,10 @@
           {
             "name": "uri",
             "type": "string"
+          },
+          {
+            "name": "token_seed",
+            "type": "string"
           }
         ]
       }
@@ -965,6 +1071,14 @@
           {
             "name": "total_supply",
             "type": "u64"
+          },
+          {
+            "name": "token_seed",
+            "docs": [
+              "Unique identifier for this token, can be name/symbol",
+              "Allows creators to make multiple tokens"
+            ],
+            "type": "string"
           }
         ]
       }

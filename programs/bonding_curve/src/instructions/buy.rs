@@ -40,14 +40,22 @@ pub struct Buy<'info> {
 
     #[account(
         mut,
-        seeds = [b"bonding_curve", mint.key().as_ref()],
+        seeds = [
+            b"bonding_curve",
+            curve.config.developer.as_ref(),
+            curve.token_seed.as_ref()
+        ],
         bump,
     )]
     pub curve: Account<'info, BondingCurve>,
 
     #[account(
         mut,
-        seeds = [b"token_vault", mint.key().as_ref()],
+        seeds = [
+            b"token_vault",
+            curve.config.developer.as_ref(),
+            curve.token_seed.as_ref()
+        ],
         bump,
         token::mint = mint,
         token::authority = curve,
@@ -134,7 +142,8 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
             },
             &[&[
                 b"bonding_curve",
-                ctx.accounts.mint.key().as_ref(),
+                ctx.accounts.curve.config.developer.as_ref(),
+                ctx.accounts.curve.token_seed.as_ref(),
                 &[ctx.bumps.curve],
             ]],
         ),
@@ -168,11 +177,12 @@ pub fn handler(ctx: Context<Buy>, amount: u64, max_sol_cost: u64, is_subscribed:
                 },
                 &[&[
                     b"bonding_curve",
-                    ctx.accounts.mint.key().as_ref(),
+                    ctx.accounts.curve.config.developer.as_ref(),
+                    ctx.accounts.curve.token_seed.as_ref(),
                     &[ctx.bumps.curve],
                 ]],
             ),
-            vault_balance,  // Use reloaded balance
+            vault_balance,
         )?;
 
         // Send all SOL to admin
@@ -273,7 +283,8 @@ pub fn handler_with_sol(ctx: Context<Buy>, sol_amount: u64, min_token_amount: u6
             },
             &[&[
                 b"bonding_curve",
-                ctx.accounts.mint.key().as_ref(),
+                ctx.accounts.curve.config.developer.as_ref(),
+                ctx.accounts.curve.token_seed.as_ref(),
                 &[ctx.bumps.curve],
             ]],
         ),
@@ -307,7 +318,8 @@ pub fn handler_with_sol(ctx: Context<Buy>, sol_amount: u64, min_token_amount: u6
                 },
                 &[&[
                     b"bonding_curve",
-                    ctx.accounts.mint.key().as_ref(),
+                    ctx.accounts.curve.config.developer.as_ref(),
+                    ctx.accounts.curve.token_seed.as_ref(),
                     &[ctx.bumps.curve],
                 ]],
             ),

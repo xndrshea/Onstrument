@@ -15,7 +15,11 @@ pub struct Sell<'info> {
 
     #[account(
         mut,
-        seeds = [b"bonding_curve", mint.key().as_ref()],
+        seeds = [
+            b"bonding_curve",
+            curve.config.developer.as_ref(),
+            curve.token_seed.as_ref()
+        ],
         bump = curve.bump,
     )]
     pub curve: Account<'info, BondingCurve>,
@@ -29,7 +33,11 @@ pub struct Sell<'info> {
 
     #[account(
         mut,
-        seeds = [b"token_vault", mint.key().as_ref()],
+        seeds = [
+            b"token_vault",
+            curve.config.developer.as_ref(),
+            curve.token_seed.as_ref()
+        ],
         bump,
         token::mint = mint,
         token::authority = curve,
@@ -87,13 +95,19 @@ pub fn handler(ctx: Context<Sell>, amount: u64, min_sol_return: u64, is_subscrib
 
     // Transfer tokens from seller to vault
     anchor_spl::token::transfer(
-        CpiContext::new(
+        CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             Transfer {
                 from: ctx.accounts.seller_token_account.to_account_info(),
                 to: ctx.accounts.token_vault.to_account_info(),
                 authority: ctx.accounts.seller.to_account_info(),
             },
+            &[&[
+                b"bonding_curve",
+                ctx.accounts.curve.config.developer.as_ref(),
+                ctx.accounts.curve.token_seed.as_ref(),
+                &[ctx.accounts.curve.bump],
+            ]],
         ),
         amount,
     )?;

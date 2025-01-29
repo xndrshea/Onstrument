@@ -71,7 +71,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -99,7 +105,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -190,7 +202,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -218,7 +236,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -300,7 +324,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -330,7 +360,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -397,7 +433,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -427,7 +469,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -490,7 +538,11 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
               }
             ]
           }
@@ -565,7 +617,11 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
               }
             ]
           }
@@ -573,7 +629,33 @@ export type BondingCurve = {
         {
           "name": "mint",
           "writable": true,
-          "signer": true
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
+              }
+            ]
+          }
         },
         {
           "name": "tokenVault",
@@ -598,7 +680,11 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "creator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.token_seed"
               }
             ]
           }
@@ -673,7 +759,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -705,7 +797,13 @@ export type BondingCurve = {
               },
               {
                 "kind": "account",
-                "path": "mint"
+                "path": "curve.config.developer",
+                "account": "bondingCurve"
+              },
+              {
+                "kind": "account",
+                "path": "curve.token_seed",
+                "account": "bondingCurve"
               }
             ]
           }
@@ -903,6 +1001,10 @@ export type BondingCurve = {
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "tokenSeed",
+            "type": "string"
           }
         ]
       }
@@ -951,6 +1053,10 @@ export type BondingCurve = {
           {
             "name": "uri",
             "type": "string"
+          },
+          {
+            "name": "tokenSeed",
+            "type": "string"
           }
         ]
       }
@@ -971,6 +1077,14 @@ export type BondingCurve = {
           {
             "name": "totalSupply",
             "type": "u64"
+          },
+          {
+            "name": "tokenSeed",
+            "docs": [
+              "Unique identifier for this token, can be name/symbol",
+              "Allows creators to make multiple tokens"
+            ],
+            "type": "string"
           }
         ]
       }
