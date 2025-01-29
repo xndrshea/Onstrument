@@ -236,10 +236,10 @@ export class BondingCurve {
             // Create versioned transaction
             const versionedTx = new VersionedTransaction(messageV0);
 
-            // Sign with mintKeypair
+            // Sign with mintKeypair first
             versionedTx.sign([mintKeypair]);
 
-            // Get provider and send transaction
+            // Get provider and send transaction directly
             const provider = getProvider(this.wallet!, this.connection);
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
@@ -290,10 +290,13 @@ export class BondingCurve {
         signers: Keypair[]
     ): Promise<string> {
         try {
-            const provider = getProvider(this.wallet!, this.connection);
+            // Get Phantom provider directly
+            const phantomProvider = (window as any).phantom?.solana;
+            if (!phantomProvider?.isPhantom) {
+                throw new Error('Phantom wallet not found');
+            }
 
-            // Always use VersionedTransaction
-            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
             const messageV0 = new TransactionMessage({
                 payerKey: this.wallet!.publicKey!,
                 recentBlockhash: blockhash,
@@ -302,12 +305,17 @@ export class BondingCurve {
 
             const versionedTx = new VersionedTransaction(messageV0);
 
-            // Phantom-compatible signing
-            const { signature } = await provider.signAndSendTransaction(versionedTx);
+            // Sign with any additional signers first
+            if (signers.length > 0) {
+                versionedTx.sign(signers);
+            }
+
+            // Use Phantom's signAndSendTransaction directly
+            const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
 
             // Add retry logic for confirmation
-            const MAX_RETRIES = 5;
-            const RETRY_DELAY = 3000; // 3 seconds
+            const MAX_RETRIES = 15;
+            const RETRY_DELAY = 1000; // 1 second
             let retries = 0;
 
             while (retries < MAX_RETRIES) {
