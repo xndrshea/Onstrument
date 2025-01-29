@@ -78,6 +78,13 @@ export class BondingCurve {
             wallet: this.wallet!.publicKey!.toString()
         });
 
+        // Check SOL balance before proceeding
+        const balance = await this.connection.getBalance(this.wallet!.publicKey!);
+        const minimumRequired = 0.02 * LAMPORTS_PER_SOL; // Adding buffer for fees
+        if (balance < minimumRequired) {
+            throw new Error(`Insufficient SOL balance. Need at least 0.02 SOL to create token and metadata. Current balance: ${balance / LAMPORTS_PER_SOL} SOL`);
+        }
+
         // Match exact order from Rust program
         const [mintPDA] = PublicKey.findProgramAddressSync(
             [
@@ -239,16 +246,48 @@ export class BondingCurve {
             try {
                 const sim = await this.connection.simulateTransaction(transaction);
                 if (sim.value.err) {
-                    console.error('Simulation failed:', sim.value);
-                    throw new Error(`Simulation failed: ${JSON.stringify(sim.value.err)}`);
+                    const errorLogs = sim.value.logs?.join('\n') || '';
+                    console.log('Simulation logs:', errorLogs);  // For debugging
+
+                    // Check for specific error patterns
+                    if (errorLogs.includes('insufficient lamports')) {
+                        const match = errorLogs.match(/insufficient lamports (\d+), need (\d+)/);
+                        if (match) {
+                            const needed = Number(match[2]) / LAMPORTS_PER_SOL;
+                            throw new Error(`Insufficient SOL balance. You need ${needed.toFixed(4)} SOL to complete this transaction.`);
+                        }
+                    }
+
+                    // Check for custom program errors
+                    if (errorLogs.includes('custom program error')) {
+                        // Add specific program error handling here
+                        if (errorLogs.includes('TokenAccountNotFound')) {
+                            throw new Error('Token account not found. Please try again.');
+                        }
+                        // Add more specific error cases as needed
+                    }
+
+                    // If we can't identify the specific error, provide a more generic message
+                    throw new Error('Transaction failed during simulation. Please check your inputs and try again.');
                 }
-                // Log program logs from simulation
+
+                // Log program logs from simulation for debugging
                 if (sim.value.logs) {
                     console.log('Program logs:', sim.value.logs);
                 }
-            } catch (simError) {
+            } catch (simError: any) {
+                // Handle simulation errors
                 console.error('Simulation error:', simError);
-                throw simError;
+
+                if (simError.message) {
+                    // Clean up technical error messages
+                    if (simError.message.includes('{"InstructionError"')) {
+                        throw new Error('Transaction failed during simulation. Please check your inputs and try again.');
+                    }
+                    throw simError;
+                }
+
+                throw new Error('Failed to simulate transaction. Please try again.');
             }
 
             if (signers.length > 0) {
@@ -266,7 +305,17 @@ export class BondingCurve {
             return signature;
         } catch (error: any) {
             console.error('Transaction error:', error);
-            throw error;
+
+            // Ensure we always throw a user-friendly message
+            if (error.message) {
+                // Clean up any remaining technical error messages
+                if (error.message.includes('{"InstructionError"')) {
+                    throw new Error('Transaction failed. Please check your inputs and try again.');
+                }
+                throw error;
+            }
+
+            throw new Error('Transaction failed. Please try again or contact support if the issue persists.');
         }
     }
 
