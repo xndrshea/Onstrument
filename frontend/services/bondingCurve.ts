@@ -22,13 +22,8 @@ const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt
 
 // Add at the top of the file
 function getProvider(wallet: WalletContextState, connection: Connection) {
-    const phantomProvider = (window as any).phantom?.solana;
-    if (phantomProvider?.isPhantom) {
-        return phantomProvider;
-    }
-
-    return {
-        signAndSendTransaction: async (tx: VersionedTransaction, options?: any) => {
+    return (window as any).phantom?.solana || {
+        signAndSendTransaction: async (tx: VersionedTransaction) => {
             const signature = await wallet.sendTransaction(tx, connection);
             return { signature };
         }

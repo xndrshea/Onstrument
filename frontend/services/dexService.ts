@@ -46,7 +46,6 @@ function getProvider(wallet: WalletContextState, connection: Connection) {
             const signature = await wallet.sendTransaction(
                 transactionToSend as VersionedTransaction,
                 connection,
-                { skipPreflight: true }
             );
             return { signature };
         }
@@ -188,7 +187,6 @@ export class DexService {
                     feeAccount: platformFeeBps > 0 ? 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L' : undefined,
                     computeUnitLimit: 300000,
                     computeUnitPrice: 500000,
-                    asLegacyTransaction: true,
                     dynamicComputeUnitLimit: true
                 })
             }).then(res => res.json());
