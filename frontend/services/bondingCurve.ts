@@ -26,12 +26,10 @@ function getProvider(wallet: WalletContextState, connection: Connection) {
     const phantomProvider = (window as any).phantom?.solana;
     if (phantomProvider?.isPhantom) return phantomProvider;
 
-    // Fallback for other wallets using standard web3.js transactions
+    // Updated fallback to use wallet-adapter's sendTransaction
     return {
         signAndSendTransaction: async (transaction: VersionedTransaction) => {
-            const signed = await wallet.signTransaction!(transaction);
-            const rawTransaction = signed.serialize();
-            return connection.sendRawTransaction(rawTransaction);
+            return await wallet.sendTransaction(transaction, connection);
         }
     };
 }

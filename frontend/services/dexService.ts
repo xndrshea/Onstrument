@@ -28,12 +28,11 @@ function getProvider(wallet: WalletContextState, connection: Connection) {
     const phantomProvider = (window as any).phantom?.solana;
     if (phantomProvider?.isPhantom) return phantomProvider;
 
-    // Fallback for non-Phantom wallets
+    // Updated fallback to use modern signing method
     return {
         signAndSendTransaction: async (transaction: VersionedTransaction) => {
-            const signed = await wallet.signTransaction!(transaction);
-            const rawTransaction = signed.serialize();
-            return connection.sendRawTransaction(rawTransaction);
+            // Use wallet-adapter's sendTransaction instead of manual signing
+            return await wallet.sendTransaction(transaction, connection);
         }
     };
 }
