@@ -141,6 +141,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 symbol: formData.symbol,
                 totalSupply: formData.totalSupply,
                 metadataUri: metadataUri,
+                tokenSeed: Math.random().toString(36).substring(2, 10),
                 curveConfig: {
                     migrationStatus: 'active',
                     isSubscribed: isSubscribed,

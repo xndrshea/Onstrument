@@ -11,6 +11,7 @@ pub struct BondingCurve {
     pub mint: Pubkey,
     pub config: CurveConfig,
     pub bump: u8,
+    pub token_seed: String,
 }
 
 impl BondingCurve {

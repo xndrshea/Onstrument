@@ -14,7 +14,11 @@ pub struct CreateMetadata<'info> {
 
     /// The curve PDA that controls the token
     #[account(
-        seeds = [b"bonding_curve", mint.key().as_ref()],
+        seeds = [
+            b"bonding_curve",
+            creator.key().as_ref(),
+            params.token_seed.as_bytes()
+        ],
         bump,
     )]
     pub curve: Box<Account<'info, BondingCurve>>,
@@ -35,6 +39,7 @@ pub struct CreateMetadataParams {
     pub name: String,
     pub symbol: String,
     pub uri: String,
+    pub token_seed: String,
 }
 
 pub fn handler(ctx: Context<CreateMetadata>, params: CreateMetadataParams) -> Result<()> {
@@ -58,12 +63,17 @@ pub fn handler(ctx: Context<CreateMetadata>, params: CreateMetadataParams) -> Re
         params.uri,
     )?;
 
+    // Create longer lived values
+    let creator_key = ctx.accounts.creator.key();
+    let token_seed = params.token_seed.as_bytes();
+    let bump = ctx.bumps.curve;
+
     // Get the curve PDA signer seeds
-    let mint_key = ctx.accounts.mint.key();
     let curve_seeds = &[
         b"bonding_curve",
-        mint_key.as_ref(),
-        &[ctx.accounts.curve.bump],
+        creator_key.as_ref(),
+        token_seed,
+        &[bump],
     ];
 
     // Invoke with signer seeds

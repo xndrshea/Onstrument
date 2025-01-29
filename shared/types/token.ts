@@ -24,6 +24,7 @@ export interface createTokenParams {
     totalSupply: BN;
     metadataUri: string;
     curveConfig: curveConfig;
+    tokenSeed: string;
 }
 
 export type Network = 'mainnet' | 'devnet';

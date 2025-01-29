@@ -8,6 +8,7 @@ import type {
     createTokenParams,
 } from '../../shared/types/token';
 import { getConnection, getConnectionForToken } from '../config';
+import { PublicKey } from '@solana/web3.js';
 
 export class TokenTransactionService {
     private connection: Connection;
@@ -28,6 +29,11 @@ export class TokenTransactionService {
         this.tokenService = new TokenService();
     }
 
+    private generateTokenSeed(): string {
+        // Generate a random 8-character string
+        return Math.random().toString(36).substring(2, 10);
+    }
+
     async createToken(
         params: createTokenParams,
         description: string,
@@ -39,32 +45,8 @@ export class TokenTransactionService {
         }
     ): Promise<TokenRecord> {
         try {
-            // Create token with bonding curve
-            const { mint, curve, tokenVault, signature } = await this.bondingCurve.createTokenWithCurve(params);
-
-            if (!signature || !mint || !curve || !tokenVault) {
-                console.error('Missing parameters:', { signature, mint, curve, tokenVault });
-                throw new Error('Failed to create token - missing required parameters');
-            }
-
-            // Instead of using confirmTransaction, use getSignatureStatus in a polling loop
-            let retries = 0;
-            while (retries < 30) {
-                const status = await this.connection.getSignatureStatus(signature);
-
-                if (status?.value?.confirmationStatus === 'processed' ||
-                    status?.value?.confirmationStatus === 'confirmed' ||
-                    status?.value?.confirmationStatus === 'finalized') {
-                    break;
-                }
-
-                if (status?.value?.err) {
-                    throw new Error(`Transaction failed: ${status.value.err.toString()}`);
-                }
-
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                retries++;
-            }
+            // Remove the token seed generation since it's in the params
+            const { mint, curve, tokenVault } = await this.bondingCurve.createTokenWithCurve(params);
 
             // Create new bonding curve instance with the new addresses
             const newBondingCurve = new BondingCurve(this.connection, this.wallet, mint, curve);
@@ -92,17 +74,10 @@ export class TokenTransactionService {
                 telegramUrl: socialLinks.telegramUrl || ''
             };
 
-
             // Save to database through tokenService
-            const savedToken = await this.tokenService.create(tokenRecord);
-
-            return savedToken;
+            return await this.tokenService.create(tokenRecord);
         } catch (error: any) {
-            console.error('Token creation error:', {
-                error,
-                message: error.message,
-                stack: error.stack
-            });
+            console.error('Token creation error:', error);
             throw error;
         }
     }
