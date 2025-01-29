@@ -117,8 +117,9 @@ export class BondingCurve {
                 throw new Error('Invalid curveConfig: isSubscribed must be a boolean');
             }
 
+            const provider = getProvider();
             const mintKeypair = Keypair.generate();
-            const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('confirmed');
+            const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
             const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
 
@@ -197,74 +198,42 @@ export class BondingCurve {
                 mintKeypair.publicKey
             );
 
-            // Create array of instructions
-            const instructions = [
-                ComputeBudgetProgram.setComputeUnitLimit({
-                    units: 1000000
-                }),
-                ComputeBudgetProgram.setComputeUnitPrice({
-                    microLamports: 50000
-                }),
-                createTokenIx,
-                createMetadataIx,
-                createAdminAtaIx
-            ];
+            // Create separate transactions for token creation and metadata
+            const createTokenTx = new VersionedTransaction(
+                new TransactionMessage({
+                    payerKey: this.wallet!.publicKey!,
+                    recentBlockhash: blockhash,
+                    instructions: [createTokenIx]
+                }).compileToV0Message()
+            );
 
-            // Create v0 compatible message
-            const messageV0 = new TransactionMessage({
-                payerKey: this.wallet!.publicKey!,
-                recentBlockhash: blockhash,
-                instructions
-            }).compileToV0Message();
-
-            // Create versioned transaction
-            const versionedTx = new VersionedTransaction(messageV0);
+            const createMetadataTx = new VersionedTransaction(
+                new TransactionMessage({
+                    payerKey: this.wallet!.publicKey!,
+                    recentBlockhash: blockhash,
+                    instructions: [createMetadataIx, createAdminAtaIx]
+                }).compileToV0Message()
+            );
 
             // Sign with mintKeypair first
-            versionedTx.sign([mintKeypair]);
+            createTokenTx.sign([mintKeypair]);
 
-            // Get Phantom provider directly
-            const phantomProvider = getProvider();
+            // Send both transactions
+            const { signatures } = await provider.signAndSendAllTransactions([
+                createTokenTx,
+                createMetadataTx
+            ]);
 
-            // Use Phantom's provider directly instead of the wrapper
-            const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
+            // Wait for confirmations
+            await this.connection.confirmTransaction(signatures[0], 'confirmed');
+            await this.connection.confirmTransaction(signatures[1], 'confirmed');
 
-            // Add retry logic for confirmation
-            const MAX_RETRIES = 5;
-            const RETRY_DELAY = 1000; // 1 second
-            let retries = 0;
-
-            while (retries < MAX_RETRIES) {
-                try {
-                    const confirmation = await this.connection.getSignatureStatus(signature);
-
-                    if (confirmation.value?.err) {
-                        throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
-                    }
-
-                    if (confirmation.value?.confirmationStatus === 'confirmed' ||
-                        confirmation.value?.confirmationStatus === 'finalized') {
-                        return {
-                            mint: mintKeypair.publicKey,
-                            curve: curveAddress,
-                            tokenVault: tokenVault,
-                            signatures: [signature]
-                        };
-                    }
-
-                    // If not confirmed yet, wait and retry
-                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-                    retries++;
-                } catch (error) {
-                    if (retries === MAX_RETRIES - 1) {
-                        throw new Error(`Failed to confirm transaction after ${MAX_RETRIES} attempts`);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-                    retries++;
-                }
-            }
-
-            throw new Error('Transaction confirmation timeout');
+            return {
+                mint: mintKeypair.publicKey,
+                curve: curveAddress,
+                tokenVault: tokenVault,
+                signatures
+            };
         } catch (err) {
             console.error('Token creation error:', err);
             throw new Error(`Failed to create token: ${err instanceof Error ? err.message : String(err)}`);
