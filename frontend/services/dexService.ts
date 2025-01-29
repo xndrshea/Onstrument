@@ -162,21 +162,21 @@ export class DexService {
             const outputMint = isSelling ? NATIVE_SOL_MINT : mintAddress;
             const platformFeeBps = isSubscribed ? 0 : 100;
 
+            // Get quote from Jupiter V6 API
             const quoteResponse = await fetch(
                 `https://quote-api.jup.ag/v6/quote?` +
                 `inputMint=${inputMint}` +
                 `&outputMint=${outputMint}` +
                 `&amount=${amount}` +
                 `&slippageBps=${Math.floor(slippageTolerance * 10000)}` +
-                `&platformFeeBps=${platformFeeBps}` +
-                `&computeUnitPriceMicroLamports=500000` +
-                `&asLegacyTransaction=true`
+                `&platformFeeBps=${platformFeeBps}`
             ).then(res => res.json());
 
             if (!quoteResponse || quoteResponse.error) {
                 throw new Error(quoteResponse.error || 'Failed to get quote');
             }
 
+            // Get swap transaction
             const { swapTransaction } = await fetch('https://quote-api.jup.ag/v6/swap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -185,13 +185,17 @@ export class DexService {
                     userPublicKey: wallet.publicKey!.toString(),
                     wrapAndUnwrapSol: true,
                     feeAccount: platformFeeBps > 0 ? 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L' : undefined,
-                    computeUnitLimit: 300000,
-                    computeUnitPrice: 500000,
-                    dynamicComputeUnitLimit: true
+                    dynamicComputeUnitLimit: true,
+                    prioritizationFeeLamports: {
+                        priorityLevelWithMaxLamports: {
+                            maxLamports: 10000000,
+                            priorityLevel: "high"
+                        }
+                    }
                 })
             }).then(res => res.json());
 
-            // Convert to VersionedTransaction FIRST
+            // Deserialize and create versioned transaction
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
             const versionedMessage = VersionedMessage.deserialize(swapTransactionBuf);
             const versionedTx = new VersionedTransaction(versionedMessage);
@@ -200,6 +204,7 @@ export class DexService {
             const provider = getProvider(wallet, connection);
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
+            // Wait for confirmation
             let done = false;
             let retries = 30;
             while (!done && retries > 0) {
