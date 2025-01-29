@@ -24,19 +24,18 @@ type PriceQuote = {
 };
 
 function getProvider(wallet: WalletContextState, connection: Connection) {
-    // Try Phantom first
-    if ('phantom' in window && wallet?.wallet?.adapter?.name === 'Phantom') {
+    if ('phantom' in window) {
         const provider = (window as any).phantom?.solana;
         if (provider?.isPhantom) {
-            console.log('Using Phantom provider');
             return provider;
         }
     }
 
-    console.log('Using fallback provider');
+    // Match Phantom's signAndSendTransaction signature exactly
     return {
-        signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
-            const signature = await wallet.sendTransaction(tx, connection);
+        signAndSendTransaction: async (tx: Transaction) => {
+            const signedTx = await wallet.signTransaction!(tx);
+            const signature = await wallet.sendTransaction(signedTx, connection);
             return { signature };
         }
     };
@@ -184,7 +183,7 @@ export class DexService {
 
             const provider = getProvider(wallet, connection);
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-            const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+            const transaction = Transaction.from(swapTransactionBuf);
 
             const { signature } = await provider.signAndSendTransaction(transaction);
 

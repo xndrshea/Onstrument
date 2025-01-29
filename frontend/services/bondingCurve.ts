@@ -22,19 +22,17 @@ const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt
 
 // Add at the top of the file
 function getProvider(wallet: WalletContextState, connection: Connection) {
-    // Try Phantom first
     if ('phantom' in window) {
         const provider = (window as any).phantom?.solana;
-        if (provider?.isPhantom && wallet?.wallet?.adapter?.name === 'Phantom') {
-            console.log('Using Phantom provider');
+        if (provider?.isPhantom) {
             return provider;
         }
     }
 
-    console.log('Using fallback provider');
     return {
         signAndSendTransaction: async (tx: Transaction) => {
-            const signature = await wallet.sendTransaction(tx, connection);
+            const signedTx = await wallet.signTransaction!(tx);
+            const signature = await wallet.sendTransaction(signedTx, connection);
             return { signature };
         }
     };
@@ -210,31 +208,19 @@ export class BondingCurve {
     ): Promise<string> {
         try {
             const provider = getProvider(this.wallet!, this.connection);
-            console.log('Transaction provider:', {
-                isPhantom: provider === (window as any).phantom?.solana,
-                type: 'buildAndSendTransaction'
-            });
 
-            const computeUnitIx = ComputeBudgetProgram.setComputeUnitLimit({
-                units: 300_000
-            });
-
-            const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-                microLamports: 500_000
-            });
-
+            // Convert to VersionedTransaction for modern wallets
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
+            const messageV0 = new TransactionMessage({
+                payerKey: this.wallet!.publicKey!,
+                recentBlockhash: blockhash,
+                instructions: instructions
+            }).compileToV0Message();
 
-            const tx = new Transaction();
-            tx.feePayer = this.wallet!.publicKey!;
-            tx.recentBlockhash = blockhash;
-            tx.add(computeUnitIx, priorityFeeIx, ...instructions);
+            const transaction = new VersionedTransaction(messageV0);
 
-            if (signers.length > 0) {
-                tx.partialSign(...signers);
-            }
-
-            const { signature } = await provider.signAndSendTransaction(tx);
+            // Use Phantom's preferred signing method
+            const { signature } = await provider.signAndSendTransaction(transaction);
 
             // Keep confirmation logic
             let done = false;
@@ -285,19 +271,12 @@ export class BondingCurve {
                     this.mintAddress
                 );
 
-                const latestBlockhash = await this.connection.getLatestBlockhash();
-                const tx = new Transaction();
-                tx.feePayer = this.wallet!.publicKey!;
-                tx.recentBlockhash = latestBlockhash.blockhash;
-                tx.add(createAtaIx);
+                const provider = getProvider(this.wallet!, this.connection);
+                const tx = new Transaction().add(createAtaIx);
 
-                const signedTx = await this.wallet!.signTransaction!(tx);
-                const signature = await this.wallet!.sendTransaction(signedTx, this.connection);
-                await this.connection.confirmTransaction({
-                    signature,
-                    blockhash: tx.recentBlockhash,
-                    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
-                });
+                // Use provider's signAndSendTransaction instead of direct wallet methods
+                const { signature } = await provider.signAndSendTransaction(tx);
+                await this.connection.confirmTransaction(signature);
             }
             return buyerTokenAccount;
         } catch (error) {
