@@ -2,7 +2,6 @@ import idl from '../../target/idl/bonding_curve.json';
 import type { BondingCurve as BondingCurveIDL } from '../../target/types/bonding_curve';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider } from '@coral-xyz/anchor';
-
 import { Connection } from '@solana/web3.js';
 import type { TransactionInstruction } from '@solana/web3.js';
 import { PublicKey, LAMPORTS_PER_SOL, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, VersionedTransaction, ComputeBudgetProgram, TransactionMessage, SimulateTransactionConfig } from '@solana/web3.js';
@@ -19,21 +18,6 @@ const TOKEN_DECIMAL_MULTIPLIER = 10 ** TOKEN_DECIMALS;
 
 // Required Program IDs
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
-
-// Add at the top of the file
-function getProvider(wallet: WalletContextState, connection: Connection) {
-    // Proper Phantom provider detection with fallback
-    const phantomProvider = (window as any).phantom?.solana;
-    if (phantomProvider?.isPhantom) return phantomProvider;
-
-    // Updated fallback to use wallet-adapter's sendTransaction
-    return {
-        signAndSendTransaction: async (transaction: VersionedTransaction) => {
-            return await wallet.sendTransaction(transaction, connection);
-        }
-    };
-}
-
 export class BondingCurve {
     public readonly program: Program<BondingCurveIDL>;
     private connection: Connection;
@@ -240,10 +224,7 @@ export class BondingCurve {
             versionedTx.sign([mintKeypair]);
 
             // Get Phantom provider directly
-            const phantomProvider = (window as any).phantom?.solana;
-            if (!phantomProvider?.isPhantom) {
-                throw new Error('Phantom wallet not found');
-            }
+            const phantomProvider = getProvider();
 
             // Use Phantom's provider directly instead of the wrapper
             const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
@@ -295,12 +276,7 @@ export class BondingCurve {
         signers: Keypair[]
     ): Promise<string> {
         try {
-            // Get Phantom provider directly
-            const phantomProvider = (window as any).phantom?.solana;
-            if (!phantomProvider?.isPhantom) {
-                throw new Error('Phantom wallet not found');
-            }
-
+            const provider = getProvider();
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
             const messageV0 = new TransactionMessage({
                 payerKey: this.wallet!.publicKey!,
@@ -309,46 +285,12 @@ export class BondingCurve {
             }).compileToV0Message();
 
             const versionedTx = new VersionedTransaction(messageV0);
-
-            // Sign with any additional signers first
             if (signers.length > 0) {
                 versionedTx.sign(signers);
             }
 
-            // Use Phantom's signAndSendTransaction directly
-            const { signature } = await phantomProvider.signAndSendTransaction(versionedTx);
-
-            // Add retry logic for confirmation
-            const MAX_RETRIES = 15;
-            const RETRY_DELAY = 1000; // 1 second
-            let retries = 0;
-
-            while (retries < MAX_RETRIES) {
-                try {
-                    const confirmation = await this.connection.getSignatureStatus(signature);
-
-                    if (confirmation.value?.err) {
-                        throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
-                    }
-
-                    if (confirmation.value?.confirmationStatus === 'confirmed' ||
-                        confirmation.value?.confirmationStatus === 'finalized') {
-                        return signature;
-                    }
-
-                    // If not confirmed yet, wait and retry
-                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-                    retries++;
-                } catch (error) {
-                    if (retries === MAX_RETRIES - 1) {
-                        throw new Error(`Failed to confirm transaction after ${MAX_RETRIES} attempts`);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-                    retries++;
-                }
-            }
-
-            throw new Error('Transaction confirmation timeout');
+            const { signature } = await provider.signAndSendTransaction(versionedTx);
+            return signature;
         } catch (error) {
             console.error('Transaction failed:', error);
             throw error;
@@ -374,10 +316,7 @@ export class BondingCurve {
             );
 
             // Get Phantom provider directly
-            const phantomProvider = (window as any).phantom?.solana;
-            if (!phantomProvider?.isPhantom) {
-                throw new Error('Phantom wallet not found');
-            }
+            const phantomProvider = getProvider();
 
             // Use VersionedTransaction
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
@@ -770,3 +709,18 @@ export class BondingCurve {
     }
 
 }
+
+declare global {
+    interface Window {
+        phantom?: any;
+    }
+}
+
+const getProvider = () => {
+    const phantom = window.phantom;
+    const provider = phantom?.solana;
+    if (provider?.isPhantom) {
+        return provider;
+    }
+    throw new Error('Phantom wallet not found');
+};
