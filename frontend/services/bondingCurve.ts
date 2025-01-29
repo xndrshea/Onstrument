@@ -179,13 +179,25 @@ export class BondingCurve {
 
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
 
+            // Build single transaction with all instructions
             const tx = new Transaction();
             tx.feePayer = this.wallet!.publicKey!;
             tx.recentBlockhash = blockhash;
             tx.add(createTokenIx, createMetadataIx, createAdminAtaIx);
             tx.partialSign(mintKeypair);
 
-            return await this.buildAndSendTransaction([createTokenIx, createMetadataIx, createAdminAtaIx], [mintKeypair]);
+            // Use provider's signAndSendTransaction directly instead of buildAndSendTransaction
+            const { signature } = await provider.signAndSendTransaction(tx);
+
+            // Wait for confirmation
+            await this.connection.confirmTransaction(signature);
+
+            return {
+                mint: mintKeypair.publicKey,
+                curve: curveAddress,
+                tokenVault: tokenVault,
+                signature
+            };
         } catch (err) {
             console.error('Token creation error:', err);
             throw err;

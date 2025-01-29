@@ -25,14 +25,15 @@ type PriceQuote = {
 
 function getProvider(wallet: WalletContextState, connection: Connection) {
     // Try Phantom first
-    if ('phantom' in window) {
+    if ('phantom' in window && wallet?.wallet?.adapter?.name === 'Phantom') {
         const provider = (window as any).phantom?.solana;
         if (provider?.isPhantom) {
+            console.log('Using Phantom provider');
             return provider;
         }
     }
 
-    // Fallback to standard wallet adapter
+    console.log('Using fallback provider');
     return {
         signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
             const signature = await wallet.sendTransaction(tx, connection);
