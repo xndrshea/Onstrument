@@ -22,12 +22,8 @@ const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt
 
 // Add at the top of the file
 function getProvider(wallet: WalletContextState, connection: Connection) {
-    return (window as any).phantom?.solana || {
-        signAndSendTransaction: async (tx: VersionedTransaction) => {
-            const signature = await wallet.sendTransaction(tx, connection);
-            return { signature };
-        }
-    };
+    // Directly use Phantom's provider if available
+    return (window as any).phantom?.solana;
 }
 
 export class BondingCurve {
@@ -234,18 +230,19 @@ export class BondingCurve {
     ): Promise<string> {
         try {
             const provider = getProvider(this.wallet!, this.connection);
+            if (!provider) throw new Error('Phantom provider not found');
 
-            // Convert to VersionedTransaction for modern wallets
+            // Convert to VersionedTransaction
             const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
             const messageV0 = new TransactionMessage({
                 payerKey: this.wallet!.publicKey!,
                 recentBlockhash: blockhash,
-                instructions: instructions
+                instructions
             }).compileToV0Message();
 
             const versionedTx = new VersionedTransaction(messageV0);
 
-            // Use Phantom's preferred signing method
+            // Use Phantom's preferred signing method directly
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
             // Keep confirmation logic

@@ -28,28 +28,7 @@ function getProvider(wallet: WalletContextState, connection: Connection) {
     if (phantomProvider?.isPhantom) {
         return phantomProvider;
     }
-
-    return {
-        signAndSendTransaction: async (tx: Transaction | VersionedTransaction) => {
-            // Always convert to VersionedTransaction for modern wallets
-            let transactionToSend = tx;
-            if (tx instanceof Transaction) {
-                const messageV0 = new TransactionMessage({
-                    payerKey: wallet.publicKey!,
-                    recentBlockhash: tx.recentBlockhash!,
-                    instructions: tx.instructions
-                }).compileToV0Message();
-                transactionToSend = new VersionedTransaction(messageV0);
-            }
-
-            // Use wallet-adapter's native sendTransaction
-            const signature = await wallet.sendTransaction(
-                transactionToSend as VersionedTransaction,
-                connection,
-            );
-            return { signature };
-        }
-    };
+    throw new Error('Phantom provider not found');
 }
 
 export class DexService {
@@ -176,7 +155,7 @@ export class DexService {
                 throw new Error(quoteResponse.error || 'Failed to get quote');
             }
 
-            // Get swap transaction
+            // Enhanced swap request with priority fees and error handling
             const { swapTransaction } = await fetch('https://quote-api.jup.ag/v6/swap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -184,47 +163,39 @@ export class DexService {
                     quoteResponse,
                     userPublicKey: wallet.publicKey!.toString(),
                     wrapAndUnwrapSol: true,
-                    feeAccount: platformFeeBps > 0 ? 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L' : undefined,
                     dynamicComputeUnitLimit: true,
                     prioritizationFeeLamports: {
                         priorityLevelWithMaxLamports: {
                             maxLamports: 10000000,
                             priorityLevel: "high"
                         }
-                    }
+                    },
+                    feeAccount: platformFeeBps > 0 ? 'E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L' : undefined,
                 })
-            }).then(res => res.json());
+            }).then(async res => {
+                const response = await res.json();
+                if (response.simulationError) {
+                    throw new Error(`Simulation failed: ${response.simulationError}`);
+                }
+                return response;
+            });
 
-            // Deserialize and create versioned transaction
+            // Improved transaction confirmation
             const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-            const versionedMessage = VersionedMessage.deserialize(swapTransactionBuf);
-            const versionedTx = new VersionedTransaction(versionedMessage);
+            const versionedTx = VersionedTransaction.deserialize(swapTransactionBuf);
 
-            // Send using Phantom's preferred method
             const provider = getProvider(wallet, connection);
             const { signature } = await provider.signAndSendTransaction(versionedTx);
 
-            // Wait for confirmation
-            let done = false;
-            let retries = 30;
-            while (!done && retries > 0) {
-                const status = await connection.getSignatureStatus(signature);
+            // Use proper confirmation method
+            const confirmation = await connection.confirmTransaction({
+                signature,
+                blockhash: versionedTx.message.recentBlockhash,
+                lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight
+            });
 
-                if (status?.value?.confirmationStatus === 'confirmed') {
-                    done = true;
-                } else if (status?.value?.confirmationStatus === 'processed' || status?.value?.confirmationStatus === 'finalized') {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else if (!status?.value) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    retries--;
-                } else {
-                    throw new Error(`Transaction failed with status: ${status?.value?.confirmationStatus}`);
-                }
-            }
-
-            if (!done) {
-                throw new Error('Transaction confirmation timeout');
+            if (confirmation.value.err) {
+                throw new Error('Transaction failed');
             }
 
             return signature;
