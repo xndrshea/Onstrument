@@ -4,7 +4,7 @@ import { pool } from '../config/database';
 import { logger } from '../utils/logger';
 import { HeliusManager } from '../services/price/websocket/heliusManager';
 import { PriceHistoryModel } from '../models/priceHistoryModel';
-import { RaydiumProcessor } from '../services/price/processors/raydiumProcessor';
+import { RaydiumStateProcessor } from '../services/price/processors/RaydiumStateProcessor';
 import { BondingCurveProcessor } from '../services/price/processors/bondingCurveProcessor';
 import multer from 'multer';
 import { pinataService } from '../services/pinataService';
@@ -167,7 +167,7 @@ router.get('/system/status', async (_req, res) => {
         const status = {
             websocket: getHeliusManager().getStatus(),
             processors: {
-                raydium: RaydiumProcessor.getStatus(),
+                raydium: RaydiumStateProcessor.getStatus(),
                 bondingCurve: BondingCurveProcessor.getStatus()
             }
         };

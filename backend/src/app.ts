@@ -7,7 +7,6 @@ import helmet from 'helmet'
 import apiRouter from './routes/api'
 import { TokenDiscoveryService } from './services/discovery/tokenDiscoveryService'
 import { CronJob } from 'cron'
-import { JupiterPriceUpdater } from './services/price/jupiterPriceUpdater'
 import { wsManager } from './services/websocket/WebSocketManager'
 import { HeliusManager } from './services/price/websocket/heliusManager'
 import { parameterStore } from './config/parameterStore'
@@ -43,52 +42,52 @@ export function createApp() {
     initializeServices()
 
     // Initialize discovery service
-    const discoveryService = TokenDiscoveryService.getInstance();
+    //const discoveryService = TokenDiscoveryService.getInstance();
 
     // Run initial queries immediately
-    Promise.all([
-        discoveryService.fetchGeckoTerminalPools(),
-        discoveryService.fetchRaydiumPools()
-    ]).catch(error => {
-        logger.error('Error in initial token discovery:', error)
-    })
+    //Promise.all([
+    //    discoveryService.fetchGeckoTerminalPools(),
+    //    discoveryService.fetchRaydiumPools()
+    //]).catch(error => {
+    //    logger.error('Error in initial token discovery:', error)
+    //})
 
     // Set up scheduled jobs
-    const geckoJob = new CronJob(
-        '* * * * *',
-        async () => {
-            try {
-                await discoveryService.fetchGeckoTerminalPools()
-            } catch (error) {
-                logger.error('Error fetching GeckoTerminal pools:', error)
-            }
-        },
-        null,    // onComplete
-        true,    // start
-        undefined, // timezone
-        undefined, // context
-        true     // runOnInit - This makes it run immediately
-    )
+    //const geckoJob = new CronJob(
+    //    '* * * * *',
+    //    async () => {
+    //        try {
+    //            await discoveryService.fetchGeckoTerminalPools()
+    //        } catch (error) {
+    //            logger.error('Error fetching GeckoTerminal pools:', error)
+    //        }
+    //    },
+    //    null,    // onComplete
+    //    true,    // start
+    //    undefined, // timezone
+    //    undefined, // context
+    //    true     // runOnInit - This makes it run immediately
+    //)
 
-    const raydiumJob = new CronJob(
-        '*/5 * * * *',
-        async () => {
-            try {
-                await discoveryService.fetchRaydiumPools()
-            } catch (error) {
-                logger.error('Error fetching Raydium pools:', error)
-            }
-        },
-        null,
-        true,
-        undefined,
-        undefined,
-        true    // runOnInit
-    )
+    //const raydiumJob = new CronJob(
+    //    '*/5 * * * *',
+    //    async () => {
+    //        try {
+    //            await discoveryService.fetchRaydiumPools()
+    //        } catch (error) {
+    //            logger.error('Error fetching Raydium pools:', error)
+    //        }
+    //    },
+    //    null,
+    //    true,
+    //    undefined,
+    //    undefined,
+    //    true    // runOnInit
+    //)
 
     // Don't start it yet
-    app.set('geckoJob', geckoJob)
-    app.set('raydiumJob', raydiumJob)
+    //app.set('geckoJob', geckoJob)
+    //app.set('raydiumJob', raydiumJob)
 
     // Security middleware
     app.use(helmet({
@@ -224,24 +223,15 @@ export function createApp() {
 }
 
 export function initializeServices() {
-    // Initialize other services
-    const jupiterPriceUpdater = JupiterPriceUpdater.getInstance();
+    // Remove JupiterPriceUpdater initialization
 
     // Cleanup on shutdown
     process.on('SIGTERM', () => {
-        jupiterPriceUpdater.cleanup();
-        // ... other cleanup
+        // Remove jupiterPriceUpdater cleanup
     });
 }
 
-// Add a new function to start background tasks
 export function startBackgroundTasks(app: Express) {
-    const geckoJob = app.get('geckoJob');
-    const raydiumJob = app.get('raydiumJob');
-    if (geckoJob) {
-        geckoJob.start();
-    }
-    if (raydiumJob) {
-        raydiumJob.start();
-    }
+    // Remove geckoJob and raydiumJob
+    // Keep other necessary background tasks
 } 

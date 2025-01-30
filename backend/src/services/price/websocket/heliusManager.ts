@@ -2,9 +2,10 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
-import { RaydiumProcessor } from '../processors/raydiumProcessor';
 import { BondingCurveProcessor } from '../processors/bondingCurveProcessor';
 import { wsManager } from '../../websocket/WebSocketManager';
+import { RaydiumStateProcessor } from '../processors/RaydiumStateProcessor';
+import { RaydiumCpProcessor } from '../processors/raydiumLogProcessor';
 
 export class HeliusManager extends EventEmitter {
     private static instance: HeliusManager;
@@ -12,21 +13,26 @@ export class HeliusManager extends EventEmitter {
     private readonly MAX_MESSAGES = 1000;
     private wsClientMainnet: WebSocket | null = null;
     private wsClientDevnet: WebSocket | null = null;
+    private wsClientRaydium: WebSocket | null = null;  // Dedicated mainnet connection for Raydium
     private wss!: WebSocket.Server;
-    // private raydiumProcessor: RaydiumProcessor;
     private bondingCurveProcessor: BondingCurveProcessor;
     private lastHeartbeat: number = Date.now();
     private lastReconnectAttempt: number = 0;
     private reconnectAttempts = 0;
     private readonly MAX_RECONNECT_ATTEMPTS = 10;
     private readonly BASE_RECONNECT_DELAY = 1000;
-    private readonly MAX_RECONNECT_DELAY = 30000; // Cap at 30 seconds
+    private readonly MAX_RECONNECT_DELAY = 30000;
     private isReconnecting = false;
+    private raydiumProcessor: RaydiumStateProcessor;
+    private raydiumCpProcessor: RaydiumCpProcessor;
+
+    private readonly RAYDIUM_CP_PROGRAM_ID = config.RAYDIUM_PROGRAMS.CP_AMM;
 
     private constructor() {
         super();
-        // this.raydiumProcessor = new RaydiumProcessor();
         this.bondingCurveProcessor = new BondingCurveProcessor();
+        this.raydiumProcessor = new RaydiumStateProcessor();
+        this.raydiumCpProcessor = RaydiumCpProcessor.getInstance();
     }
 
     static getInstance(): HeliusManager {
@@ -40,47 +46,110 @@ export class HeliusManager extends EventEmitter {
         this.wss = wss;
         this.setupWebSocketServer(wss);
         await this.connect();
+        await this.connectRaydium();  // Separate connection for Raydium
     }
 
     private setupWebSocketServer(wss: WebSocket.Server): void {
-        // Forward price updates from processors to connected clients
-        // this.raydiumProcessor.on('priceUpdate', (update) => {
-        //     wss.clients.forEach(client => {
-        //         if (client.readyState === WebSocket.OPEN) {
-        //             client.send(JSON.stringify({ type: 'price', data: update }));
-        //         }
-        //     });
-        // });
-
         this.bondingCurveProcessor.on('priceUpdate', (update) => {
-            // Replace direct WebSocket broadcasting with WebSocketManager
             wsManager.broadcastPrice(update.mintAddress, update.price);
         });
+    }
+
+    private async connectRaydium(): Promise<void> {
+        this.wsClientRaydium = new WebSocket(config.HELIUS_MAINNET_WEBSOCKET_URL);
+
+        this.wsClientRaydium.on('open', () => {
+            logger.info('Connected to Helius WebSocket for Raydium CP AMM monitoring');
+            this.setupRaydiumSubscriptions();
+        });
+
+        this.wsClientRaydium.on('message', (data) => {
+            try {
+                const message = JSON.parse(data.toString());
+                logger.debug('Received Raydium message');
+
+                // Just forward everything to the processor
+                this.raydiumProcessor.processEvent(
+                    data.toString(),
+                    '',  // We'll let the processor handle parsing the account key
+                    this.RAYDIUM_CP_PROGRAM_ID
+                );
+            } catch (error) {
+                logger.error('Error handling Raydium WebSocket message:', error);
+            }
+        });
+
+        this.wsClientRaydium.on('close', () => {
+            logger.warn('Raydium WebSocket connection closed');
+            setTimeout(() => this.connectRaydium(), this.BASE_RECONNECT_DELAY);
+        });
+
+        this.wsClientRaydium.on('error', (error) => {
+            logger.error('Raydium WebSocket error:', error);
+            this.wsClientRaydium?.close();
+        });
+    }
+
+    private setupRaydiumSubscriptions() {
+        logger.info('Setting up Raydium subscriptions...');
+
+        if (!this.wsClientRaydium) {
+            logger.error('Raydium WebSocket client not initialized');
+            return;
+        }
+
+        // Subscribe to all accounts owned by the Raydium CP program
+        const accountSub = {
+            jsonrpc: '2.0',
+            id: 'accounts-' + Date.now(),
+            method: 'programSubscribe',
+            params: [
+                this.RAYDIUM_CP_PROGRAM_ID,
+                {
+                    encoding: 'base64',
+                    commitment: 'confirmed'
+                }
+            ]
+        };
+
+        logger.info('Sending account subscription:', accountSub);
+        this.wsClientRaydium.send(JSON.stringify(accountSub));
+
+        // Keep the heartbeat check
+        setInterval(() => {
+            if (this.wsClientRaydium?.readyState === WebSocket.OPEN) {
+                this.wsClientRaydium.ping();
+            }
+        }, 30000);
     }
 
     private async connect(): Promise<void> {
         const isProd = process.env.NODE_ENV === 'production';
 
-        // Production uses mainnet, development uses devnet
+        // Production uses mainnet, development uses devnet (for bonding curves)
         const wsClient = isProd
             ? new WebSocket(config.HELIUS_MAINNET_WEBSOCKET_URL)
             : new WebSocket(config.HELIUS_DEVNET_WEBSOCKET_URL);
 
         this.setupWebSocketHandlers(wsClient, isProd ? 'mainnet' : 'devnet');
-        await this.subscribeToPrograms(wsClient, [config.BONDING_CURVE_PROGRAM_ID]);
+
+        // Subscribe only to Bonding Curve program
+        await this.subscribeToPrograms(wsClient, [
+            config.BONDING_CURVE_PROGRAM_ID
+        ]);
     }
 
     private setupWebSocketHandlers(wsClient: WebSocket | null, network: string): void {
         if (!wsClient) return;
 
         wsClient.on('open', () => {
+            logger.info(`Connected to Helius WebSocket on ${network}`);
         });
 
         wsClient.on('message', (data) => {
             this.handleMessage(data, network);
         });
 
-        // Standard WebSocket error handling
         wsClient.on('close', () => {
             logger.warn(`Helius WebSocket connection closed on ${network}`);
             this.reconnect();
@@ -94,6 +163,27 @@ export class HeliusManager extends EventEmitter {
                 this.wsClientDevnet?.close();
             }
         });
+    }
+
+    private handleMessage(data: any, network: string): void {
+        try {
+            const message = data.toString();
+            const parsedMessage = JSON.parse(message);
+
+            // Handle account state updates only
+            if (parsedMessage.params?.result?.value?.data) {
+                const buffer = Buffer.from(parsedMessage.params.result.value.data[0], 'base64');
+                const accountKey = parsedMessage.params.result.value.pubkey;
+
+                // Process bonding curve messages for mainnet/devnet connection
+                if (network === 'mainnet' || network === 'devnet') {
+                    this.bondingCurveProcessor.processEvent(buffer, accountKey, config.BONDING_CURVE_PROGRAM_ID);  // Fixed program ID
+                }
+            }
+
+        } catch (error) {
+            logger.error('Error in handleMessage:', error);
+        }
     }
 
     private async subscribeToPrograms(wsClient: WebSocket | null, programs: string | Record<string, string> | string[]): Promise<void> {
@@ -127,26 +217,42 @@ export class HeliusManager extends EventEmitter {
         });
     }
 
-    private handleMessage(data: any, network: string): void {
-        try {
-            const message = JSON.parse(data.toString());
-            logger.info(`Parsed WebSocket message on ${network}:`, message);
 
-            if (message.result?.data) {
-                const accountKeys = message.result.data.accountData.map((d: any) => d.account);
-                const programId = message.result.data.programId;
-                logger.info('Program event received:', { programId, accountKeys });
+    public async subscribeToLogs(programId: string, callback: (logs: any) => Promise<void>): Promise<void> {
+        const wsClient = this.wsClientMainnet || this.wsClientDevnet;
+        if (!wsClient) return;
 
-                // Comment out Raydium processing
-                // if (Object.values(config.RAYDIUM_PROGRAMS).includes(programId)) {
-                //     this.raydiumProcessor.processEvent(Buffer.from(message.result.data.accountData[0], 'base64'), accountKeys[0], programId);
-                // } else 
-                if (programId === config.BONDING_CURVE_PROGRAM_ID) {
-                    this.bondingCurveProcessor.processEvent(Buffer.from(message.result.data.accountData[0], 'base64'), accountKeys[0], programId);
+        const subscribeMessage = {
+            jsonrpc: '2.0',
+            id: 'logs-' + Date.now(),
+            method: 'logsSubscribe',
+            params: [
+                {
+                    mentions: [programId]
+                },
+                {
+                    commitment: 'confirmed'
                 }
+            ]
+        };
+
+        wsClient.on('message', async (data) => {
+            try {
+                const message = JSON.parse(data.toString());
+                if (message.params?.result?.value?.logs) {
+                    await callback({
+                        signature: message.params.result.value.signature,
+                        logs: message.params.result.value.logs
+                    });
+                }
+            } catch (error) {
+                logger.error(`Error handling log subscription message:`, error);
             }
-        } catch (error) {
-            logger.error(`Error handling WebSocket message on ${network}:`, error);
+        });
+
+        if (wsClient.readyState === WebSocket.OPEN) {
+            wsClient.send(JSON.stringify(subscribeMessage));
+            logger.info(`Subscribed to logs for program: ${programId}`);
         }
     }
 
@@ -208,8 +314,15 @@ export class HeliusManager extends EventEmitter {
         return {
             mainnetConnected: this.wsClientMainnet?.readyState === WebSocket.OPEN,
             devnetConnected: this.wsClientDevnet?.readyState === WebSocket.OPEN,
+            raydiumConnected: this.wsClientRaydium?.readyState === WebSocket.OPEN,
             messageCount: this.messageCount,
             maxMessages: this.MAX_MESSAGES
         };
+    }
+
+    public cleanup() {
+        this.wsClientMainnet?.close();
+        this.wsClientDevnet?.close();
+        this.wsClientRaydium?.close();
     }
 }
