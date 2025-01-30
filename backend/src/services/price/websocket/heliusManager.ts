@@ -4,8 +4,8 @@ import { config } from '../../../config/env';
 import { logger } from '../../../utils/logger';
 import { BondingCurveProcessor } from '../processors/bondingCurveProcessor';
 import { wsManager } from '../../websocket/WebSocketManager';
-import { RaydiumStateProcessor } from '../processors/RaydiumStateProcessor';
-import { RaydiumCpProcessor } from '../processors/raydiumLogProcessor';
+import { RaydiumStateProcessor } from '../processors/raydiumStateProcessor';
+import { RaydiumLogProcessor } from '../processors/raydiumLogProcessor';
 
 export class HeliusManager extends EventEmitter {
     private static instance: HeliusManager;
@@ -24,15 +24,16 @@ export class HeliusManager extends EventEmitter {
     private readonly MAX_RECONNECT_DELAY = 30000;
     private isReconnecting = false;
     private raydiumProcessor: RaydiumStateProcessor;
-    private raydiumCpProcessor: RaydiumCpProcessor;
+    private raydiumLogProcessor: RaydiumLogProcessor;
 
     private readonly RAYDIUM_CP_PROGRAM_ID = config.RAYDIUM_PROGRAMS.CP_AMM;
+    private readonly RAYDIUM_V4_PROGRAM_ID = config.RAYDIUM_PROGRAMS.V4_AMM;
 
     private constructor() {
         super();
         this.bondingCurveProcessor = new BondingCurveProcessor();
         this.raydiumProcessor = new RaydiumStateProcessor();
-        this.raydiumCpProcessor = RaydiumCpProcessor.getInstance();
+        this.raydiumLogProcessor = RaydiumLogProcessor.getInstance();
     }
 
     static getInstance(): HeliusManager {
@@ -47,6 +48,11 @@ export class HeliusManager extends EventEmitter {
         this.setupWebSocketServer(wss);
         await this.connect();
         await this.connectRaydium();  // Separate connection for Raydium
+
+        // Subscribe to Raydium CP AMM logs
+        await this.subscribeToLogs(this.RAYDIUM_CP_PROGRAM_ID, async (logData) => {
+            await this.raydiumLogProcessor.processLogs(logData.signature, logData.logs);
+        });
     }
 
     private setupWebSocketServer(wss: WebSocket.Server): void {
@@ -59,21 +65,47 @@ export class HeliusManager extends EventEmitter {
         this.wsClientRaydium = new WebSocket(config.HELIUS_MAINNET_WEBSOCKET_URL);
 
         this.wsClientRaydium.on('open', () => {
-            logger.info('Connected to Helius WebSocket for Raydium CP AMM monitoring');
-            this.setupRaydiumSubscriptions();
+            this.subscribeToPrograms(this.wsClientRaydium, [
+                this.RAYDIUM_CP_PROGRAM_ID,
+                this.RAYDIUM_V4_PROGRAM_ID
+            ]);
         });
 
-        this.wsClientRaydium.on('message', (data) => {
+        this.wsClientRaydium.on('message', async (data) => {
             try {
                 const message = JSON.parse(data.toString());
-                logger.debug('Received Raydium message');
 
-                // Just forward everything to the processor
-                this.raydiumProcessor.processEvent(
-                    data.toString(),
-                    '',  // We'll let the processor handle parsing the account key
-                    this.RAYDIUM_CP_PROGRAM_ID
-                );
+                // Handle program notifications
+                if (message.method === 'programNotification' &&
+                    message.params?.result?.value?.account?.data) {
+                    const accountData = message.params.result.value.account.data;
+                    const buffer = Buffer.from(accountData[0], 'base64');
+                    const accountKey = message.params.result.value.pubkey;
+                    const programId = message.params.result.value.account.owner;
+
+                    // Process based on program ID
+                    if (programId === this.RAYDIUM_CP_PROGRAM_ID) {
+                        await this.raydiumProcessor.processEvent(
+                            buffer,
+                            accountKey,
+                            this.RAYDIUM_CP_PROGRAM_ID
+                        );
+                    } else if (programId === this.RAYDIUM_V4_PROGRAM_ID) {
+                        await this.raydiumProcessor.processEvent(
+                            buffer,
+                            accountKey,
+                            this.RAYDIUM_V4_PROGRAM_ID
+                        );
+                    }
+                }
+
+                // Handle log notifications
+                if (message.params?.result?.value?.logs) {
+                    await this.raydiumLogProcessor.processLogs(
+                        message.params.result.value.signature,
+                        message.params.result.value.logs
+                    );
+                }
             } catch (error) {
                 logger.error('Error handling Raydium WebSocket message:', error);
             }
@@ -88,39 +120,6 @@ export class HeliusManager extends EventEmitter {
             logger.error('Raydium WebSocket error:', error);
             this.wsClientRaydium?.close();
         });
-    }
-
-    private setupRaydiumSubscriptions() {
-        logger.info('Setting up Raydium subscriptions...');
-
-        if (!this.wsClientRaydium) {
-            logger.error('Raydium WebSocket client not initialized');
-            return;
-        }
-
-        // Subscribe to all accounts owned by the Raydium CP program
-        const accountSub = {
-            jsonrpc: '2.0',
-            id: 'accounts-' + Date.now(),
-            method: 'programSubscribe',
-            params: [
-                this.RAYDIUM_CP_PROGRAM_ID,
-                {
-                    encoding: 'base64',
-                    commitment: 'confirmed'
-                }
-            ]
-        };
-
-        logger.info('Sending account subscription:', accountSub);
-        this.wsClientRaydium.send(JSON.stringify(accountSub));
-
-        // Keep the heartbeat check
-        setInterval(() => {
-            if (this.wsClientRaydium?.readyState === WebSocket.OPEN) {
-                this.wsClientRaydium.ping();
-            }
-        }, 30000);
     }
 
     private async connect(): Promise<void> {
@@ -186,41 +185,35 @@ export class HeliusManager extends EventEmitter {
         }
     }
 
-    private async subscribeToPrograms(wsClient: WebSocket | null, programs: string | Record<string, string> | string[]): Promise<void> {
+    private async subscribeToPrograms(wsClient: WebSocket | null, programs: string[]): Promise<void> {
         if (!wsClient) return;
 
-        return new Promise((resolve, reject) => {
-            try {
-                const programIds = Array.isArray(programs)
-                    ? programs
-                    : typeof programs === 'string'
-                        ? [programs]
-                        : Object.values(programs);
-
-                programIds.forEach(programId => {
-                    if (wsClient.readyState === WebSocket.OPEN) {
-                        wsClient.send(JSON.stringify({
-                            jsonrpc: '2.0',
-                            method: 'accountSubscribe',
-                            params: [
-                                programId,
-                                { encoding: 'jsonParsed', commitment: 'confirmed' }
-                            ],
-                            id: `${programId}-subscription`
-                        }));
-                    }
-                });
-                resolve();
-            } catch (error) {
-                reject(error);
+        programs.forEach(programId => {
+            if (wsClient.readyState === WebSocket.OPEN) {
+                wsClient.send(JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'programSubscribe',
+                    params: [
+                        programId,
+                        {
+                            encoding: 'base64',
+                            commitment: 'confirmed',
+                            filters: [] // Add any specific filters if needed
+                        }
+                    ],
+                    id: `${programId}-subscription`
+                }));
+                logger.info(`Subscribed to program: ${programId}`);
             }
         });
     }
 
-
     public async subscribeToLogs(programId: string, callback: (logs: any) => Promise<void>): Promise<void> {
-        const wsClient = this.wsClientMainnet || this.wsClientDevnet;
-        if (!wsClient) return;
+        const wsClient = this.wsClientRaydium;
+        if (!wsClient) {
+            logger.error('Cannot subscribe to logs: WebSocket client is null');
+            return;
+        }
 
         const subscribeMessage = {
             jsonrpc: '2.0',
@@ -236,23 +229,13 @@ export class HeliusManager extends EventEmitter {
             ]
         };
 
-        wsClient.on('message', async (data) => {
-            try {
-                const message = JSON.parse(data.toString());
-                if (message.params?.result?.value?.logs) {
-                    await callback({
-                        signature: message.params.result.value.signature,
-                        logs: message.params.result.value.logs
-                    });
-                }
-            } catch (error) {
-                logger.error(`Error handling log subscription message:`, error);
-            }
-        });
-
         if (wsClient.readyState === WebSocket.OPEN) {
             wsClient.send(JSON.stringify(subscribeMessage));
             logger.info(`Subscribed to logs for program: ${programId}`);
+        } else {
+            logger.error('Cannot subscribe to logs: WebSocket not open', {
+                readyState: wsClient.readyState
+            });
         }
     }
 
@@ -289,24 +272,6 @@ export class HeliusManager extends EventEmitter {
             this.reconnect(); // Continue trying
         } finally {
             this.isReconnecting = false;
-        }
-    }
-
-    public async subscribeToAccount(accountAddress: string, network: 'mainnet' | 'devnet' = 'devnet'): Promise<void> {
-        const wsClient = network === 'mainnet' ? this.wsClientMainnet : this.wsClientDevnet;
-        try {
-            await wsClient?.send(JSON.stringify({
-                jsonrpc: '2.0',
-                id: Date.now(),
-                method: 'accountSubscribe',
-                params: [
-                    accountAddress,
-                    { encoding: 'base64', commitment: 'confirmed' }
-                ]
-            }));
-        } catch (error) {
-            logger.error(`Failed to subscribe to account ${accountAddress}:`, error);
-            throw error;
         }
     }
 

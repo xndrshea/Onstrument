@@ -11,7 +11,7 @@ export class MetadataService {
     private umi: any;
     private processingQueue: Set<string> = new Set();
     private queueTimer: NodeJS.Timeout | null = null;
-    private readonly QUEUE_PROCESS_INTERVAL = 30000; // 30 seconds
+    private readonly QUEUE_PROCESS_INTERVAL = 10000; // 10 seconds
     private readonly BATCH_SIZE = 800; // Large batch size since we'll flush on time anyway
 
     private constructor() {
@@ -26,11 +26,27 @@ export class MetadataService {
     }
 
     private startQueueProcessor() {
-        this.queueTimer = setInterval(() => {
+        this.queueTimer = setInterval(async () => {
             if (this.processingQueue.size > 0) {
                 const addresses = Array.from(this.processingQueue);
                 this.processingQueue.clear();
-                void this.queueMetadataUpdate(addresses, 'queue_processor');
+
+                // Process in batches of 1000
+                const batches: string[][] = [];
+                for (let i = 0; i < addresses.length; i += this.BATCH_SIZE) {
+                    batches.push(addresses.slice(i, i + this.BATCH_SIZE));
+                }
+
+                for (const batch of batches) {
+                    try {
+                        const metadataResults = await this.fetchMetadataBatch(batch);
+                        for (const [mintAddress, metadata] of metadataResults.entries()) {
+                            await this.processMetadata(mintAddress, metadata, 'queue_processor');
+                        }
+                    } catch (error) {
+                        logger.error('Error processing metadata batch:', error);
+                    }
+                }
             }
         }, this.QUEUE_PROCESS_INTERVAL);
     }
@@ -56,29 +72,8 @@ export class MetadataService {
     }
 
     async queueMetadataUpdate(mintAddresses: string[], source: string = 'unknown'): Promise<void> {
-        // Process in batches of 20
-        const batches: string[][] = [];
-
-        for (let i = 0; i < mintAddresses.length; i += this.BATCH_SIZE) {
-            batches.push(mintAddresses.slice(i, i + this.BATCH_SIZE));
-        }
-
-        for (const batch of batches) {
-            try {
-                const metadataResults = await this.fetchMetadataBatch(batch);
-
-                // Process each result in the batch
-                for (const [mintAddress, metadata] of metadataResults.entries()) {
-                    await this.processMetadata(mintAddress, metadata, source);
-                }
-            } catch (error) {
-                logger.error('Error processing metadata batch:', {
-                    error,
-                    batchSize: batch.length,
-                    addresses: batch
-                });
-            }
-        }
+        // Just add to queue - actual processing happens in startQueueProcessor
+        mintAddresses.forEach(address => this.processingQueue.add(address));
     }
 
     private async processMetadata(mintAddress: string, metadata: any, source: string): Promise<void> {

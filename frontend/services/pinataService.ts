@@ -9,7 +9,7 @@ export const pinataService = {
         console.log('Attempting upload to:', url);
 
         const headers = await getFullHeaders();
-        delete headers['Content-Type']; // Remove only the Content-Type, keep CSRF token
+      
 
         const response = await fetch(url, {
             method: 'POST',

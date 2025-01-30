@@ -15,6 +15,7 @@ import { initializeSolPriceJob } from './jobs/solPriceJob'
 import csrf from 'csurf'
 import cookieParser from 'cookie-parser'
 import path from 'path'
+import { MetricsUpdaterService } from './services/metrics/metricsUpdaterService'
 
 // Add at the top of the file
 declare global {
@@ -223,11 +224,17 @@ export function createApp() {
 }
 
 export function initializeServices() {
-    // Remove JupiterPriceUpdater initialization
+    // Initialize metrics updater service
+    const metricsUpdater = MetricsUpdaterService.getInstance();
+    metricsUpdater.start().catch(error => {
+        logger.error('Failed to start metrics updater:', error);
+    });
 
     // Cleanup on shutdown
     process.on('SIGTERM', () => {
-        // Remove jupiterPriceUpdater cleanup
+        // Add cleanup for metrics updater
+        const metricsUpdater = MetricsUpdaterService.getInstance();
+        metricsUpdater.stop();
     });
 }
 

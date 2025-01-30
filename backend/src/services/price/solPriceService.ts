@@ -9,10 +9,17 @@ export class SolPriceService {
     private readonly SOL_ADDRESS = 'So11111111111111111111111111111111111111112';
     private readonly JUPITER_PRICE_API = 'https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112';
     private lastPrice: number | null = null;
+    private metadataService: MetadataService;
 
     private constructor() {
-        // Fetch price immediately on startup
-        void this.updateSolPrice();
+        this.metadataService = MetadataService.getInstance();
+        // Fetch metadata and price immediately on startup
+        void this.initializeToken();
+    }
+
+    private async initializeToken(): Promise<void> {
+        await this.metadataService.queueMetadataUpdate([this.SOL_ADDRESS], 'dex');
+        await this.updateSolPrice();
     }
 
     static getInstance(): SolPriceService {
@@ -20,23 +27,6 @@ export class SolPriceService {
             SolPriceService.instance = new SolPriceService();
         }
         return SolPriceService.instance;
-    }
-
-    private isValidPrice(price: number): boolean {
-        const MIN_PRICE = 0.01;
-        const MAX_PRICE = 1000;
-        const MAX_CHANGE = 0.25; // 25% max change from last price
-
-        if (price < MIN_PRICE || price > MAX_PRICE) return false;
-        if (this.lastPrice && Math.abs(price - this.lastPrice) / this.lastPrice > MAX_CHANGE) {
-            logger.warn('SOL price change exceeds threshold', {
-                lastPrice: this.lastPrice,
-                newPrice: price,
-                change: (price - this.lastPrice) / this.lastPrice
-            });
-            return false;
-        }
-        return true;
     }
 
     public async updateSolPrice(): Promise<void> {
@@ -47,12 +37,6 @@ export class SolPriceService {
             if (!price || isNaN(price)) {
                 throw new Error('Invalid price received from Jupiter');
             }
-
-            // First, verify the current state
-            const verifyQuery = await pool().query(
-                'SELECT current_price FROM onstrument.tokens WHERE mint_address = $1',
-                [this.SOL_ADDRESS]
-            );
 
             const query = `
                 UPDATE onstrument.tokens 
@@ -66,14 +50,7 @@ export class SolPriceService {
 
             const result = await pool().query(query, [price, this.SOL_ADDRESS]);
 
-            // Immediately verify the update
-            const postVerifyQuery = await pool().query(
-                'SELECT current_price FROM onstrument.tokens WHERE mint_address = $1',
-                [this.SOL_ADDRESS]
-            );
-
-
-            if (!postVerifyQuery.rows[0]?.current_price) {
+            if (!result.rows[0]?.current_price) {
                 throw new Error('Price was cleared immediately after update!');
             }
 
