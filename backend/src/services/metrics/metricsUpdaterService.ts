@@ -28,29 +28,28 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                // Get ALL tokens, but still batch in groups of 30 to not overload the API
+                // Get tokens that haven't been updated recently, 
+                // but prioritize high volume tokens
                 const tokensResult = await pool().query(`
                     SELECT mint_address 
                     FROM onstrument.tokens 
-                    ORDER BY mint_address
+                    ORDER BY 
+                        COALESCE(last_price_update, '1970-01-01'::timestamp) ASC,  -- Prioritize tokens not updated recently
+                        COALESCE(volume_24h, 0) DESC,  -- Within same update timeframe, prioritize by volume
+                        mint_address  -- Ensure consistent ordering for ties
                     LIMIT 30
                 `);
 
                 if (tokensResult.rows.length === 0) {
-                    // We've processed all tokens, start over
+                    logger.info('No tokens to update, waiting...');
                     continue;
                 }
-
-                // Update the batch
                 await this.updateAllMetrics();
 
-                // Rate limiting: 1 second delay between batches (~60 requests per minute)
-                // This is much more conservative than before
                 await new Promise(resolve => setTimeout(resolve, 1000));
 
             } catch (error) {
                 logger.error('Error in metrics update loop:', error);
-                // If we hit rate limit, wait 5 seconds before retrying
                 await new Promise(resolve => setTimeout(resolve, 5000));
             }
         }
