@@ -13,9 +13,15 @@ import { PriceFetcher } from './priceFetcher';
 import { PRICE_WHITELIST } from '../../../constants/priceWhitelist';
 
 
-export class RaydiumProcessor extends BaseProcessor {
+export class RaydiumStateProcessor extends BaseProcessor {
     private connection: Connection;
     private umi: Umi;
+    private static readonly RAYDIUM_POOL_SIZE = 328; // Minimum size for CP pool
+    private static readonly RAYDIUM_POOL_DISCRIMINATOR = Buffer.from([0xf7, 0xed, 0xe3, 0xf5, 0xd7, 0xc3, 0xde, 0x46]);
+    private static readonly KNOWN_DISCRIMINATORS = {
+        CP_AMM: Buffer.from([0xf7, 0xed, 0xe3, 0xf5, 0xd7, 0xc3, 0xde, 0x46]),
+        // Add other known discriminators if needed
+    };
 
 
     constructor() {
@@ -27,33 +33,41 @@ export class RaydiumProcessor extends BaseProcessor {
 
     async processEvent(buffer: Buffer, accountKey: string, programId: string): Promise<void> {
         try {
-            switch (programId) {
-                case config.RAYDIUM_PROGRAMS.CP_AMM:
-                    await this.processCPSwap(buffer, accountKey);
-                    break;
-                case config.RAYDIUM_PROGRAMS.V4_AMM:
-                    await this.processV4AMM(buffer, accountKey);
-                    break;
+            const discriminator = buffer.subarray(0, 8);
 
-                default:
-                    logger.warn('Unknown Raydium program:', programId);
+            // Log the discriminator for V4 AMM to discover its value
+            if (programId === config.RAYDIUM_PROGRAMS.V4_AMM) {
+                await this.processV4AMM(buffer, accountKey);
+                return;
+            }
+
+            // Handle CP AMM as before
+            if (programId === config.RAYDIUM_PROGRAMS.CP_AMM) {
+                if (!discriminator.equals(RaydiumStateProcessor.KNOWN_DISCRIMINATORS.CP_AMM)) {
+                    return;
+                }
+                await this.processCPState(buffer, accountKey);
             }
         } catch (error) {
-            logger.error('Error in RaydiumProcessor:', { error, programId, accountKey });
+            logger.error('Error in RaydiumProcessor:', error);
+            if (error instanceof Error) {
+                logger.error('Error details:', error.message);
+                logger.error('Stack trace:', error.stack);
+            }
         }
     }
 
-    private async processCPSwap(buffer: Buffer, accountKey: string): Promise<void> {
+    private async processCPState(buffer: Buffer, accountKey: string): Promise<void> {
         try {
-            if (buffer.length < 328) {  // Add this check
+            if (buffer.length < 328) {
                 logger.warn(`Buffer too small for CP pool ${accountKey}: ${buffer.length} bytes`);
                 return;
             }
-            // Skip discriminator (8 bytes)
-            let offset = 8;
+
+            let offset = 8; // Skip discriminator
 
             const poolState = {
-                // First comes all the PublicKeys (32 bytes each)
+                // PublicKeys (32 bytes each)
                 ammConfig: new PublicKey(buffer.subarray(offset, offset += 32)),
                 poolCreator: new PublicKey(buffer.subarray(offset, offset += 32)),
                 token0Vault: new PublicKey(buffer.subarray(offset, offset += 32)),
@@ -65,14 +79,14 @@ export class RaydiumProcessor extends BaseProcessor {
                 token1Program: new PublicKey(buffer.subarray(offset, offset += 32)),
                 observationKey: new PublicKey(buffer.subarray(offset, offset += 32)),
 
-                // Then come the smaller fields
+                // Small fields
                 authBump: buffer.readUInt8(offset++),
                 status: buffer.readUInt8(offset++),
                 lpMintDecimals: buffer.readUInt8(offset++),
                 mint0Decimals: buffer.readUInt8(offset++),
                 mint1Decimals: buffer.readUInt8(offset++),
 
-                // Then the u64 fields
+                // U64 fields
                 lpSupply: new BN(buffer.subarray(offset, offset += 8), 'le'),
                 protocolFeesToken0: new BN(buffer.subarray(offset, offset += 8), 'le'),
                 protocolFeesToken1: new BN(buffer.subarray(offset, offset += 8), 'le'),
@@ -82,20 +96,94 @@ export class RaydiumProcessor extends BaseProcessor {
                 recentEpoch: new BN(buffer.subarray(offset, offset += 8), 'le'),
             };
 
-            await this.pairFetcher({
-                baseToken: poolState.token0Mint.toString(),
-                quoteToken: poolState.token1Mint.toString(),
-                baseVault: poolState.token0Vault.toString(),
-                quoteVault: poolState.token1Vault.toString(),
-                baseDecimals: poolState.mint0Decimals,
-                quoteDecimals: poolState.mint1Decimals,
-                accountKey
-            });
 
+            // First ensure both tokens exist in our database
+            const token0Mint = poolState.token0Mint.toBase58();
+            const token1Mint = poolState.token1Mint.toBase58();
 
+            await Promise.all([
+                this.ensureTokenExists(token0Mint, poolState.mint0Decimals),
+                this.ensureTokenExists(token1Mint, poolState.mint1Decimals)
+            ]);
+
+            // Then store the pool mapping
+            await pool().query(
+                `INSERT INTO onstrument.raydium_pools (
+                    pool_id,
+                    token0_mint,
+                    token1_mint,
+                    token0_decimals,
+                    token1_decimals
+                ) VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (pool_id) 
+                DO UPDATE SET 
+                    token0_mint = $2,
+                    token1_mint = $3,
+                    token0_decimals = $4,
+                    token1_decimals = $5`,
+                [
+                    accountKey,
+                    token0Mint,
+                    token1Mint,
+                    poolState.mint0Decimals,
+                    poolState.mint1Decimals
+                ]
+            );
 
         } catch (error) {
             logger.error('Error processing Raydium CP pool:', error);
+            if (error instanceof Error) {
+                logger.error('Error details:', error.message);
+                logger.error('Stack trace:', error.stack);
+            }
+            throw error;
+        }
+    }
+
+    private async ensureTokenExists(mintAddress: string, decimals: number): Promise<boolean> {
+        const client = await pool().connect();
+        try {
+            await client.query('BEGIN');
+
+            // Lock the row if it exists
+            const existingToken = await client.query(
+                `SELECT mint_address, metadata_status 
+                 FROM onstrument.tokens 
+                 WHERE mint_address = $1
+                 FOR UPDATE`,
+                [mintAddress]
+            );
+
+            if (existingToken.rows.length === 0) {
+                // Token doesn't exist, insert it
+                await client.query(
+                    `INSERT INTO onstrument.tokens (
+                        mint_address,
+                        decimals,
+                        metadata_status,
+                        metadata_source,
+                        token_type
+                    )
+                    VALUES ($1, $2, 'pending', 'raydium', 'dex')`,
+                    [mintAddress, decimals]
+                );
+
+                // Queue for metadata since it's new
+                await MetadataService.getInstance().queueMetadataUpdate([mintAddress], 'raydium');
+            } else if (existingToken.rows[0].metadata_status === 'pending') {
+                // Token exists but needs metadata
+                await MetadataService.getInstance().queueMetadataUpdate([mintAddress], 'raydium');
+            }
+
+            await client.query('COMMIT');
+            return true;
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            logger.error(`Error ensuring token exists for ${mintAddress}:`, error);
+            return false;
+        } finally {
+            client.release();
         }
     }
 
@@ -103,7 +191,13 @@ export class RaydiumProcessor extends BaseProcessor {
         try {
             const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(buffer);
 
-            // Log the entire pool state object with all fields
+            // Skip if both vaults are the default public key
+            if (poolState.baseVault?.toString() === '11111111111111111111111111111111' ||
+                poolState.quoteVault?.toString() === '11111111111111111111111111111111') {
+                return;
+            }
+
+            // Continue with existing processing
             const extractedPoolState = {
                 accountKey,
                 // Basic info
@@ -182,115 +276,54 @@ export class RaydiumProcessor extends BaseProcessor {
                 lpReserve: poolState.lpReserve?.toString(),
             };
 
+            // Add new database operations
+            const baseMint = poolState.baseMint?.toString();
+            const quoteMint = poolState.quoteMint?.toString();
+            const baseDecimals = parseInt(poolState.baseDecimal?.toString() || '0');
+            const quoteDecimals = parseInt(poolState.quoteDecimal?.toString() || '0');
 
-
-            await this.pairFetcher({
-                baseToken: poolState.baseMint.toString(),
-                quoteToken: poolState.quoteMint.toString(),
-                baseVault: poolState.baseVault.toString(),
-                quoteVault: poolState.quoteVault.toString(),
-                baseDecimals: parseInt(poolState.baseDecimal.toString()),
-                quoteDecimals: parseInt(poolState.quoteDecimal.toString()),
-                accountKey
-            });
-
-
-
-
-
-        } catch (error) {
-            logger.error('Error in processV4AMM:', error);
-        }
-    }
-
-
-    private async ensureTokenExists(mintAddress: string, decimals: number): Promise<boolean> {
-        try {
-            await pool().query(
-                `INSERT INTO onstrument.tokens (
-                    mint_address,
-                    decimals,
-                    metadata_status,
-                    metadata_source,
-                    token_type
-                )
-                VALUES ($1, $2, 'pending', 'raydium', 'dex')
-                ON CONFLICT (mint_address) 
-                DO UPDATE SET 
-                    metadata_status = CASE 
-                        WHEN onstrument.tokens.metadata_status IS NULL 
-                        THEN 'pending' 
-                        ELSE onstrument.tokens.metadata_status 
-                    END`,
-                [mintAddress, decimals]
-            );
-
-            // Queue metadata update
-            const result = await pool().query(
-                `SELECT metadata_status FROM onstrument.tokens WHERE mint_address = $1`,
-                [mintAddress]
-            );
-
-            if (result.rows[0]?.metadata_status === 'pending') {
-                await MetadataService.getInstance().queueMetadataUpdate([mintAddress], 'raydium');
+            if (!baseMint || !quoteMint) {
+                logger.warn(`Missing mint addresses for pool ${accountKey}`);
+                return;
             }
 
-            return true;
+            // Ensure both tokens exist in our database
+            await Promise.all([
+                this.ensureTokenExists(baseMint, baseDecimals),
+                this.ensureTokenExists(quoteMint, quoteDecimals)
+            ]);
+
+            // Store the pool mapping
+            await pool().query(
+                `INSERT INTO onstrument.raydium_pools (
+                    pool_id,
+                    token0_mint,
+                    token1_mint,
+                    token0_decimals,
+                    token1_decimals
+                ) VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (pool_id) 
+                DO UPDATE SET 
+                    token0_mint = $2,
+                    token1_mint = $3,
+                    token0_decimals = $4,
+                    token1_decimals = $5`,
+                [
+                    accountKey,
+                    baseMint,
+                    quoteMint,
+                    baseDecimals,
+                    quoteDecimals
+                ]
+            );
+
         } catch (error) {
-            logger.error(`Error ensuring token exists for ${mintAddress}:`, error);
-            return false;
+            logger.error('Error processing Raydium V4 AMM:', error);
+            if (error instanceof Error) {
+                logger.error('Error details:', error.message);
+                logger.error('Stack trace:', error.stack);
+            }
+            throw error;
         }
-    }
-
-    private async pairFetcher({
-        baseToken,
-        quoteToken,
-        baseVault,
-        quoteVault,
-        baseDecimals,
-        quoteDecimals,
-        accountKey
-    }: {
-        baseToken: string,
-        quoteToken: string,
-        baseVault: string,
-        quoteVault: string,
-        baseDecimals: number,
-        quoteDecimals: number,
-        accountKey: string
-    }): Promise<void> {
-        const NATIVE_SOL = "So11111111111111111111111111111111111111112";
-
-        // Check if either token is SOL
-        const isBaseSol = baseToken === NATIVE_SOL;
-        const isQuoteSol = quoteToken === NATIVE_SOL;
-
-        if (!isBaseSol && !isQuoteSol) {
-            return; // Skip if neither token is SOL
-        }
-
-        // Determine which token needs to be tracked
-        const tokenToTrack = isBaseSol ? quoteToken : baseToken;
-
-        // Check if token is in whitelist
-        if (!PRICE_WHITELIST.has(tokenToTrack)) {
-            return; // Skip if token is not in whitelist
-        }
-
-        const tokenDecimals = isBaseSol ? quoteDecimals : baseDecimals;
-
-        // Ensure token exists in database
-        await this.ensureTokenExists(tokenToTrack, tokenDecimals);
-
-        // Forward to price fetcher
-        await PriceFetcher.fetchPrice({
-            baseToken,
-            quoteToken,
-            baseVault,
-            quoteVault,
-            baseDecimals,
-            quoteDecimals,
-            accountKey
-        });
     }
 }
