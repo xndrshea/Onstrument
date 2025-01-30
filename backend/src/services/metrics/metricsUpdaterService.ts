@@ -1,6 +1,32 @@
 import { pool } from '../../config/database';
 import { logger } from '../../utils/logger';
 
+interface DexScreenerResponse {
+    volume: {
+        h24: number;
+        h6: number;
+        h1: number;
+        m5: number;
+    };
+    txns: {
+        m5: { buys: number; sells: number; };
+        h1: { buys: number; sells: number; };
+        h6: { buys: number; sells: number; };
+        h24: { buys: number; sells: number; };
+    };
+    priceChange: {
+        m5: number;
+        h1: number;
+        h6: number;
+        h24: number;
+    };
+    priceUsd: string;
+    marketCap: number;
+    fdv: number;
+    liquidity: { usd: number; };
+    baseToken: { address: string; };
+}
+
 export class MetricsUpdaterService {
     private static instance: MetricsUpdaterService;
     private isRunning: boolean = false;
@@ -68,6 +94,8 @@ export class MetricsUpdaterService {
 
     private async updateAllMetrics(): Promise<void> {
         try {
+            logger.info('Starting metrics update...');
+
             const tokensResult = await pool().query(`
                 SELECT mint_address 
                 FROM onstrument.tokens 
@@ -80,32 +108,38 @@ export class MetricsUpdaterService {
             }
 
             const addresses = tokensResult.rows.map(t => t.mint_address).join(',');
-            const response = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${addresses}`);
 
+            const response = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${addresses}`);
             if (!response.ok) {
                 throw new Error(`DexScreener API error: ${response.statusText}`);
             }
 
-            const pairs = await response.json();
+            const pairs = await response.json() as DexScreenerResponse[];
 
-            for (const pair of pairs) {
+            // Create a map for quick lookup of pair data by token address
+            const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
+
+            // Batch update all tokens that we got data for
+            for (const token of tokensResult.rows) {
+                const pair = pairMap.get(token.mint_address);
+                if (!pair) {
+                    continue;
+                }
+
                 await pool().query(`
                     UPDATE onstrument.tokens 
                     SET 
                         current_price = $1,
                         market_cap_usd = $2,
                         fully_diluted_value_usd = $3,
-                        
                         volume_5m = $4,
                         volume_1h = $5,
                         volume_6h = $6,
                         volume_24h = $7,
-                        
                         price_change_5m = $8,
                         price_change_1h = $9,
                         price_change_6h = $10,
                         price_change_24h = $11,
-                        
                         tx_5m_buys = $12,
                         tx_5m_sells = $13,
                         tx_1h_buys = $14,
@@ -114,7 +148,6 @@ export class MetricsUpdaterService {
                         tx_6h_sells = $17,
                         tx_24h_buys = $18,
                         tx_24h_sells = $19,
-                        
                         reserve_in_usd = $20,
                         last_price_update = NOW()
                     WHERE mint_address = $21
@@ -122,17 +155,14 @@ export class MetricsUpdaterService {
                     pair.priceUsd,
                     pair.marketCap,
                     pair.fdv,
-
                     pair.volume?.m5,
                     pair.volume?.h1,
                     pair.volume?.h6,
                     pair.volume?.h24,
-
                     pair.priceChange?.m5,
                     pair.priceChange?.h1,
                     pair.priceChange?.h6,
                     pair.priceChange?.h24,
-
                     pair.txns?.m5?.buys,
                     pair.txns?.m5?.sells,
                     pair.txns?.h1?.buys,
@@ -141,11 +171,24 @@ export class MetricsUpdaterService {
                     pair.txns?.h6?.sells,
                     pair.txns?.h24?.buys,
                     pair.txns?.h24?.sells,
-
                     pair.liquidity?.usd,
-                    pair.baseToken.address
+                    token.mint_address
                 ]);
+
+                const verifyUpdate = await pool().query(`
+                    SELECT mint_address, volume_24h, current_price, market_cap_usd, last_price_update
+                    FROM onstrument.tokens
+                    WHERE mint_address = $1
+                `, [token.mint_address]);
+                logger.info('Database values after update:', verifyUpdate.rows[0]);
             }
+
+            logger.info(`DexScreener data for first token:`, {
+                mint: pairs[0]?.baseToken?.address,
+                volume24h: pairs[0]?.volume?.h24,
+                currentPrice: pairs[0]?.priceUsd,
+                marketCap: pairs[0]?.marketCap
+            });
 
         } catch (error) {
             logger.error('Error in updateAllMetrics:', error);
