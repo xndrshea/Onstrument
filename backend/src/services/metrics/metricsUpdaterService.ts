@@ -28,15 +28,26 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                // Get tokens that haven't been updated recently, 
-                // but prioritize high volume tokens
+                // Balance between importance and update fairness
                 const tokensResult = await pool().query(`
                     SELECT mint_address 
                     FROM onstrument.tokens 
                     ORDER BY 
-                        COALESCE(last_price_update, '1970-01-01'::timestamp) ASC,  -- Prioritize tokens not updated recently
-                        COALESCE(volume_24h, 0) DESC,  -- Within same update timeframe, prioritize by volume
-                        mint_address  -- Ensure consistent ordering for ties
+                        CASE
+                            -- High priority: Important tokens not updated in 5+ minutes
+                            WHEN volume_24h > 1000000 AND (last_price_update < NOW() - INTERVAL '5 minutes' OR last_price_update IS NULL) THEN 0
+                            
+                            -- Medium priority: Any token not updated in 15+ minutes
+                            WHEN last_price_update < NOW() - INTERVAL '15 minutes' OR last_price_update IS NULL THEN 1
+                            
+                            -- Lower priority: Important tokens updated recently
+                            WHEN volume_24h > 1000000 THEN 2
+                            
+                            -- Lowest priority: Everything else
+                            ELSE 3
+                        END,
+                        COALESCE(volume_24h, 0) DESC,
+                        mint_address
                     LIMIT 30
                 `);
 
