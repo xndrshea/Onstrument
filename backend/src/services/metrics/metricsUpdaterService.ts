@@ -93,10 +93,9 @@ export class MetricsUpdaterService {
     }
 
     private async updateAllMetrics(): Promise<void> {
+        const client = await pool().connect();
         try {
-            logger.info('Starting metrics update...');
-
-            const tokensResult = await pool().query(`
+            const tokensResult = await client.query(`
                 SELECT mint_address 
                 FROM onstrument.tokens 
                 ORDER BY mint_address
@@ -115,84 +114,77 @@ export class MetricsUpdaterService {
             }
 
             const pairs = await response.json() as DexScreenerResponse[];
-
-            // Create a map for quick lookup of pair data by token address
             const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
 
-            // Batch update all tokens that we got data for
-            for (const token of tokensResult.rows) {
-                const pair = pairMap.get(token.mint_address);
-                if (!pair) {
-                    continue;
+            await client.query('BEGIN');
+
+            try {
+                for (const token of tokensResult.rows) {
+                    const pair = pairMap.get(token.mint_address);
+                    if (!pair) {
+                        continue;
+                    }
+
+                    await client.query(`
+                        UPDATE onstrument.tokens 
+                        SET 
+                            current_price = $1::numeric,
+                            market_cap_usd = $2::numeric,
+                            fully_diluted_value_usd = $3::numeric,
+                            volume_5m = $4::numeric,
+                            volume_1h = $5::numeric,
+                            volume_6h = $6::numeric,
+                            volume_24h = $7::numeric,
+                            price_change_5m = $8::numeric,
+                            price_change_1h = $9::numeric,
+                            price_change_6h = $10::numeric,
+                            price_change_24h = $11::numeric,
+                            tx_5m_buys = $12,
+                            tx_5m_sells = $13,
+                            tx_1h_buys = $14,
+                            tx_1h_sells = $15,
+                            tx_6h_buys = $16,
+                            tx_6h_sells = $17,
+                            tx_24h_buys = $18,
+                            tx_24h_sells = $19,
+                            reserve_in_usd = $20::numeric,
+                            last_price_update = NOW()
+                        WHERE mint_address = $21
+                    `, [
+                        Number(pair.priceUsd),
+                        Number(pair.marketCap),
+                        Number(pair.fdv),
+                        Number(pair.volume?.m5 || 0),
+                        Number(pair.volume?.h1 || 0),
+                        Number(pair.volume?.h6 || 0),
+                        Number(pair.volume?.h24 || 0),
+                        Number(pair.priceChange?.m5 || 0),
+                        Number(pair.priceChange?.h1 || 0),
+                        Number(pair.priceChange?.h6 || 0),
+                        Number(pair.priceChange?.h24 || 0),
+                        pair.txns?.m5?.buys || 0,
+                        pair.txns?.m5?.sells || 0,
+                        pair.txns?.h1?.buys || 0,
+                        pair.txns?.h1?.sells || 0,
+                        pair.txns?.h6?.buys || 0,
+                        pair.txns?.h6?.sells || 0,
+                        pair.txns?.h24?.buys || 0,
+                        pair.txns?.h24?.sells || 0,
+                        Number(pair.liquidity?.usd || 0),
+                        pair.baseToken.address
+                    ]);
                 }
-
-                await pool().query(`
-                    UPDATE onstrument.tokens 
-                    SET 
-                        current_price = $1,
-                        market_cap_usd = $2,
-                        fully_diluted_value_usd = $3,
-                        volume_5m = $4,
-                        volume_1h = $5,
-                        volume_6h = $6,
-                        volume_24h = $7,
-                        price_change_5m = $8,
-                        price_change_1h = $9,
-                        price_change_6h = $10,
-                        price_change_24h = $11,
-                        tx_5m_buys = $12,
-                        tx_5m_sells = $13,
-                        tx_1h_buys = $14,
-                        tx_1h_sells = $15,
-                        tx_6h_buys = $16,
-                        tx_6h_sells = $17,
-                        tx_24h_buys = $18,
-                        tx_24h_sells = $19,
-                        reserve_in_usd = $20,
-                        last_price_update = NOW()
-                    WHERE mint_address = $21
-                `, [
-                    pair.priceUsd,
-                    pair.marketCap,
-                    pair.fdv,
-                    pair.volume?.m5,
-                    pair.volume?.h1,
-                    pair.volume?.h6,
-                    pair.volume?.h24,
-                    pair.priceChange?.m5,
-                    pair.priceChange?.h1,
-                    pair.priceChange?.h6,
-                    pair.priceChange?.h24,
-                    pair.txns?.m5?.buys,
-                    pair.txns?.m5?.sells,
-                    pair.txns?.h1?.buys,
-                    pair.txns?.h1?.sells,
-                    pair.txns?.h6?.buys,
-                    pair.txns?.h6?.sells,
-                    pair.txns?.h24?.buys,
-                    pair.txns?.h24?.sells,
-                    pair.liquidity?.usd,
-                    token.mint_address
-                ]);
-
-                const verifyUpdate = await pool().query(`
-                    SELECT mint_address, volume_24h, current_price, market_cap_usd, last_price_update
-                    FROM onstrument.tokens
-                    WHERE mint_address = $1
-                `, [token.mint_address]);
-                logger.info('Database values after update:', verifyUpdate.rows[0]);
+                await client.query('COMMIT');
+            } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
             }
-
-            logger.info(`DexScreener data for first token:`, {
-                mint: pairs[0]?.baseToken?.address,
-                volume24h: pairs[0]?.volume?.h24,
-                currentPrice: pairs[0]?.priceUsd,
-                marketCap: pairs[0]?.marketCap
-            });
 
         } catch (error) {
             logger.error('Error in updateAllMetrics:', error);
             throw error;
+        } finally {
+            client.release();
         }
     }
 
