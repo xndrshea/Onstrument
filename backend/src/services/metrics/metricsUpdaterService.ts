@@ -28,31 +28,30 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                // Get next batch of tokens
+                // Get ALL tokens, but still batch in groups of 30 to not overload the API
                 const tokensResult = await pool().query(`
                     SELECT mint_address 
                     FROM onstrument.tokens 
-                    WHERE last_price_update IS NULL 
-                       OR last_price_update < NOW() - INTERVAL '1 minute'
-                    ORDER BY last_price_update ASC NULLS FIRST
+                    ORDER BY mint_address
                     LIMIT 30
                 `);
 
                 if (tokensResult.rows.length === 0) {
-                    // No tokens need updating, wait a bit
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    // We've processed all tokens, start over
                     continue;
                 }
 
                 // Update the batch
                 await this.updateAllMetrics();
 
-                // Rate limit: 200 requests per minute = 1 request per 300ms
-                await new Promise(resolve => setTimeout(resolve, 300));
+                // Rate limiting: 1 second delay between batches (~60 requests per minute)
+                // This is much more conservative than before
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
             } catch (error) {
                 logger.error('Error in metrics update loop:', error);
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // If we hit rate limit, wait 5 seconds before retrying
+                await new Promise(resolve => setTimeout(resolve, 5000));
             }
         }
     }
@@ -62,8 +61,7 @@ export class MetricsUpdaterService {
             const tokensResult = await pool().query(`
                 SELECT mint_address 
                 FROM onstrument.tokens 
-                WHERE last_price_update IS NULL 
-                   OR last_price_update < NOW() - INTERVAL '5 minutes'
+                ORDER BY mint_address
                 LIMIT 30
             `);
 

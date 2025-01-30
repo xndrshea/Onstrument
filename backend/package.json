@@ -54,6 +54,7 @@
         "winston": "3.17.0",
         "winston-cloudwatch": "^6.3.0",
         "ws": "8.13.0",
-        "csurf": "^1.11.0"
+        "csurf": "^1.11.0",
+        "@coral-xyz/anchor": "^0.28.0"
     }
 }
