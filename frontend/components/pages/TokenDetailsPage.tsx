@@ -13,19 +13,21 @@ import { getAuthHeaders } from '../../utils/headers';
 const MAINNET_USDC_ADDRESS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 // Updated MetricsCard component with terminal style
-const MetricsCard = ({ title, value, change }: { title: string; value: string | number; change?: number }) => (
-    <div className="bg-[#1E222D] border border-gray-800 p-4 rounded-lg">
-        <h3 className="text-[#808591] text-sm mb-1">{title}</h3>
-        <div className="flex items-end gap-2">
-            <span className="text-white text-lg font-mono">{value}</span>
-            {change !== undefined && (
-                <span className={`text-sm font-mono ${change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                    {change > 0 ? '+' : ''}{change.toFixed(2)}%
-                </span>
-            )}
+const MetricsCard = ({ title, value, change }: { title: string; value: string; change?: number }) => {
+    return (
+        <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="text-sm text-gray-600 mb-1">{title}</div>
+            <div className="flex items-center gap-2">
+                <div className="text-lg font-mono text-gray-900">{value}</div>
+                {change !== undefined && (
+                    <span className={`text-sm ${change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                    </span>
+                )}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 // Add this component inside TokenDetailsPage, after TradingInterface
 const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
@@ -35,7 +37,7 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
         try {
             await navigator.clipboard.writeText(text);
             setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000); // Reset after 2 seconds
+            setTimeout(() => setCopySuccess(false), 2000);
         } catch (err) {
             console.error('Failed to copy text: ', err);
         }
@@ -48,7 +50,7 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
             <Disclosure>
                 {({ open }) => (
                     <>
-                        <DisclosureButton className="flex w-full justify-between items-center px-4 py-2 bg-[#1E222D] hover:bg-[#2C3038] rounded-lg text-white">
+                        <DisclosureButton className="flex w-full justify-between items-center px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-gray-900 border border-gray-200">
                             <span>Token Information</span>
                             <svg
                                 className={`w-5 h-5 transform ${open ? 'rotate-180' : ''} transition-transform`}
@@ -60,12 +62,12 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
                             </svg>
                         </DisclosureButton>
 
-                        <DisclosurePanel className="px-4 py-3 bg-[#1E222D] mt-1 rounded-lg">
+                        <DisclosurePanel className="px-4 py-3 bg-white mt-1 rounded-lg border border-gray-200">
                             <div className="space-y-3 text-sm">
                                 <div>
-                                    <div className="text-[#808591]">Contract Address</div>
+                                    <div className="text-gray-600">Contract Address</div>
                                     <div
-                                        className="font-mono text-white break-all cursor-pointer hover:text-blue-400 flex items-center gap-2"
+                                        className="font-mono text-gray-900 break-all cursor-pointer hover:text-blue-500 flex items-center gap-2"
                                         onClick={() => copyToClipboard(token.mintAddress)}
                                     >
                                         {token.mintAddress}
@@ -73,7 +75,7 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
                                             <span className="text-green-500 text-xs">Copied!</span>
                                         ) : (
                                             <svg
-                                                className="w-4 h-4 text-[#808591]"
+                                                className="w-4 h-4 text-gray-400"
                                                 fill="none"
                                                 stroke="currentColor"
                                                 viewBox="0 0 24 24"
@@ -91,9 +93,9 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
 
                                 {token.websiteUrl && (
                                     <div>
-                                        <div className="text-[#808591]">Website</div>
+                                        <div className="text-gray-600">Website</div>
                                         <a href={token.websiteUrl} target="_blank" rel="noopener noreferrer"
-                                            className="text-blue-400 hover:text-blue-300">
+                                            className="text-blue-500 hover:text-blue-600">
                                             {token.websiteUrl}
                                         </a>
                                     </div>
@@ -101,9 +103,9 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
 
                                 {token.twitterUrl && (
                                     <div>
-                                        <div className="text-[#808591]">Twitter</div>
+                                        <div className="text-gray-600">Twitter</div>
                                         <a href={token.twitterUrl} target="_blank" rel="noopener noreferrer"
-                                            className="text-blue-400 hover:text-blue-300">
+                                            className="text-blue-500 hover:text-blue-600">
                                             {token.twitterUrl}
                                         </a>
                                     </div>
@@ -111,9 +113,9 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
 
                                 {token.telegramUrl && (
                                     <div>
-                                        <div className="text-[#808591]">Telegram</div>
+                                        <div className="text-gray-600">Telegram</div>
                                         <a href={token.telegramUrl} target="_blank" rel="noopener noreferrer"
-                                            className="text-blue-400 hover:text-blue-300">
+                                            className="text-blue-500 hover:text-blue-600">
                                             {token.telegramUrl}
                                         </a>
                                     </div>
@@ -357,7 +359,7 @@ export function TokenDetailsPage() {
 
     const renderTokenSelector = () => (
         <Menu as="div" className="relative inline-flex items-center">
-            <MenuButton className="flex items-center gap-1 px-3 py-2 text-[#808591] hover:text-white bg-[#2C3038] hover:bg-[#363B44] rounded-md transition-colors">
+            <MenuButton className="flex items-center gap-1 px-3 py-2 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
                 <span className="text-sm font-mono">Select Token</span>
                 <svg className="w-5 h-5 fill-current transition-transform" viewBox="0 0 20 20">
                     <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
@@ -365,10 +367,10 @@ export function TokenDetailsPage() {
             </MenuButton>
 
             <MenuItems
-                className="w-[400px] bg-[#1E222D] border border-gray-800 rounded-md shadow-lg max-h-[400px] overflow-hidden z-[9999]"
+                className="w-[400px] bg-white border border-gray-200 rounded-md shadow-lg max-h-[400px] overflow-hidden z-[9999]"
                 anchor="bottom start"
             >
-                <div className="sticky top-0 bg-[#2C3038] grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 text-xs text-[#808591] border-b border-gray-800">
+                <div className="sticky top-0 bg-gray-50 grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
                     <span>Token</span>
                     <button
                         onClick={() => {
@@ -379,7 +381,7 @@ export function TokenDetailsPage() {
                                 setSortDirection('desc');
                             }
                         }}
-                        className="text-left hover:text-white w-full"
+                        className="text-left hover:text-gray-900 w-full"
                     >
                         Market Cap
                         {sortField === 'marketCapUsd' && (
@@ -395,7 +397,7 @@ export function TokenDetailsPage() {
                                 setSortDirection('desc');
                             }
                         }}
-                        className="text-right hover:text-white w-full"
+                        className="text-right hover:text-gray-900 w-full"
                     >
                         24h Volume
                         {sortField === 'volume24h' && (
@@ -404,7 +406,7 @@ export function TokenDetailsPage() {
                     </button>
                 </div>
 
-                <div className="overflow-y-auto max-h-[360px] scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-[#1E222D]">
+                <div className="overflow-y-auto max-h-[360px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                     {sortTokens(topTokens).map(token => (
                         <MenuItem
                             key={token.mintAddress}
@@ -414,14 +416,14 @@ export function TokenDetailsPage() {
                                     state: { tokenType: token.tokenType || 'dex' }
                                 });
                             }}
-                            className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-[#2C3038]"
+                            className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-gray-50 text-gray-900"
                         >
                             <div className="flex items-center gap-2">
                                 {(token.tokenType === 'custom' ? metadataImage : token.imageUrl) && (
                                     <img
                                         src={token.tokenType === 'custom' ? metadataImage! : token.imageUrl!}
                                         alt=""
-                                        className="w-5 h- rounded-full"
+                                        className="w-5 h-5 rounded-full"
                                         onError={(e) => {
                                             (e.target as HTMLImageElement).style.display = 'none';
                                         }}
@@ -429,10 +431,10 @@ export function TokenDetailsPage() {
                                 )}
                                 <span className="font-medium">{token.symbol}</span>
                             </div>
-                            <div className="text-left">
+                            <div className="text-left text-gray-600">
                                 {formatMarketCap(token.marketCapUsd || null)}
                             </div>
-                            <div className="text-right">
+                            <div className="text-right text-gray-600">
                                 ${formatNumber(token.volume24h || 0)}
                             </div>
                         </MenuItem>
@@ -455,19 +457,20 @@ export function TokenDetailsPage() {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    if (loading) return <div className="p-4 text-[#808591] font-mono">Loading...</div>;
+    // Update loading and error states to use light theme colors
+    if (loading) return <div className="p-4 text-gray-600 font-mono">Loading...</div>;
     if (error) return <div className="p-4 text-red-500 font-mono">Error: {error}</div>;
-    if (!token) return <div className="p-4 text-[#808591] font-mono">Token not found</div>;
+    if (!token) return <div className="p-4 text-gray-600 font-mono">Token not found</div>;
 
     return (
-        <div className="flex flex-col flex-1 bg-[#131722] text-white overflow-x-hidden">
+        <div className="flex flex-col flex-1 bg-white text-gray-900 overflow-x-hidden">
             <div className="max-w-[1920px] mx-auto w-full p-4 space-y-4">
                 {/* Top section with chart and trading interface */}
                 <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-4 overflow-x-hidden">
                     {/* Left column */}
                     <div className="space-y-4 overflow-x-hidden">
                         {/* Token header */}
-                        <div className="bg-[#1E222D] border border-gray-800 rounded-lg p-3 overflow-x-hidden">
+                        <div className="bg-white border border-gray-200 rounded-lg p-3 overflow-x-hidden shadow-sm">
                             <div className="flex flex-col">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center">
@@ -481,18 +484,18 @@ export function TokenDetailsPage() {
                                                 }}
                                             />
                                         )}
-                                        <h1 className="text-lg font-mono truncate">{token.symbol}</h1>
+                                        <h1 className="text-lg font-mono text-gray-900 truncate">{token.symbol}</h1>
                                     </div>
                                     {renderTokenSelector()}
                                 </div>
-                                <div className="mt-1 text-sm text-[#808591] font-mono truncate">
+                                <div className="mt-1 text-sm text-gray-600 font-mono truncate">
                                     {token.name}
                                 </div>
                             </div>
                         </div>
 
                         {/* Metrics cards */}
-                        <div className="bg-[#1E222D] border border-gray-800 rounded-lg p-4">
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                             <div className="grid grid-cols-2 gap-4">
                                 <MetricsCard
                                     title="Market Cap (USD)"
@@ -505,12 +508,13 @@ export function TokenDetailsPage() {
                                 />
                             </div>
                         </div>
+
                         <TradingInterface token={token} currentPrice={currentPrice} />
                         <TokenInfoSection token={token} />
                     </div>
 
                     {/* Chart section */}
-                    <div className="bg-[#1E222D] border border-gray-800 rounded-lg p-4 h-[600px]">
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 h-[600px] shadow-sm">
                         <PriceChart
                             token={token}
                             width={windowDimensions.width > 1024 ? windowDimensions.width - 450 : windowDimensions.width - 48}

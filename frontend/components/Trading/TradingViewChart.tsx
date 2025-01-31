@@ -73,10 +73,10 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 symbol: token.mintAddress,
                 interval: '1',
                 timezone: 'Etc/UTC',
-                theme: 'dark',
+                theme: "light",
                 style: '1',
                 locale: 'en',
-                toolbar_bg: '#232427',
+                toolbar_bg: '#ffffff',
                 enable_publishing: false,
                 hide_top_toolbar: false,
                 hide_legend: false,
@@ -97,25 +97,72 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     'header_fullscreen_button',
                 ],
                 overrides: {
-                    "paneProperties.background": "#131722",
-                    "paneProperties.vertGridProperties.color": "#363c4e",
-                    "paneProperties.horzGridProperties.color": "#363c4e",
-                    "mainSeriesProperties.candleStyle.upColor": "#32c48d",
-                    "mainSeriesProperties.candleStyle.downColor": "#ff4976",
-                    "mainSeriesProperties.candleStyle.borderUpColor": "#32c48d",
-                    "mainSeriesProperties.candleStyle.borderDownColor": "#ff4976",
-                    "mainSeriesProperties.candleStyle.wickUpColor": "#32c48d",
-                    "mainSeriesProperties.candleStyle.wickDownColor": "#ff4976",
+                    "mainSeriesProperties.style": 1,
+                    "mainSeriesProperties.minTick": "auto",
+                    "mainSeriesProperties.priceAxisProperties.autoScale": true,
+                    "mainSeriesProperties.priceAxisProperties.autoScaleDisabled": false,
+                    "mainSeriesProperties.priceAxisProperties.percentage": false,
+                    "mainSeriesProperties.priceAxisProperties.percentageDisabled": false,
+                    "mainSeriesProperties.priceAxisProperties.log": false,
+                    "mainSeriesProperties.priceAxisProperties.logDisabled": false,
+                    "paneProperties.background": "#ffffff",
+                    "paneProperties.backgroundType": "solid",
+                    "paneProperties.backgroundGradientStartColor": "#ffffff",
+                    "paneProperties.backgroundGradientEndColor": "#ffffff",
+                    "paneProperties.vertGridProperties.color": "#f1f5f9",
+                    "paneProperties.horzGridProperties.color": "#f1f5f9",
+                    "paneProperties.crossHairProperties.color": "#64748b",
+                    "paneProperties.crossHairProperties.style": 2,
+                    "paneProperties.crossHairProperties.width": 1,
+                    "chartProperties.background": "#ffffff",
+                    "chartProperties.backgroundType": "solid",
+                    "chartProperties.paneProperties.background": "#ffffff",
+                    "chartProperties.paneProperties.backgroundType": "solid",
+                    "sessions.vertlines.color": "#e2e8f0",
+                    "sessions.vertlines.style": 2,
+                    "sessions.vertlines.visible": false,
+                    "scalesProperties.backgroundColor": "#ffffff",
+                    "scalesProperties.textColor": "#64748b",
+                    "scalesProperties.lineColor": "#f1f5f9",
+                    "mainSeriesProperties.candleStyle.upColor": "#22c55e",
+                    "mainSeriesProperties.candleStyle.downColor": "#ef4444",
                     "mainSeriesProperties.candleStyle.drawWick": true,
                     "mainSeriesProperties.candleStyle.drawBorder": true,
-                    "mainSeriesProperties.candleStyle.barColorsOnPrevClose": true
+                    "mainSeriesProperties.candleStyle.borderColor": "#000000",
+                    "mainSeriesProperties.candleStyle.borderUpColor": "#22c55e",
+                    "mainSeriesProperties.candleStyle.borderDownColor": "#ef4444",
+                    "mainSeriesProperties.candleStyle.wickUpColor": "#22c55e",
+                    "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444",
+                    "paneProperties.legendProperties.showBackground": true,
+                    "paneProperties.legendProperties.backgroundTransparency": 0,
+                    "paneProperties.legendProperties.backgroundColor": "#ffffff",
+                    "paneProperties.legendProperties.textColor": "#64748b",
+                    "toolbarBg": "#ffffff",
+                    "toolbarColor": "#64748b",
+                    "header_widget.background": "#ffffff",
+                    "header_widget.symbolSearch": "#64748b",
+                    "header_symbol_search.background": "#ffffff",
+                    "symbolWatermarkProperties.transparency": 0,
+                    "symbolWatermarkProperties.color": "rgba(0, 0, 0, 0)",
+                    "crossHairProperties.color": "#64748b",
+                    "crossHairProperties.style": 2,
+                    "crossHairProperties.transparency": 0,
+                    "crossHairProperties.width": 1,
                 },
                 studies_overrides: {
-                    "volume.volume.color.0": "#ff4976",
-                    "volume.volume.color.1": "#32c48d",
-                    "volume.volume.transparency": 50
+                    "volume.volume.color.0": "#ef4444",
+                    "volume.volume.color.1": "#22c55e",
+                    "volume.volume.transparency": 50,
+                    "volume.volume.backgroundTransparency": 100
                 },
-                loading_screen: { backgroundColor: "#131722" },
+                loading_screen: {
+                    backgroundColor: "#ffffff",
+                    foregroundColor: "#64748b"
+                },
+                charts_storage_url: 'https://saveload.tradingview.com',
+                client_id: 'tradingview.com',
+                user_id: 'public_user',
+                charts_storage_api_version: "1.1",
                 datafeed: {
                     onReady: (callback: any) => {
                         callback({
@@ -274,6 +321,21 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 },
                 auto_scale: false,
                 scale_mode: 'Normal',
+                custom_themes: {
+                    light: {
+                        // Blue (buttons, selections)
+                        "color1": ["#f5f8ff", "#e5efff", "#d6e6ff", "#c6dcff", "#b7d3ff", "#a8caff", "#98c1ff", "#89b8ff", "#79afff", "#6aa6ff", "#4d94ff", "#4687ea", "#3f7ad5", "#386dbf", "#3161aa", "#2a5495", "#244880", "#1d3b6a", "#162e55", "#0f2240"],
+
+                        // Grey (text, lines)
+                        "color2": ["#f7f7f7", "#efefef", "#e7e7e7", "#dfdfdf", "#d7d7d7", "#cfcfcf", "#c7c7c7", "#bfbfbf", "#b7b7b7", "#afafaf", "#9f9f9f", "#919191", "#848484", "#767676", "#696969", "#5b5b5b", "#4e4e4e", "#404040", "#333333", "#262626"],
+
+                        // Red (down moves)
+                        "color3": ["#fff0f0", "#ffe1e1", "#ffd3d3", "#ffc4c4", "#ffb5b5", "#ffa6a6", "#ff9797", "#ff8888", "#ff7a7a", "#ff6b6b", "#ff4d4d", "#ea4747", "#d54040", "#bf3a3a", "#aa3333", "#952d2d", "#802727", "#6a2020", "#551a1a", "#401313"],
+
+                        // Green (up moves)
+                        "color4": ["#f0fff7", "#e1fff0", "#d3ffe8", "#c4ffe1", "#b5ffda", "#a6ffd3", "#97ffcc", "#88ffc5", "#7affbe", "#6bffb7", "#4dffaa", "#47ea9b", "#40d58d", "#3abf7f", "#33aa71", "#2d9563", "#278055", "#206a47", "#1a5539", "#13402b"],
+                    }
+                }
             });
 
             widgetRef.current.onChartReady(() => {
@@ -284,7 +346,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
 
                         // Match TradingView's button styling
                         button.textContent = denomination;
-                        button.style.color = "#d1d4dc";
+                        button.style.color = "#1e293b";
                         button.style.padding = "0 12px";
                         button.style.display = "flex";
                         button.style.alignItems = "center";
@@ -293,7 +355,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
 
                         // Add hover effect
                         button.addEventListener('mouseenter', () => {
-                            button.style.backgroundColor = "rgba(250, 250, 250, 0.1)";
+                            button.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
                         });
                         button.addEventListener('mouseleave', () => {
                             button.style.backgroundColor = "transparent";
