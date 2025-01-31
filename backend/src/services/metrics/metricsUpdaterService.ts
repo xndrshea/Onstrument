@@ -84,7 +84,6 @@ export class MetricsUpdaterService {
                 await new Promise(resolve => setTimeout(resolve, 1000));
 
             } catch (error) {
-                logger.error('Error in metrics update loop:', error);
                 await new Promise(resolve => setTimeout(resolve, 5000));
             }
         }
@@ -107,6 +106,13 @@ export class MetricsUpdaterService {
             const pairs = await response.json() as DexScreenerResponse[];
             const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
 
+            logger.info('DexScreener response for high volume tokens:', {
+                requestedAddresses: addresses,
+                responseStatus: response.status,
+                pairsReceived: pairs.length,
+                firstPair: pairs[0] // Let's see what data we're getting
+            });
+
             await client.query('BEGIN');
 
             try {
@@ -115,12 +121,6 @@ export class MetricsUpdaterService {
                     if (!pair) {
                         continue;
                     }
-
-                    logger.info('Updating token metrics:', {
-                        address: pair.baseToken.address,
-                        volume24h: pair.volume.h24,
-                        price: pair.priceUsd
-                    });
 
                     await client.query(`
                         UPDATE onstrument.tokens 
@@ -178,7 +178,6 @@ export class MetricsUpdaterService {
             }
 
         } catch (error) {
-            logger.error('Error in updateAllMetrics:', error);
             throw error;
         } finally {
             client.release();
