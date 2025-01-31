@@ -3,10 +3,10 @@ import { logger } from '../../utils/logger';
 
 interface DexScreenerResponse {
     volume: {
-        h24: number;
-        h6: number;
-        h1: number;
-        m5: number;
+        h24: string;
+        h6: string;
+        h1: string;
+        m5: string;
     };
     txns: {
         m5: { buys: number; sells: number; };
@@ -21,9 +21,9 @@ interface DexScreenerResponse {
         h24: number;
     };
     priceUsd: string;
-    marketCap: number;
-    fdv: number;
-    liquidity: { usd: number; };
+    marketCap: string;
+    fdv: string;
+    liquidity: { usd: string; };
     baseToken: { address: string; };
 }
 
