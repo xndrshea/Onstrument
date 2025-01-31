@@ -145,11 +145,10 @@ export function createApp() {
 
     // Rate limiting
     app.use(rateLimit({
-        windowMs: 1 * 60 * 1000,    // 1 minute window (more appropriate for trading)
+        windowMs: 1 * 60 * 1000,    // 1 minute window
         max: process.env.NODE_ENV === 'development'
             ? 1000                   // dev: 1000 requests per minute
-            : 600,                   // prod: 300 requests per minute (5 per second)
-        message: 'Too many requests from this IP, please try again later.'
+            : 600                    // prod: 600 requests per minute
     }));
 
     // 5. Apply CSRF protection to API routes
@@ -219,8 +218,6 @@ export function createApp() {
 
     // Initialize cron jobs
     initializeSolPriceJob();
-
-    app.set('trust proxy', true);
 
     return app
 }
