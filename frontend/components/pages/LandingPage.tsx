@@ -1,14 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
-import { Modal } from '../Modal/Modal';
-import { TokenCreationForm } from '../TokenCreation/TokenCreationForm';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 
 export function LandingPage() {
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const { connected } = useWallet();
-    const { setVisible } = useWalletModal();
 
     return (
         <div className="min-h-screen bg-white">
@@ -21,13 +13,13 @@ export function LandingPage() {
                     <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
                         Our mission is to help bring real projects to life.
                     </p>
-                    <button
-                        onClick={() => setIsModalOpen(true)}
+                    <Link
+                        to="/create"
                         className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
                     >
                         <span>+</span>
                         Start Project
-                    </button>
+                    </Link>
                 </div>
 
                 {/* How It Works Section */}
@@ -44,8 +36,10 @@ export function LandingPage() {
                             <p className="text-xl text-gray-700">
                                 Onstrument adapts to its users. You can choose to build in public, post videos, and interact with your community.
                                 You can also choose to build in private, stay anonymous, and only interact with your team.
+                                All you need is a Solana wallet (for now).
                             </p>
                         </div>
+
                     </div>
                 </div>
 
@@ -102,37 +96,14 @@ export function LandingPage() {
 
                 {/* CTA Section */}
                 <div className="text-center bg-gradient-to-r from-blue-50 to-violet-50 rounded-2xl p-12">
-                    <button
-                        onClick={() => setIsModalOpen(true)}
+                    <Link
+                        to="/create"
                         className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
                     >
                         Start Building
-                    </button>
+                    </Link>
                 </div>
             </div>
-
-            {/* Modal */}
-            {isModalOpen && !connected ? (
-                <Modal isOpen={true} onClose={() => setIsModalOpen(false)}>
-                    <div className="connect-wallet-prompt" style={{ padding: '20px', textAlign: 'center' }}>
-                        <h2>Connect Wallet Required</h2>
-                        <p>Please connect your wallet to create a project.</p>
-                        <button
-                            onClick={() => setVisible(true)}
-                            className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
-                        >
-                            Select Wallet
-                        </button>
-                    </div>
-                </Modal>
-            ) : (
-                <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-                    <TokenCreationForm
-                        onSuccess={() => setIsModalOpen(false)}
-                        onTokenCreated={() => setIsModalOpen(false)}
-                    />
-                </Modal>
-            )}
         </div>
     );
 } 

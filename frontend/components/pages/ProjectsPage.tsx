@@ -5,6 +5,7 @@ import { TokenCard } from '../TokenList/TokenCard';
 import { Modal } from '../Modal/Modal';
 import { TokenCreationForm } from '../TokenCreation/TokenCreationForm';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { Link } from 'react-router-dom';
 
 export function ProjectsPage() {
     const { connection } = useConnection();
@@ -61,13 +62,13 @@ export function ProjectsPage() {
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">Onstrument Projects</h1>
                     <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setIsModalOpen(true)}
+                        <Link
+                            to="/create"
                             className="bg-purple-600 hover:bg-purple-700 text-white rounded-lg px-6 py-2 flex items-center gap-2"
                         >
                             <span className="text-xl">+</span>
-                            Create Token
-                        </button>
+                            Start a Project
+                        </Link>
                         <select
                             value={volumePeriod}
                             onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
