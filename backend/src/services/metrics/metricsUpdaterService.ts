@@ -113,11 +113,13 @@ export class MetricsUpdaterService {
                         continue;
                     }
 
-                    // Log each update attempt
-                    logger.info('Updating token:', {
+                    // Add debug logging before update
+                    logger.info('Attempting update:', {
                         mintAddress: token.mint_address,
-                        price: pair.priceUsd,
-                        volume24h: pair.volume.h24
+                        currentInDb: null, // We'll get this
+                        newPrice: pair?.priceUsd,
+                        newVolume: pair?.volume?.h24,
+                        timestamp: new Date().toISOString()
                     });
 
                     const result = await client.query(`
@@ -145,7 +147,8 @@ export class MetricsUpdaterService {
                             reserve_in_usd = $20::numeric,
                             last_price_update = NOW()
                         WHERE mint_address = $21
-                        RETURNING mint_address, current_price, volume_24h
+                        AND (last_price_update < NOW() - INTERVAL '1 minute' OR last_price_update IS NULL)
+                        RETURNING mint_address, current_price, volume_24h, last_price_update;
                     `, [
                         pair.priceUsd,
                         pair.marketCap.toString(),
@@ -170,21 +173,22 @@ export class MetricsUpdaterService {
                         pair.baseToken.address
                     ]);
 
-                    // Log the result
-                    logger.info('Update result:', {
+                    // Add debug logging after update
+                    logger.info('Update attempt result:', {
                         mintAddress: token.mint_address,
                         rowsAffected: result.rowCount,
-                        updatedData: result.rows[0]
+                        returnedData: result.rows[0],
+                        timestamp: new Date().toISOString()
                     });
                 }
                 await client.query('COMMIT');
             } catch (error) {
-                await client.query('ROLLBACK');
-                logger.error('Error during token updates:', {
-                    error,
-                    errorMessage: (error as Error).message,
-                    errorStack: (error as Error).stack
+                logger.error('Error in updateAllMetrics:', {
+                    error: (error as Error).message,
+                    stack: (error as Error).stack,
+                    timestamp: new Date().toISOString()
                 });
+                await client.query('ROLLBACK');
                 throw error;
             }
 
