@@ -12,7 +12,7 @@ export function Footer() {
                     <div className="col-span-1">
                         <h3 className="text-base font-semibold text-gray-900 mb-2">Onstrument</h3>
                         <p className="text-gray-600 text-sm">
-                            Building the future of token creation and management on Solana.
+                            Building the future of tokenization.
                         </p>
                     </div>
 

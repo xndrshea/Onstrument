@@ -54,75 +54,31 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                // Change to every 3 seconds to get closer to 200 requests/minute
-                const batchNumber = Math.floor(Date.now() / 1000 / 3); // Changes every 3 seconds
+                const batchNumber = Math.floor(Date.now() / 1000 / 3);
+                logger.info('Starting update batch', { batchNumber });
 
                 const tokensResult = await pool().query(`
-                    WITH tokens_to_update AS (
-                        SELECT mint_address, volume_24h
-                        FROM onstrument.tokens
-                        WHERE 
-                            -- Filter out inactive or fake tokens
-                            (
-                                -- Has some meaningful volume
-                                volume_24h > 100
-                                OR market_cap_usd > 1000
-                                OR reserve_in_usd > 1000
-                                OR (tx_24h_buys + tx_24h_sells) > 10
-                            )
-                            AND
-                            (
-                                -- High volume tokens: update every 15 minutes
-                                (volume_24h > 100000 AND (last_price_update < NOW() - INTERVAL '15 minutes' OR last_price_update IS NULL))
-                                OR
-                                -- Medium volume tokens: update every 30 minutes
-                                (volume_24h > 10000 AND (last_price_update < NOW() - INTERVAL '30 minutes' OR last_price_update IS NULL))
-                                OR
-                                -- Low volume tokens: update every hour
-                                (last_price_update < NOW() - INTERVAL '1 hour' OR last_price_update IS NULL)
-                            )
-                    ),
-                    total_count AS (
-                        SELECT COUNT(*) as count FROM tokens_to_update
-                    ),
-                    numbered_tokens AS (
-                        SELECT 
-                            mint_address,
-                            CASE 
-                                WHEN ${batchNumber} % 2 = 0 THEN
-                                    ROW_NUMBER() OVER (ORDER BY COALESCE(volume_24h, 0) DESC)
-                                ELSE
-                                    ROW_NUMBER() OVER (ORDER BY mint_address)
-                            END as row_num
-                        FROM tokens_to_update
-                    )
-                    SELECT 
-                        mint_address,
-                        (SELECT count FROM total_count) as total_tokens
-                    FROM numbered_tokens
-                    WHERE row_num > (${batchNumber} * 50) % (SELECT count FROM total_count)
-                        AND row_num <= ((${batchNumber} * 50) % (SELECT count FROM total_count) + 50)
-                    ORDER BY row_num
+                    SELECT mint_address, volume_24h
+                    FROM onstrument.tokens
+                    ORDER BY volume_24h DESC
+                    OFFSET (${batchNumber} * 50) % (SELECT COUNT(*) FROM onstrument.tokens)
                     LIMIT 50
                 `);
 
-                if (tokensResult.rows.length === 0) {
-                    logger.info('No tokens to update, waiting...');
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    continue;
-                }
-
-                // Log progress
-                const totalTokens = tokensResult.rows[0]?.total_tokens || 0;
-                const currentBatchStart = (batchNumber * 50) % totalTokens;
-                logger.info(`Processing tokens ${currentBatchStart + 1}-${Math.min(currentBatchStart + 50, totalTokens)} of ${totalTokens}`);
+                logger.info('Selected tokens for update', {
+                    batchNumber,
+                    count: tokensResult.rows.length,
+                    tokens: tokensResult.rows.map(t => ({ mint: t.mint_address, volume: t.volume_24h }))
+                });
 
                 await this.updateAllMetrics(tokensResult.rows);
-
-                // Shorter delay to achieve ~200 requests per minute
-                await new Promise(resolve => setTimeout(resolve, 300));
+                logger.info('Completed batch update', { batchNumber });
 
             } catch (error) {
+                logger.error('Error in scheduleUpdates', {
+                    error: (error as Error).message,
+                    stack: (error as Error).stack
+                });
                 await new Promise(resolve => setTimeout(resolve, 5000));
             }
         }
@@ -133,25 +89,38 @@ export class MetricsUpdaterService {
         const client = await dbPool.connect();
 
         try {
-            if (tokens.length === 0) {
-                return;
-            }
+            logger.info('Starting metrics update', { tokenCount: tokens.length });
 
             const addresses = tokens.map(t => t.mint_address).join(',');
+            logger.info('Fetching DexScreener data', { addresses });
+
             const response = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${addresses}`);
             const pairs = await response.json() as DexScreenerResponse[];
 
-            const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
+            logger.info('DexScreener response received', {
+                pairsCount: pairs.length,
+                pairs: pairs.map(p => ({
+                    address: p.baseToken.address,
+                    volume: p.volume?.h24
+                }))
+            });
 
+            const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
             await client.query('BEGIN');
 
             try {
                 for (const token of tokens) {
                     const pair = pairMap.get(token.mint_address);
                     if (!pair) {
-                        logger.warn(`No pair data found for token: ${token.mint_address}`);
+                        logger.warn('No pair data found', { token: token.mint_address });
                         continue;
                     }
+
+                    logger.info('Updating token', {
+                        token: token.mint_address,
+                        newVolume: pair.volume?.h24,
+                        newPrice: pair.priceUsd
+                    });
 
                     const result = await client.query(`
                         UPDATE onstrument.tokens 
@@ -178,7 +147,7 @@ export class MetricsUpdaterService {
                             reserve_in_usd = $20::numeric,
                             last_price_update = NOW()
                         WHERE mint_address = $21
-                        RETURNING mint_address, current_price, volume_24h, last_price_update;
+                        RETURNING mint_address, volume_24h, last_price_update;
                     `, [
                         pair.priceUsd || 0,
                         pair.marketCap || 0,
@@ -202,27 +171,35 @@ export class MetricsUpdaterService {
                         Number(pair.liquidity?.usd || 0),
                         pair.baseToken.address
                     ]);
+
+                    logger.info('Token update complete', {
+                        token: token.mint_address,
+                        updated: result!.rowCount! > 0,
+                        newValues: result!.rows![0]
+                    });
                 }
+
                 await client.query('COMMIT');
+                logger.info('Batch commit complete', { tokenCount: tokens.length });
+
             } catch (error) {
                 await client.query('ROLLBACK');
-                logger.error('Error during token updates:', {
-                    error,
-                    errorMessage: (error as Error).message,
-                    errorStack: (error as Error).stack
+                logger.error('Error during token updates', {
+                    error: (error as Error).message,
+                    stack: (error as Error).stack
                 });
                 throw error;
             }
 
         } catch (error) {
-            logger.error('Error in updateAllMetrics:', {
-                error,
-                errorMessage: (error as Error).message,
-                errorStack: (error as Error).stack
+            logger.error('Error in updateAllMetrics', {
+                error: (error as Error).message,
+                stack: (error as Error).stack
             });
             throw error;
         } finally {
             client.release();
+            logger.info('Database connection released');
         }
     }
 
