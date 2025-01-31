@@ -54,25 +54,32 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                const batchNumber = Math.floor(Date.now() / 1000 / 3);
-                logger.info('Starting update batch', { batchNumber });
+                // Get total count first
+                const countResult = await pool().query('SELECT COUNT(*) FROM onstrument.tokens');
+                const totalTokens = parseInt(countResult.rows[0].count);
+
+                // Use a smaller cycle number (resets every ~hour)
+                const cycleNumber = Math.floor((Date.now() / 1000) % 3600);
+                const offset = (cycleNumber * 30) % totalTokens;
+
+                logger.info('Starting update batch', { cycleNumber, offset, totalTokens });
 
                 const tokensResult = await pool().query(`
                     SELECT mint_address, volume_24h
                     FROM onstrument.tokens
                     ORDER BY volume_24h DESC
-                    OFFSET (${batchNumber} * 50) % (SELECT COUNT(*) FROM onstrument.tokens)
-                    LIMIT 50
-                `);
+                    OFFSET $1 LIMIT 30
+                `, [offset]);
 
                 logger.info('Selected tokens for update', {
-                    batchNumber,
+                    cycleNumber,
+                    offset,
                     count: tokensResult.rows.length,
                     tokens: tokensResult.rows.map(t => ({ mint: t.mint_address, volume: t.volume_24h }))
                 });
 
                 await this.updateAllMetrics(tokensResult.rows);
-                logger.info('Completed batch update', { batchNumber });
+                logger.info('Completed batch update', { cycleNumber });
 
             } catch (error) {
                 logger.error('Error in scheduleUpdates', {
