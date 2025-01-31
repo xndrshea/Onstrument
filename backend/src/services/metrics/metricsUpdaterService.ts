@@ -54,25 +54,51 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
+                const batchNumber = Math.floor(Date.now() / 1000 / 15) % 10; // Changes every 15 seconds, cycles 0-9
+
                 const tokensResult = await pool().query(`
-                    SELECT mint_address 
-                    FROM onstrument.tokens 
-                    WHERE 
-                        -- Only get tokens that haven't been updated in the last minute
-                        (last_price_update < NOW() - INTERVAL '1 minute' OR last_price_update IS NULL)
+                    WITH tokens_to_update AS (
+                        SELECT mint_address, volume_24h
+                        FROM onstrument.tokens
+                        WHERE 
+                            -- High volume tokens: update every 15 minutes
+                            (volume_24h > 100000 AND (last_price_update < NOW() - INTERVAL '15 minutes' OR last_price_update IS NULL))
+                            OR
+                            -- Medium volume tokens: update every 30 minutes
+                            (volume_24h > 10000 AND (last_price_update < NOW() - INTERVAL '30 minutes' OR last_price_update IS NULL))
+                            OR
+                            -- Low volume tokens: update every hour
+                            (last_price_update < NOW() - INTERVAL '1 hour' OR last_price_update IS NULL)
+                    )
+                    SELECT mint_address
+                    FROM (
+                        SELECT mint_address,
+                            CASE 
+                                WHEN ${batchNumber} < 5 THEN
+                                    ROW_NUMBER() OVER (ORDER BY COALESCE(volume_24h, 0) DESC)
+                                ELSE
+                                    ROW_NUMBER() OVER (ORDER BY mint_address)
+                            END as row_num
+                        FROM tokens_to_update
+                    ) ranked
+                    WHERE row_num > ${batchNumber * 50} 
+                        AND row_num <= ${(batchNumber + 1) * 50}
                     ORDER BY 
-                        COALESCE(volume_24h, 0) DESC,
-                        mint_address
-                    LIMIT 30
+                        CASE WHEN ${batchNumber} < 5 THEN row_num END,
+                        CASE WHEN ${batchNumber} >= 5 THEN row_num END
+                    LIMIT 50
                 `);
 
                 if (tokensResult.rows.length === 0) {
                     logger.info('No tokens to update, waiting...');
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     continue;
                 }
                 await this.updateAllMetrics(tokensResult.rows);
 
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Delay to maintain ~200 requests per minute
+                // 60 seconds / 200 requests = 300ms between requests
+                await new Promise(resolve => setTimeout(resolve, 300));
 
             } catch (error) {
                 await new Promise(resolve => setTimeout(resolve, 5000));
@@ -101,7 +127,7 @@ export class MetricsUpdaterService {
                 for (const token of tokens) {
                     const pair = pairMap.get(token.mint_address);
                     if (!pair) {
-                        logger.warn('No pair data found for token:', token.mint_address);
+                        logger.warn(`No pair data found for token: ${token.mint_address}`);
                         continue;
                     }
 
@@ -135,26 +161,25 @@ export class MetricsUpdaterService {
                         pair.priceUsd || 0,
                         pair.marketCap || 0,
                         pair.fdv || 0,
-                        parseFloat(pair.volume?.m5) || 0,
-                        parseFloat(pair.volume?.h1) || 0,
-                        parseFloat(pair.volume?.h6) || 0,
-                        parseFloat(pair.volume?.h24) || 0,
-                        Number(pair.priceChange.m5),
-                        Number(pair.priceChange.h1),
-                        Number(pair.priceChange.h6),
-                        Number(pair.priceChange.h24),
-                        pair.txns.m5.buys,
-                        pair.txns.m5.sells,
-                        pair.txns.h1.buys,
-                        pair.txns.h1.sells,
-                        pair.txns.h6.buys,
-                        pair.txns.h6.sells,
-                        pair.txns.h24.buys,
-                        pair.txns.h24.sells,
-                        Number(pair.liquidity.usd),
+                        parseFloat(pair.volume?.m5 || '0'),
+                        parseFloat(pair.volume?.h1 || '0'),
+                        parseFloat(pair.volume?.h6 || '0'),
+                        parseFloat(pair.volume?.h24 || '0'),
+                        Number(pair.priceChange?.m5 || 0),
+                        Number(pair.priceChange?.h1 || 0),
+                        Number(pair.priceChange?.h6 || 0),
+                        Number(pair.priceChange?.h24 || 0),
+                        pair.txns?.m5?.buys || 0,
+                        pair.txns?.m5?.sells || 0,
+                        pair.txns?.h1?.buys || 0,
+                        pair.txns?.h1?.sells || 0,
+                        pair.txns?.h6?.buys || 0,
+                        pair.txns?.h6?.sells || 0,
+                        pair.txns?.h24?.buys || 0,
+                        pair.txns?.h24?.sells || 0,
+                        Number(pair.liquidity?.usd || 0),
                         pair.baseToken.address
                     ]);
-
                 }
                 await client.query('COMMIT');
             } catch (error) {

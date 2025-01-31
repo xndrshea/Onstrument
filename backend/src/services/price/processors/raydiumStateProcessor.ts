@@ -9,8 +9,6 @@ import type { Umi } from '@metaplex-foundation/umi';
 import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata'
 import { MetadataService } from '../../metadata/metadataService';
 import { BN } from 'bn.js';
-import { PriceFetcher } from './priceFetcher';
-import { PRICE_WHITELIST } from '../../../constants/priceWhitelist';
 
 
 export class RaydiumStateProcessor extends BaseProcessor {
