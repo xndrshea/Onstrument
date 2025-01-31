@@ -54,38 +54,55 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                const batchNumber = Math.floor(Date.now() / 1000 / 15) % 10; // Changes every 15 seconds, cycles 0-9
+                // Change to every 3 seconds to get closer to 200 requests/minute
+                const batchNumber = Math.floor(Date.now() / 1000 / 3); // Changes every 3 seconds
 
                 const tokensResult = await pool().query(`
                     WITH tokens_to_update AS (
                         SELECT mint_address, volume_24h
                         FROM onstrument.tokens
                         WHERE 
-                            -- High volume tokens: update every 15 minutes
-                            (volume_24h > 100000 AND (last_price_update < NOW() - INTERVAL '15 minutes' OR last_price_update IS NULL))
-                            OR
-                            -- Medium volume tokens: update every 30 minutes
-                            (volume_24h > 10000 AND (last_price_update < NOW() - INTERVAL '30 minutes' OR last_price_update IS NULL))
-                            OR
-                            -- Low volume tokens: update every hour
-                            (last_price_update < NOW() - INTERVAL '1 hour' OR last_price_update IS NULL)
-                    )
-                    SELECT mint_address
-                    FROM (
-                        SELECT mint_address,
+                            -- Filter out inactive or fake tokens
+                            (
+                                -- Has some meaningful volume
+                                volume_24h > 100
+                                OR market_cap_usd > 1000
+                                OR reserve_in_usd > 1000
+                                OR (tx_24h_buys + tx_24h_sells) > 10
+                            )
+                            AND
+                            (
+                                -- High volume tokens: update every 15 minutes
+                                (volume_24h > 100000 AND (last_price_update < NOW() - INTERVAL '15 minutes' OR last_price_update IS NULL))
+                                OR
+                                -- Medium volume tokens: update every 30 minutes
+                                (volume_24h > 10000 AND (last_price_update < NOW() - INTERVAL '30 minutes' OR last_price_update IS NULL))
+                                OR
+                                -- Low volume tokens: update every hour
+                                (last_price_update < NOW() - INTERVAL '1 hour' OR last_price_update IS NULL)
+                            )
+                    ),
+                    total_count AS (
+                        SELECT COUNT(*) as count FROM tokens_to_update
+                    ),
+                    numbered_tokens AS (
+                        SELECT 
+                            mint_address,
                             CASE 
-                                WHEN ${batchNumber} < 5 THEN
+                                WHEN ${batchNumber} % 2 = 0 THEN
                                     ROW_NUMBER() OVER (ORDER BY COALESCE(volume_24h, 0) DESC)
                                 ELSE
                                     ROW_NUMBER() OVER (ORDER BY mint_address)
                             END as row_num
                         FROM tokens_to_update
-                    ) ranked
-                    WHERE row_num > ${batchNumber * 50} 
-                        AND row_num <= ${(batchNumber + 1) * 50}
-                    ORDER BY 
-                        CASE WHEN ${batchNumber} < 5 THEN row_num END,
-                        CASE WHEN ${batchNumber} >= 5 THEN row_num END
+                    )
+                    SELECT 
+                        mint_address,
+                        (SELECT count FROM total_count) as total_tokens
+                    FROM numbered_tokens
+                    WHERE row_num > (${batchNumber} * 50) % (SELECT count FROM total_count)
+                        AND row_num <= ((${batchNumber} * 50) % (SELECT count FROM total_count) + 50)
+                    ORDER BY row_num
                     LIMIT 50
                 `);
 
@@ -94,10 +111,15 @@ export class MetricsUpdaterService {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     continue;
                 }
+
+                // Log progress
+                const totalTokens = tokensResult.rows[0]?.total_tokens || 0;
+                const currentBatchStart = (batchNumber * 50) % totalTokens;
+                logger.info(`Processing tokens ${currentBatchStart + 1}-${Math.min(currentBatchStart + 50, totalTokens)} of ${totalTokens}`);
+
                 await this.updateAllMetrics(tokensResult.rows);
 
-                // Delay to maintain ~200 requests per minute
-                // 60 seconds / 200 requests = 300ms between requests
+                // Shorter delay to achieve ~200 requests per minute
                 await new Promise(resolve => setTimeout(resolve, 300));
 
             } catch (error) {
