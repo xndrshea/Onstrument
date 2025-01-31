@@ -49,6 +49,7 @@ export class MetricsUpdaterService {
         this.isRunning = true;
         this.scheduleUpdates();
     }
+    //asdfasdf
 
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
