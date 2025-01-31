@@ -22,27 +22,27 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
 
     useEffect(() => {
         const fetchMetadata = async () => {
-            if (!token.metadataUri) return;
+            if (!token.metadataUrl) return;
             try {
-                const response = await fetch(token.metadataUri);
-                const metadata: TokenMetadata = await response.json();
+                const response = await fetch(token.metadataUrl);
+                const metadata = await response.json();
                 setImageUrl(metadata.image);
             } catch (error) {
-                // Silently fail for metadata fetch errors
+                console.error('Failed to fetch metadata:', error);
             }
         };
         fetchMetadata();
-    }, [token.metadataUri, token.name]);
+    }, [token.metadataUrl]);
 
     return (
-        <div className="bg-[#232427] rounded-lg border border-transparent hover:border-white transition-colors">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all">
             <Link
                 to={`/token/${token.mintAddress}`}
                 state={{ tokenType: 'custom' }}
-                className="flex flex-col sm:flex-row p-4 gap-4"
+                className="flex flex-col sm:flex-row p-6 gap-6"
             >
                 {/* Image container */}
-                <div className="w-full sm:w-40 h-40 sm:h-40 md:w-48 md:h-48 flex-shrink-0">
+                <div className="w-full sm:w-40 h-40 sm:h-40 md:w-48 md:h-48 flex-shrink-0 bg-gray-50 rounded-lg p-2">
                     {imageUrl && (
                         <img
                             src={imageUrl}
@@ -57,17 +57,17 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
 
                 {/* Content container */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-white font-medium truncate">{token.name || 'Unnamed Token'}</h3>
-                        <span className="text-gray-400 text-sm whitespace-nowrap">({token.symbol || 'UNKNOWN'})</span>
+                    <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-gray-900 font-semibold text-lg truncate">{token.name || 'Unnamed Token'}</h3>
+                        <span className="text-gray-500 text-sm whitespace-nowrap">({token.symbol || 'UNKNOWN'})</span>
                     </div>
 
-                    <p className="text-sm text-gray-400 line-clamp-2 mb-2">
+                    <p className="text-sm text-gray-600 line-clamp-2 mb-4">
                         {token.description || 'No description available'}
                     </p>
 
-                    <div className="flex justify-between items-center mt-2">
-                        <div className="text-sm text-gray-400">
+                    <div className="flex justify-between items-center mt-auto">
+                        <div className="text-sm font-medium text-gray-700">
                             Market Cap: {token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
                         </div>
                     </div>

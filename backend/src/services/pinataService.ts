@@ -6,32 +6,51 @@ import { logger } from '../utils/logger';
 
 export const pinataService = {
     async uploadImage(file: Request['file']): Promise<string> {
-        if (!file) throw new Error('No file provided');
+        try {
+            if (!file) throw new Error('No file provided');
 
-        const formData = new FormData();
-        formData.append('file', file.buffer, {
-            filename: file.originalname,
-            contentType: file.mimetype
-        });
+            const formData = new FormData();
+            formData.append('file', file.buffer, {
+                filename: file.originalname,
+                contentType: file.mimetype
+            });
 
-        const metadata = JSON.stringify({
-            name: file.originalname,
-            keyvalues: { type: 'token_image' }
-        });
-        formData.append('pinataMetadata', metadata);
+            const metadata = JSON.stringify({
+                name: file.originalname,
+                keyvalues: { type: 'token_image' }
+            });
+            formData.append('pinataMetadata', metadata);
 
-        const res = await axios.post(
-            "https://api.pinata.cloud/pinning/pinFileToIPFS",
-            formData,
-            {
-                headers: {
-                    ...formData.getHeaders(),
-                    'Authorization': `Bearer ${config.PINATA_JWT}`
+            const res = await axios.post(
+                "https://api.pinata.cloud/pinning/pinFileToIPFS",
+                formData,
+                {
+                    headers: {
+                        ...formData.getHeaders(),
+                        'Authorization': `Bearer ${config.PINATA_JWT}`
+                    },
+                    maxContentLength: Infinity,
+                    maxBodyLength: Infinity
                 }
-            }
-        );
+            );
 
-        return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+            if (!res.data || !res.data.IpfsHash) {
+                throw new Error('Invalid response from Pinata');
+            }
+
+            return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+        } catch (error) {
+            logger.error('Pinata image upload failed:', {
+                error: (error as any).response?.data || (error as any).message,
+                status: (error as any).response?.status,
+                fileInfo: {
+                    filename: file?.originalname,
+                    mimetype: file?.mimetype,
+                    size: file?.size
+                }
+            });
+            throw new Error('Failed to upload image to IPFS');
+        }
     },
 
     async uploadMetadata(metadata: any): Promise<string> {
