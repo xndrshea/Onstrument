@@ -30,7 +30,6 @@ interface DexScreenerResponse {
 export class MetricsUpdaterService {
     private static instance: MetricsUpdaterService;
     private isRunning: boolean = false;
-    private readonly UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
     private constructor() { }
 
@@ -54,7 +53,6 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                // Balance between importance and update fairness
                 const tokensResult = await pool().query(`
                     SELECT mint_address 
                     FROM onstrument.tokens 
@@ -81,7 +79,7 @@ export class MetricsUpdaterService {
                     logger.info('No tokens to update, waiting...');
                     continue;
                 }
-                await this.updateAllMetrics();
+                await this.updateAllMetrics(tokensResult.rows);
 
                 await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -92,21 +90,14 @@ export class MetricsUpdaterService {
         }
     }
 
-    private async updateAllMetrics(): Promise<void> {
+    private async updateAllMetrics(tokens: { mint_address: string }[]): Promise<void> {
         const client = await pool().connect();
         try {
-            const tokensResult = await client.query(`
-                SELECT mint_address 
-                FROM onstrument.tokens 
-                ORDER BY mint_address
-                LIMIT 30
-            `);
-
-            if (tokensResult.rows.length === 0) {
+            if (tokens.length === 0) {
                 return;
             }
 
-            const addresses = tokensResult.rows.map(t => t.mint_address).join(',');
+            const addresses = tokens.map(t => t.mint_address).join(',');
 
             const response = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${addresses}`);
             if (!response.ok) {
@@ -119,11 +110,17 @@ export class MetricsUpdaterService {
             await client.query('BEGIN');
 
             try {
-                for (const token of tokensResult.rows) {
+                for (const token of tokens) {
                     const pair = pairMap.get(token.mint_address);
                     if (!pair) {
                         continue;
                     }
+
+                    logger.info('Updating token metrics:', {
+                        address: pair.baseToken.address,
+                        volume24h: pair.volume.h24,
+                        price: pair.priceUsd
+                    });
 
                     await client.query(`
                         UPDATE onstrument.tokens 
