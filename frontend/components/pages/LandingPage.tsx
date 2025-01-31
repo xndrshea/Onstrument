@@ -1,6 +1,22 @@
 import { Link } from 'react-router-dom';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { TokenCreationForm } from '../TokenCreation/TokenCreationForm';
+import { useState } from 'react';
+import { Dialog } from '@headlessui/react';
 
 export function LandingPage() {
+    const { connected } = useWallet();
+    const { setVisible } = useWalletModal();
+    const [showQuickForm, setShowQuickForm] = useState(false);
+
+    const handleQuickStart = () => {
+        if (!connected) {
+            setVisible(true);
+        } else {
+            setShowQuickForm(!showQuickForm);
+        }
+    };
 
     return (
         <div className="min-h-screen bg-white">
@@ -13,14 +29,52 @@ export function LandingPage() {
                     <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
                         Our mission is to help bring real projects to life.
                     </p>
-                    <Link
-                        to="/create"
-                        className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
-                    >
-                        <span>+</span>
-                        Start Project
-                    </Link>
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-4">
+                        <div className="flex flex-col items-center">
+                            <button
+                                onClick={handleQuickStart}
+                                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
+                            >
+
+                                Start Project
+                            </button>
+                            <span className="text-sm text-gray-500 italic mt-2">in seconds</span>
+                        </div>
+
+                        <div className="flex flex-col items-center">
+                            <Link
+                                to="/create"
+                                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
+                            >
+
+                                Start Project
+                            </Link>
+                            <span className="text-sm text-gray-500 italic mt-2">in minutes</span>
+                        </div>
+
+                        <div className="flex flex-col items-center">
+                            <Link
+                                to="/contact"
+                                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
+                            >
+
+                                Start Project
+                            </Link>
+                            <span className="text-sm text-gray-500 italic mt-2">in days to weeks</span>
+                        </div>
+                    </div>
                 </div>
+
+                {showQuickForm && (
+                    <Dialog open={showQuickForm} onClose={() => setShowQuickForm(false)} className="relative z-50">
+                        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+                        <div className="fixed inset-0 flex items-center justify-center p-4">
+                            <Dialog.Panel className="bg-white rounded-lg p-6 w-full max-w-xl">
+                                <TokenCreationForm />
+                            </Dialog.Panel>
+                        </div>
+                    </Dialog>
+                )}
 
                 {/* How It Works Section */}
                 <div className="mb-20">
