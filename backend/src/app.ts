@@ -143,13 +143,25 @@ export function createApp() {
         ]
     }));
 
-    // Rate limiting
-    app.use(rateLimit({
-        windowMs: 1 * 60 * 1000,    // 1 minute window
-        max: process.env.NODE_ENV === 'development'
-            ? 1000                   // dev: 1000 requests per minute
-            : 600                    // prod: 600 requests per minute
-    }));
+    // Rate limiting - only apply to regular HTTP endpoints, not WebSocket
+    app.use((req, res, next) => {
+        // Skip rate limiting for WebSocket and health check endpoints
+        if (
+            req.path === '/api/ws' ||
+            req.path === '/health' ||
+            req.path === '/api/ws/health'
+        ) {
+            return next();
+        }
+
+        // Apply rate limit to all other routes
+        rateLimit({
+            windowMs: 1 * 60 * 1000,
+            max: process.env.NODE_ENV === 'development' ? 1000 : 600,
+            // Skip X-Forwarded-For validation
+            validate: false
+        })(req, res, next);
+    });
 
     // 5. Apply CSRF protection to API routes
     app.use('/api', (req, res, next) => {
