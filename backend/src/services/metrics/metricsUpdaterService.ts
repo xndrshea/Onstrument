@@ -122,6 +122,26 @@ export class MetricsUpdaterService {
                         continue;
                     }
 
+                    logger.info('Executing UPDATE query:', {
+                        token: pair.baseToken.address,
+                        query: `UPDATE onstrument.tokens SET volume_24h = $1::numeric WHERE mint_address = $2 RETURNING volume_24h, last_price_update`,
+                        params: [pair.volume.h24.toString(), pair.baseToken.address]
+                    });
+
+                    const result = await client.query(`
+                        UPDATE onstrument.tokens 
+                        SET volume_24h = $1::numeric 
+                        WHERE mint_address = $2
+                        RETURNING volume_24h, last_price_update
+                    `, [pair.volume.h24.toString(), pair.baseToken.address]);
+
+                    logger.info('Update result:', {
+                        token: pair.baseToken.address,
+                        oldVolume: result.rows[0]?.volume_24h,
+                        newVolume: pair.volume.h24.toString(),
+                        lastUpdate: result.rows[0]?.last_price_update
+                    });
+
                     await client.query(`
                         UPDATE onstrument.tokens 
                         SET 
@@ -145,8 +165,8 @@ export class MetricsUpdaterService {
                             tx_24h_buys = $18,
                             tx_24h_sells = $19,
                             reserve_in_usd = $20::numeric,
-                            last_price_update = NOW()
-                        WHERE mint_address = $21
+                            last_price_update = $21
+                        WHERE mint_address = $22
                     `, [
                         pair.priceUsd,
                         pair.marketCap.toString(),
@@ -168,7 +188,7 @@ export class MetricsUpdaterService {
                         pair.txns.h24.buys,
                         pair.txns.h24.sells,
                         Number(pair.liquidity.usd),
-                        pair.baseToken.address
+                        result.rows[0]?.last_price_update
                     ]);
                 }
                 await client.query('COMMIT');
