@@ -18,9 +18,9 @@ interface TradingInterfaceProps {
 }
 
 
-// Add new styled components for the terminal look
+// Update styled component for light theme
 const TerminalCard = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
-    <div className={`bg-[#1E222D] border border-gray-800 rounded-lg ${className}`}>
+    <div className={`bg-white border border-gray-200 rounded-lg shadow-sm ${className}`}>
         {children}
     </div>
 );
@@ -413,7 +413,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
         <TerminalCard className="p-4">
             {!connected ? (
                 <div className="text-center mb-4">
-                    <p className="text-gray-400 mb-4">Please connect your wallet to trade</p>
+                    <p className="text-gray-600 mb-4">Please connect your wallet to trade</p>
                     <button
                         onClick={() => setVisible(true)}
                         className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
@@ -423,12 +423,12 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 </div>
             ) : (
                 <>
-                    {/* Price Display - Terminal Style */}
+                    {/* Price Display */}
                     <div className="mb-4">
                         <div className="flex justify-between items-center">
-                            <span className="text-[#808591] text-sm">Price (SOL)</span>
+                            <span className="text-gray-600 text-sm">Price (SOL)</span>
                             <div className="flex items-center gap-2">
-                                <span className="text-2xl font-mono text-white">
+                                <span className="text-2xl font-mono text-gray-900">
                                     {spotPrice ? `${spotPrice.toFixed(6)} SOL` : 'N/A'}
                                 </span>
                             </div>
@@ -436,52 +436,52 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     </div>
 
                     {/* Trading Type Selector */}
-                    <div className="grid grid-cols-2 gap-1 mb-4 bg-[#2C3038] p-1 rounded">
+                    <div className="grid grid-cols-2 gap-1 mb-4 bg-gray-50 p-1 rounded">
                         <button
-                            className={`py-2 px-4 rounded ${!isSelling ? 'bg-[#22C55E] text-white' : 'text-gray-400 hover:text-white'}`}
+                            className={`py-2 px-4 rounded ${!isSelling ? 'bg-green-500 text-white' : 'text-gray-600 hover:text-gray-900'}`}
                             onClick={() => setIsSelling(false)}
                         >
                             Buy
                         </button>
                         <button
-                            className={`py-2 px-4 rounded ${isSelling ? 'bg-[#EF4444] text-white' : 'text-gray-400 hover:text-white'}`}
+                            className={`py-2 px-4 rounded ${isSelling ? 'bg-red-500 text-white' : 'text-gray-600 hover:text-gray-900'}`}
                             onClick={() => setIsSelling(true)}
                         >
                             Sell
                         </button>
                     </div>
 
-                    {/* Amount Input - Terminal Style */}
+                    {/* Amount Input */}
                     <div className="mb-4">
                         <input
                             type="text"
                             value={rawInput}
                             onChange={handleInputChange}
-                            className="w-full p-3 bg-[#2C3038] border border-gray-700 rounded text-white font-mono"
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded text-gray-900 font-mono focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                             placeholder={`0.00 ${isSelling ? token.symbol : 'SOL'}`}
                         />
                     </div>
 
-                    {/* Balance Display - Terminal Style */}
+                    {/* Balance Display */}
                     <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
-                            <span className="text-[#808591] text-sm">Available</span>
-                            <div className="font-mono text-white">
+                            <span className="text-gray-600 text-sm">Available</span>
+                            <div className="font-mono text-gray-900">
                                 {solBalance.toFixed(4)} SOL
                             </div>
                         </div>
                         <div>
-                            <span className="text-[#808591] text-sm">Balance</span>
-                            <div className="font-mono text-white">
+                            <span className="text-gray-600 text-sm">Balance</span>
+                            <div className="font-mono text-gray-900">
                                 {token.decimals ? Number(userBalance) / (10 ** token.decimals) : 'Loading...'} {token.symbol}
                             </div>
                         </div>
                     </div>
 
-                    {/* Slippage Control - Terminal Style */}
+                    {/* Slippage Control */}
                     <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-[#808591] text-sm">Slippage</span>
+                            <span className="text-gray-600 text-sm">Slippage</span>
                             <input
                                 type="text"
                                 value={slippageTolerance * 100}
@@ -491,31 +491,31 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                                         setSlippageTolerance(value / 100);
                                     }
                                 }}
-                                className="w-20 p-1 bg-[#2C3038] border border-gray-700 rounded text-white font-mono text-right"
+                                className="w-20 p-1 bg-gray-50 border border-gray-200 rounded text-gray-900 font-mono text-right focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                             />
                         </div>
                     </div>
 
-                    {/* Trade Button - Terminal Style */}
+                    {/* Trade Button */}
                     <button
                         onClick={handleTransaction}
                         disabled={isLoading || !amount || !isTokenTradable}
                         className={`w-full py-3 rounded font-semibold ${isLoading
-                            ? 'bg-gray-600 cursor-not-allowed'
+                            ? 'bg-gray-300 cursor-not-allowed'
                             : isSelling
-                                ? 'bg-[#EF4444] hover:bg-[#DC2626]'
-                                : 'bg-[#22C55E] hover:bg-[#16A34A]'
-                            } text-white`}
+                                ? 'bg-red-500 hover:bg-red-600'
+                                : 'bg-green-500 hover:bg-green-600'
+                            } text-white transition-colors duration-200`}
                     >
                         {isLoading ? 'Processing...' : `${isSelling ? 'Sell' : 'Buy'} ${token.symbol}`}
                     </button>
 
-                    {/* Quote Display - Terminal Style */}
+                    {/* Quote Display */}
                     {priceInfo && (
-                        <div className="mt-4 p-3 bg-[#2C3038] rounded">
+                        <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
                             <div className="flex justify-between text-sm">
-                                <span className="text-[#808591]">Expected Output</span>
-                                <span className="text-white font-mono">
+                                <span className="text-gray-600">Expected Output</span>
+                                <span className="text-gray-900 font-mono">
                                     {isSelling
                                         ? `${priceInfo.totalCost.toFixed(6)} SOL`
                                         : `${priceInfo.price.toFixed(6)} ${token.symbol}`
@@ -525,9 +525,9 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                         </div>
                     )}
 
-                    {/* Error Display - Terminal Style */}
+                    {/* Error Display */}
                     {error && (
-                        <div className="mt-4 p-3 bg-red-900/20 border border-red-500 text-red-400 rounded text-sm">
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded text-sm">
                             {error}
                         </div>
                     )}

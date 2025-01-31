@@ -71,33 +71,21 @@ export function MarketPage() {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                                     Token
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Price
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     24h Change
                                 </th>
-                                <th
-                                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                                    onClick={() => {
-                                        // Cycle through volume sorting options
-                                        if (sortBy === 'volume24h') setSortBy('volume1h');
-                                        else if (sortBy === 'volume1h') setSortBy('volume5m');
-                                        else if (sortBy === 'volume5m') setSortBy('volume24h');
-                                        else setSortBy('volume24h');
-                                    }}
-                                >
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
                                     {sortBy === 'volume24h' ? '24h Volume' :
                                         sortBy === 'volume1h' ? '1h Volume' :
                                             sortBy === 'volume5m' ? '5m Volume' : 'Volume'}
                                 </th>
-                                <th
-                                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                                    onClick={() => setSortBy('marketCapUsd')}
-                                >
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Market Cap
                                 </th>
                             </tr>
@@ -109,7 +97,7 @@ export function MarketPage() {
                                     className="hover:bg-gray-50 cursor-pointer"
                                     onClick={() => navigate(`/token/${token.mintAddress}`)}
                                 >
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 w-1/3">
                                         <div className="flex items-center gap-2">
                                             {token.imageUrl && (
                                                 <img
@@ -124,13 +112,13 @@ export function MarketPage() {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {Number(token.priceChange24h)?.toFixed(2)}
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-left text-gray-500">
+                                        ${Number(token.currentPrice)?.toFixed(2)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-left text-gray-500">
                                         {Number(token.priceChange24h)?.toFixed(1)}%
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-left text-gray-500">
                                         ${formatNumber(
                                             sortBy === 'volume24h' ? (token.volume24h || 0) :
                                                 sortBy === 'volume1h' ? (token.volume1h || 0) :
@@ -138,7 +126,7 @@ export function MarketPage() {
                                                         token.volume24h || 0
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-left text-gray-500">
                                         {formatMarketCap(token.marketCapUsd || 0)}
                                     </td>
                                 </tr>

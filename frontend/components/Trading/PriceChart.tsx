@@ -36,20 +36,20 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice, onP
                     onPriceUpdate={onPriceUpdate}
                     chartStyle={{
                         layout: {
-                            backgroundColor: '#1E222D',
-                            textColor: '#D9D9D9',
+                            backgroundColor: '#FFFFFF',
+                            textColor: '#333333',
                         },
                         grid: {
-                            vertLines: { color: '#2B2B43' },
-                            horzLines: { color: '#2B2B43' },
+                            vertLines: { color: '#E6E6E6' },
+                            horzLines: { color: '#E6E6E6' },
                         },
                         timeScale: {
-                            borderColor: '#2B2B43',
+                            borderColor: '#E6E6E6',
                             timeVisible: true,
                             secondsVisible: false,
                         },
                         priceScale: {
-                            borderColor: '#2B2B43',
+                            borderColor: '#E6E6E6',
                         },
                     }}
                 />
@@ -93,7 +93,7 @@ export function PriceChart({ token, width = 600, height = 300, currentPrice, onP
                         border: 'none',
                     }}
                     title="GeckoTerminal Embed"
-                    src={`https://www.geckoterminal.com/solana/pools/${mostLiquidPool}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0`}
+                    src={`https://www.geckoterminal.com/solana/pools/${mostLiquidPool}?embed=1&info=0&swaps=0&grayscale=0&light_chart=1`}
                     allow="clipboard-write"
                     allowFullScreen
                 />
