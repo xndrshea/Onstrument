@@ -57,20 +57,10 @@ export class MetricsUpdaterService {
                 const tokensResult = await pool().query(`
                     SELECT mint_address 
                     FROM onstrument.tokens 
+                    WHERE 
+                        -- Only get tokens that haven't been updated in the last 10 minutes
+                        (last_price_update < NOW() - INTERVAL '10 minutes' OR last_price_update IS NULL)
                     ORDER BY 
-                        CASE
-                            -- High priority: Important tokens not updated in 5+ minutes
-                            WHEN volume_24h > 1000000 AND (last_price_update < NOW() - INTERVAL '5 minutes' OR last_price_update IS NULL) THEN 0
-                            
-                            -- Medium priority: Any token not updated in 15+ minutes
-                            WHEN last_price_update < NOW() - INTERVAL '15 minutes' OR last_price_update IS NULL THEN 1
-                            
-                            -- Lower priority: Important tokens updated recently
-                            WHEN volume_24h > 1000000 THEN 2
-                            
-                            -- Lowest priority: Everything else
-                            ELSE 3
-                        END,
                         COALESCE(volume_24h, 0) DESC,
                         mint_address
                     LIMIT 30
@@ -91,8 +81,7 @@ export class MetricsUpdaterService {
     }
 
     private async updateAllMetrics(tokens: { mint_address: string }[]): Promise<void> {
-        // Get a single client from the existing pool
-        const dbPool = pool();  // Get the singleton pool instance
+        const dbPool = pool();
         const client = await dbPool.connect();
 
         try {
@@ -101,21 +90,18 @@ export class MetricsUpdaterService {
             }
 
             const addresses = tokens.map(t => t.mint_address).join(',');
-
             const response = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${addresses}`);
-            if (!response.ok) {
-                throw new Error(`DexScreener API error: ${response.statusText}`);
-            }
-
             const pairs = await response.json() as DexScreenerResponse[];
-            const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
 
-            logger.info('DexScreener response for high volume tokens:', {
-                requestedAddresses: addresses,
-                responseStatus: response.status,
-                pairsReceived: pairs.length,
-                firstPair: pairs[0]
+            // Add more detailed logging
+            logger.info('Token batch details:', {
+                requestedTokens: tokens.map(t => t.mint_address),
+                receivedPairs: pairs.map(p => p.baseToken.address),
+                totalRequested: tokens.length,
+                totalReceived: pairs.length
             });
+
+            const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
 
             await client.query('BEGIN');
 
@@ -123,30 +109,18 @@ export class MetricsUpdaterService {
                 for (const token of tokens) {
                     const pair = pairMap.get(token.mint_address);
                     if (!pair) {
+                        logger.warn('No pair data found for token:', token.mint_address);
                         continue;
                     }
 
-                    logger.info('Executing UPDATE query:', {
-                        token: pair.baseToken.address,
-                        query: `UPDATE onstrument.tokens SET volume_24h = $1::numeric WHERE mint_address = $2 RETURNING volume_24h, last_price_update`,
-                        params: [pair.volume.h24.toString(), pair.baseToken.address]
+                    // Log each update attempt
+                    logger.info('Updating token:', {
+                        mintAddress: token.mint_address,
+                        price: pair.priceUsd,
+                        volume24h: pair.volume.h24
                     });
 
                     const result = await client.query(`
-                        UPDATE onstrument.tokens 
-                        SET volume_24h = $1::numeric 
-                        WHERE mint_address = $2
-                        RETURNING volume_24h, last_price_update
-                    `, [pair.volume.h24.toString(), pair.baseToken.address]);
-
-                    logger.info('Update result:', {
-                        token: pair.baseToken.address,
-                        oldVolume: result.rows[0]?.volume_24h,
-                        newVolume: pair.volume.h24.toString(),
-                        lastUpdate: result.rows[0]?.last_price_update
-                    });
-
-                    await client.query(`
                         UPDATE onstrument.tokens 
                         SET 
                             current_price = $1::numeric,
@@ -171,6 +145,7 @@ export class MetricsUpdaterService {
                             reserve_in_usd = $20::numeric,
                             last_price_update = NOW()
                         WHERE mint_address = $21
+                        RETURNING mint_address, current_price, volume_24h
                     `, [
                         pair.priceUsd,
                         pair.marketCap.toString(),
@@ -194,14 +169,31 @@ export class MetricsUpdaterService {
                         Number(pair.liquidity.usd),
                         pair.baseToken.address
                     ]);
+
+                    // Log the result
+                    logger.info('Update result:', {
+                        mintAddress: token.mint_address,
+                        rowsAffected: result.rowCount,
+                        updatedData: result.rows[0]
+                    });
                 }
                 await client.query('COMMIT');
             } catch (error) {
                 await client.query('ROLLBACK');
+                logger.error('Error during token updates:', {
+                    error,
+                    errorMessage: (error as Error).message,
+                    errorStack: (error as Error).stack
+                });
                 throw error;
             }
 
         } catch (error) {
+            logger.error('Error in updateAllMetrics:', {
+                error,
+                errorMessage: (error as Error).message,
+                errorStack: (error as Error).stack
+            });
             throw error;
         } finally {
             client.release();
