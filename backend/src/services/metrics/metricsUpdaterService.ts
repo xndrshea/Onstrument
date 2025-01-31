@@ -54,32 +54,41 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                // Get total count first
-                const countResult = await pool().query('SELECT COUNT(*) FROM onstrument.tokens');
-                const totalTokens = parseInt(countResult.rows[0].count);
+                logger.info('Starting update batch');
 
-                // Use a smaller cycle number (resets every ~hour)
-                const cycleNumber = Math.floor((Date.now() / 1000) % 3600);
-                const offset = (cycleNumber * 30) % totalTokens;
-
-                logger.info('Starting update batch', { cycleNumber, offset, totalTokens });
-
+                // Get top tokens by volume and any new tokens that haven't been checked
                 const tokensResult = await pool().query(`
-                    SELECT mint_address, volume_24h
-                    FROM onstrument.tokens
-                    ORDER BY volume_24h DESC
-                    OFFSET $1 LIMIT 30
-                `, [offset]);
+                    (
+                        SELECT mint_address, volume_24h, last_price_update
+                        FROM onstrument.tokens 
+                        WHERE volume_24h > 0
+                        AND (last_price_update IS NULL OR last_price_update < NOW() - INTERVAL '10 minutes')
+                        ORDER BY volume_24h DESC
+                        LIMIT 20
+                    )
+                    UNION ALL
+                    (
+                        SELECT mint_address, volume_24h, last_price_update
+                        FROM onstrument.tokens
+                        WHERE last_price_update IS NULL
+                        LIMIT 10
+                    )
+                `);
 
                 logger.info('Selected tokens for update', {
-                    cycleNumber,
-                    offset,
                     count: tokensResult.rows.length,
-                    tokens: tokensResult.rows.map(t => ({ mint: t.mint_address, volume: t.volume_24h }))
+                    tokens: tokensResult.rows.map(t => ({
+                        mint: t.mint_address,
+                        volume: t.volume_24h,
+                        lastUpdate: t.last_price_update
+                    }))
                 });
 
                 await this.updateAllMetrics(tokensResult.rows);
-                logger.info('Completed batch update', { cycleNumber });
+                logger.info('Completed batch update');
+
+                // Wait 5 seconds before next batch
+                await new Promise(resolve => setTimeout(resolve, 5000));
 
             } catch (error) {
                 logger.error('Error in scheduleUpdates', {

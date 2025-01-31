@@ -40,6 +40,14 @@ export function LandingPage() {
                             </p>
                         </div>
 
+
+                        <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-8 rounded-2xl">
+                            <p className="text-xl text-gray-700">
+                                If you want custom tokenization solutions, reach out to us on Telegram or X. We can make anything happen,
+                                as long as it's on-chain.
+                            </p>
+                        </div>
+
                     </div>
                 </div>
 
