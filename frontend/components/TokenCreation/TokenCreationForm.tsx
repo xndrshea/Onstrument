@@ -363,7 +363,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 disabled={isLoading || uploadingImage || !!supplyError || !!error}
                 className={`submit-button ${isLoading || uploadingImage ? 'loading' : ''}`}
             >
-                {isLoading || uploadingImage ? 'Creating Token...' : 'Create Token'}
+                {isLoading || uploadingImage ? 'Creating...' : 'Create'}
             </button>
         </form>
     )
