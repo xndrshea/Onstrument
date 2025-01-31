@@ -91,7 +91,10 @@ export class MetricsUpdaterService {
     }
 
     private async updateAllMetrics(tokens: { mint_address: string }[]): Promise<void> {
-        const client = await pool().connect();
+        // Get a single client from the existing pool
+        const dbPool = pool();  // Get the singleton pool instance
+        const client = await dbPool.connect();
+
         try {
             if (tokens.length === 0) {
                 return;
@@ -111,7 +114,7 @@ export class MetricsUpdaterService {
                 requestedAddresses: addresses,
                 responseStatus: response.status,
                 pairsReceived: pairs.length,
-                firstPair: pairs[0] // Let's see what data we're getting
+                firstPair: pairs[0]
             });
 
             await client.query('BEGIN');
@@ -166,8 +169,8 @@ export class MetricsUpdaterService {
                             tx_24h_buys = $18,
                             tx_24h_sells = $19,
                             reserve_in_usd = $20::numeric,
-                            last_price_update = $21
-                        WHERE mint_address = $22
+                            last_price_update = NOW()
+                        WHERE mint_address = $21
                     `, [
                         pair.priceUsd,
                         pair.marketCap.toString(),
@@ -189,7 +192,7 @@ export class MetricsUpdaterService {
                         pair.txns.h24.buys,
                         pair.txns.h24.sells,
                         Number(pair.liquidity.usd),
-                        result.rows[0]?.last_price_update
+                        pair.baseToken.address
                     ]);
                 }
                 await client.query('COMMIT');
