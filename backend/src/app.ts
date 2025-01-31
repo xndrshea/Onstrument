@@ -220,6 +220,8 @@ export function createApp() {
     // Initialize cron jobs
     initializeSolPriceJob();
 
+    app.set('trust proxy', true);
+
     return app
 }
 
