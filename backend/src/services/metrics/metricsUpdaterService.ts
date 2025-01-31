@@ -148,13 +148,13 @@ export class MetricsUpdaterService {
                             last_price_update = NOW()
                         WHERE mint_address = $21
                     `, [
-                        Number(pair.priceUsd),
-                        Number(pair.marketCap),
-                        Number(pair.fdv),
-                        Number(pair.volume.m5),
-                        Number(pair.volume.h1),
-                        Number(pair.volume.h6),
-                        Number(pair.volume.h24),
+                        pair.priceUsd,
+                        pair.marketCap.toString(),
+                        pair.fdv.toString(),
+                        pair.volume.m5.toString(),
+                        pair.volume.h1.toString(),
+                        pair.volume.h6.toString(),
+                        pair.volume.h24.toString(),
                         Number(pair.priceChange.m5),
                         Number(pair.priceChange.h1),
                         Number(pair.priceChange.h6),
