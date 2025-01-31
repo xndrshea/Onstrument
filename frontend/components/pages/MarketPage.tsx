@@ -50,32 +50,38 @@ export function MarketPage() {
     if (error) return <div className="p-4 text-red-500">{error}</div>
 
     return (
-        <div className="p-4 bg-[#1C1D21]">
-            <div className="max-w-7xl mx-auto">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold text-white">Market</h1>
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="bg-[#2C2D33] text-white rounded px-3 py-1 text-sm"
-                    >
-                        <option value="volume24h">24h Volume</option>
-                        <option value="volume1h">1h Volume</option>
-                        <option value="volume5m">5m Volume</option>
-                        <option value="marketCapUsd">Market Cap</option>
-                        <option value="priceChange24h">24h Change</option>
-                    </select>
-                </div>
+        <div className="min-h-screen bg-white">
+            <div className="max-w-7xl mx-auto px-4 py-8">
+                <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900">Market</h1>
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="bg-gray-50 text-gray-500 rounded px-3 py-1 text-sm"
+                        >
+                            <option value="volume24h">24h Volume</option>
+                            <option value="volume1h">1h Volume</option>
+                            <option value="volume5m">5m Volume</option>
+                            <option value="marketCapUsd">Market Cap</option>
+                            <option value="priceChange24h">24h Change</option>
+                        </select>
+                    </div>
 
-                {/* Market Table */}
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="text-sm text-gray-400 border-b border-gray-800">
-                                <th className="py-3 text-left w-[40%]">Token</th>
-                                <th className="py-3 text-right w-[20%]">24h Change</th>
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Token
+                                </th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Price
+                                </th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    24h Change
+                                </th>
                                 <th
-                                    className="py-3 text-right w-[20%] cursor-pointer hover:text-white"
+                                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
                                     onClick={() => {
                                         // Cycle through volume sorting options
                                         if (sortBy === 'volume24h') setSortBy('volume1h');
@@ -89,21 +95,21 @@ export function MarketPage() {
                                             sortBy === 'volume5m' ? '5m Volume' : 'Volume'}
                                 </th>
                                 <th
-                                    className="py-3 text-right w-[20%] cursor-pointer hover:text-white"
+                                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
                                     onClick={() => setSortBy('marketCapUsd')}
                                 >
                                     Market Cap
                                 </th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="bg-white divide-y divide-gray-200">
                             {tokens.map(token => (
                                 <tr
                                     key={token.mintAddress}
-                                    className="border-b border-gray-800 hover:bg-[#2C2D33] cursor-pointer"
+                                    className="hover:bg-gray-50 cursor-pointer"
                                     onClick={() => navigate(`/token/${token.mintAddress}`)}
                                 >
-                                    <td className="py-4 w-[40%]">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                         <div className="flex items-center gap-2">
                                             {token.imageUrl && (
                                                 <img
@@ -113,15 +119,18 @@ export function MarketPage() {
                                                 />
                                             )}
                                             <div>
-                                                <div className="font-medium text-white">{token.symbol}</div>
-                                                <div className="text-sm text-gray-400">{token.name}</div>
+                                                <div className="font-medium text-gray-900">{token.symbol}</div>
+                                                <div className="text-sm text-gray-500">{token.name}</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className={`py-4 text-right w-[20%] ${(token.priceChange24h || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {Number(token.priceChange24h)?.toFixed(2)}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {Number(token.priceChange24h)?.toFixed(1)}%
                                     </td>
-                                    <td className="py-4 text-right w-[20%] text-white">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         ${formatNumber(
                                             sortBy === 'volume24h' ? (token.volume24h || 0) :
                                                 sortBy === 'volume1h' ? (token.volume1h || 0) :
@@ -129,7 +138,7 @@ export function MarketPage() {
                                                         token.volume24h || 0
                                         )}
                                     </td>
-                                    <td className="py-4 text-right w-[20%] text-white">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {formatMarketCap(token.marketCapUsd || 0)}
                                     </td>
                                 </tr>
@@ -143,17 +152,17 @@ export function MarketPage() {
                     <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="px-4 py-2 bg-[#2C2D33] rounded disabled:opacity-50"
+                        className="px-4 py-2 bg-gray-50 rounded disabled:opacity-50"
                     >
                         Previous
                     </button>
-                    <span className="px-4 py-2 text-gray-400">
+                    <span className="px-4 py-2 text-gray-500">
                         Page {currentPage} of {totalPages}
                     </span>
                     <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="px-4 py-2 bg-[#2C2D33] rounded disabled:opacity-50"
+                        className="px-4 py-2 bg-gray-50 rounded disabled:opacity-50"
                     >
                         Next
                     </button>

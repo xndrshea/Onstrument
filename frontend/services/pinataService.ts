@@ -8,13 +8,10 @@ export const pinataService = {
         const url = `/api/upload/image`;
         console.log('Attempting upload to:', url);
 
-        const headers = await getFullHeaders();
-      
 
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                ...headers,
                 'Accept': 'application/json',
             },
             credentials: 'include',

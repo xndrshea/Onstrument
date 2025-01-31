@@ -17,6 +17,8 @@ import { TokenList } from './components/TokenList/TokenList'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { UserService } from './services/userService'
 import { useScrollLock } from './hooks/useScrollLock'
+import { LandingPage } from './components/pages/LandingPage'
+import { ProjectsPage } from './components/pages/ProjectsPage'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -62,7 +64,7 @@ function App() {
         <Router>
             <div style={{
                 minHeight: '100vh',
-                backgroundColor: '#1a1b1f',
+                backgroundColor: 'white',
                 display: 'flex',
                 flexDirection: 'column'
             }}>
@@ -74,20 +76,16 @@ function App() {
 
                 <main style={{
                     padding: '20px',
-                    color: 'white',
+                    color: '#1a1b1f',
                     flex: '1 1 auto',
-                    minHeight: 0  // Add this to prevent flex item from growing
+                    minHeight: 0
                 }}>
                     <Routes>
-                        <Route path="/" element={
-                            <TokenList
-                                onCreateClick={handleCreateClick}
-                                key={refreshTrigger}
-                            />
-                        } />
+                        <Route path="/" element={<LandingPage />} />
+                        <Route path="/projects" element={<ProjectsPage />} />
                         <Route path="/market" element={<MarketPage />} />
-                        <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
                         <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
+                        <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />
                         <Route path="/profile" element={<ProfilePage />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                         <Route path="/terms-of-service" element={<TermsOfService />} />

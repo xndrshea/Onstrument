@@ -16,6 +16,8 @@ import csrf from 'csurf'
 import cookieParser from 'cookie-parser'
 import path from 'path'
 import { MetricsUpdaterService } from './services/metrics/metricsUpdaterService'
+import bodyParser from 'body-parser'
+import multer from 'multer'
 
 // Add at the top of the file
 declare global {
@@ -97,29 +99,7 @@ export function createApp() {
         crossOriginOpenerPolicy: false,
     }))
 
-    // 1. Cookie parser needs to be before any CSRF middleware
-    app.use(cookieParser())
-
-    // 2. Body parsing middleware
-    app.use(express.json({ limit: '10mb' }))  // Handle JSON
-    app.use(express.urlencoded({ extended: true, limit: '10mb' }))
-
-    // 3. Single CSRF middleware configuration
-    const csrfProtection = csrf({
-        cookie: {
-            key: '_csrf',
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            httpOnly: true
-        }
-    });
-
-    // 4. CSRF token endpoint
-    app.get('/api/csrf-token', csrfProtection, (req, res) => {
-        res.json({ csrfToken: req.csrfToken() });
-    });
-
-    // CORS setup
+    // CORS setup first
     app.use(cors({
         origin: process.env.NODE_ENV === 'production'
             ? 'https://onstrument.com'
@@ -142,6 +122,46 @@ export function createApp() {
             'Authorization'
         ]
     }));
+
+    // File upload middleware needs to come before body parsers
+    const upload = multer({
+        storage: multer.memoryStorage(),
+        limits: {
+            fileSize: 5 * 1024 * 1024 // 5MB limit
+        }
+    }).single('file');
+
+    // Route-specific file upload handling
+    app.post('/api/upload/image', (req, res, next) => {
+        upload(req, res, (err) => {
+            if (err instanceof multer.MulterError) {
+                return res.status(400).json({ error: 'File upload error: ' + err.message });
+            } else if (err) {
+                return res.status(500).json({ error: 'Unknown error: ' + err.message });
+            }
+            next();
+        });
+    });
+
+    // Cookie parser and body parsers after file upload
+    app.use(cookieParser())
+    app.use(bodyParser.json())
+    app.use(bodyParser.urlencoded({ extended: true }))
+
+    // 3. Single CSRF middleware configuration
+    const csrfProtection = csrf({
+        cookie: {
+            key: '_csrf',
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            httpOnly: true
+        }
+    });
+
+    // 4. CSRF token endpoint
+    app.get('/api/csrf-token', csrfProtection, (req, res) => {
+        res.json({ csrfToken: req.csrfToken() });
+    });
 
     // Rate limiting - only apply to regular HTTP endpoints, not WebSocket
     app.use((req, res, next) => {
@@ -172,13 +192,14 @@ export function createApp() {
 
         // Exempt only essential endpoints that have their own auth
         const csrfExemptPaths = [
-            '/auth/nonce',           // Uses wallet signature
-            '/auth/verify',          // Uses wallet signature
-            '/auth/verify-silent',   // Uses JWT
-            '/auth/logout',          // Uses JWT
-            '/ws',                   // WebSocket connection
-            '/helius',               // Proxied RPC calls
-            '/upload/*'          // Uses Pinata auth
+            '/auth/nonce',
+            '/auth/verify',
+            '/auth/verify-silent',
+            '/auth/logout',
+            '/ws',
+            '/helius',
+            '/upload/image',         // Changed from /upload/* to be more specific
+            '/upload/metadata'       // Added specific metadata endpoint
         ];
 
         if (csrfExemptPaths.some(path => req.path.startsWith(path))) {

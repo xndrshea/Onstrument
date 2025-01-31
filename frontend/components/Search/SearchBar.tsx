@@ -73,28 +73,28 @@ export function SearchBar() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search tokens..."
-                className="w-64 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-primary"
+                placeholder="Search projects..."
+                className="w-64 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             />
 
             {(results.length > 0 || isLoading || error) && query && (
-                <div className="absolute z-50 w-full mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                <div className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto">
                     {isLoading && (
-                        <div className="p-4 text-gray-400 text-center">Loading...</div>
+                        <div className="p-4 text-gray-500 text-center">Loading...</div>
                     )}
 
                     {error && (
-                        <div className="p-4 text-red-400 text-center">{error}</div>
+                        <div className="p-4 text-red-500 text-center">{error}</div>
                     )}
 
                     {!isLoading && !error && results.map((result) => (
                         <button
                             key={result.mint_address}
                             onClick={() => handleSelect(result)}
-                            className="w-full px-4 py-2 text-left hover:bg-gray-700 focus:outline-none"
+                            className="w-full px-4 py-2 text-left hover:bg-gray-50 focus:outline-none"
                         >
-                            <div className="font-medium text-white">{result.name}</div>
-                            <div className="text-sm text-gray-400">
+                            <div className="font-medium text-gray-900">{result.name}</div>
+                            <div className="text-sm text-gray-500">
                                 {result.symbol} • {result.mint_address.slice(0, 4)}...{result.mint_address.slice(-4)}
                             </div>
                         </button>

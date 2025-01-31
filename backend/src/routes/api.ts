@@ -21,7 +21,15 @@ import { csrfProtection } from '../middleware/csrfProtection';
 
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+
+// Configure multer for file uploads
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    }
+});
+
 let heliusManagerInstance: HeliusManager | null = null;
 const getHeliusManager = () => {
     if (!heliusManagerInstance) {
@@ -940,17 +948,36 @@ router.get('/users/:walletAddress/trading-stats', ...[authMiddleware, verifyWall
     }
 });
 
-// File upload endpoint
-router.post('/upload/image', upload.single('file'), async (req, res) => {
+// Update the file upload endpoint to explicitly handle SVG files as well
+router.post('/upload/image', async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No file provided' });
         }
+
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+        if (!allowedMimeTypes.includes(req.file.mimetype)) {
+            return res.status(400).json({
+                error: 'Invalid file type. Only JPEG, PNG, GIF, WebP, and SVG images are allowed.'
+            });
+        }
+
         const imageUrl = await pinataService.uploadImage(req.file);
         res.json({ url: imageUrl });
     } catch (error) {
-        console.error('Image upload error:', error);
-        res.status(500).json({ error: 'Failed to upload image' });
+        logger.error('Image upload error:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            fileInfo: req.file ? {
+                mimetype: req.file.mimetype,
+                size: req.file.size,
+                originalname: req.file.originalname
+            } : null
+        });
+        res.status(500).json({
+            error: 'Failed to upload image',
+            details: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 });
 
