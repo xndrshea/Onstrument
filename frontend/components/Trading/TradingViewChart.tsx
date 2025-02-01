@@ -323,77 +323,110 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 scale_mode: 'Normal',
                 custom_themes: {
                     light: {
-                        // Blue (buttons, selections) - 20 shades
+                        // Blue (color1)
                         "color1": [
                             "#f5f8ff", "#e5efff", "#d6e6ff", "#c6dcff", "#b7d3ff",
                             "#a8caff", "#98c1ff", "#89b8ff", "#79afff", "#6aa6ff",
                             "#5a9dff", "#4d94ff", "#4687ea", "#3f7ad5", "#386dbf",
                             "#3161aa", "#2a5495", "#244880", "#1d3b6a", "#162e55"
                         ],
-
-                        // Grey (text, lines) - 20 shades
+                        // Grey (color2)
                         "color2": [
                             "#f7f7f7", "#efefef", "#e7e7e7", "#dfdfdf", "#d7d7d7",
                             "#cfcfcf", "#c7c7c7", "#bfbfbf", "#b7b7b7", "#afafaf",
                             "#a7a7a7", "#9f9f9f", "#919191", "#848484", "#767676",
                             "#696969", "#5b5b5b", "#4e4e4e", "#404040", "#333333"
                         ],
-
-                        // Red (down moves) - 20 shades
+                        // Red (color3)
                         "color3": [
                             "#fff0f0", "#ffe1e1", "#ffd3d3", "#ffc4c4", "#ffb5b5",
                             "#ffa6a6", "#ff9797", "#ff8888", "#ff7a7a", "#ff6b6b",
                             "#ff5d5d", "#ff4d4d", "#ea4747", "#d54040", "#bf3a3a",
                             "#aa3333", "#952d2d", "#802727", "#6a2020", "#551a1a"
                         ],
-
-                        // Green (up moves) - 20 shades
+                        // Green (color4)
                         "color4": [
                             "#f0fff7", "#e1fff0", "#d3ffe8", "#c4ffe1", "#b5ffda",
                             "#a6ffd3", "#97ffcc", "#88ffc5", "#7affbe", "#6bffb7",
                             "#5cffb0", "#4dffaa", "#47ea9b", "#40d58d", "#3abf7f",
                             "#33aa71", "#2d9563", "#278055", "#206a47", "#1a5539"
+                        ],
+                        // Orange (color5)
+                        "color5": [
+                            "#fff7f0", "#ffefe1", "#ffe7d3", "#ffdfc4", "#ffd7b5",
+                            "#ffcfa6", "#ffc797", "#ffbf88", "#ffb77a", "#ffaf6b",
+                            "#ffa75d", "#ff9f4d", "#ea9147", "#d58340", "#bf763a",
+                            "#aa6833", "#955b2d", "#804e27", "#6a4120", "#55341a"
+                        ],
+                        // Purple (color6)
+                        "color6": [
+                            "#f7f0ff", "#efe1ff", "#e7d3ff", "#dfc4ff", "#d7b5ff",
+                            "#cfa6ff", "#c797ff", "#bf88ff", "#b77aff", "#af6bff",
+                            "#a75dff", "#9f4dff", "#9147ea", "#8340d5", "#763abf",
+                            "#6833aa", "#5b2d95", "#4e2780", "#41206a", "#341a55"
+                        ],
+                        // Yellow (color7)
+                        "color7": [
+                            "#fffff0", "#ffffe1", "#ffffd3", "#ffffc4", "#ffffb5",
+                            "#ffffa6", "#ffff97", "#ffff88", "#ffff7a", "#ffff6b",
+                            "#ffff5d", "#ffff4d", "#eaea47", "#d5d540", "#bfbf3a",
+                            "#aaaa33", "#95952d", "#808027", "#6a6a20", "#55551a"
                         ]
                     }
                 }
             });
 
-            widgetRef.current.onChartReady(() => {
-                try {
-                    // Wait for header to be ready before creating button
-                    widgetRef.current.headerReady().then(() => {
-                        const button = widgetRef.current.createButton();
+            widgetRef.current.onReady(() => {
+                setTimeout(() => {
+                    try {
+                        // Wait for header to be ready before creating button
+                        widgetRef.current.headerReady().then(() => {
+                            const button = widgetRef.current.createButton();
 
-                        // Match TradingView's button styling
-                        button.textContent = denomination;
-                        button.style.color = "#1e293b";
-                        button.style.padding = "0 12px";
-                        button.style.display = "flex";
-                        button.style.alignItems = "center";
-                        button.style.height = "100%";
-                        button.style.cursor = "pointer";
+                            // Match TradingView's button styling
+                            button.textContent = denomination;
+                            button.style.color = "#1e293b";
+                            button.style.padding = "0 12px";
+                            button.style.display = "flex";
+                            button.style.alignItems = "center";
+                            button.style.height = "100%";
+                            button.style.cursor = "pointer";
 
-                        // Add hover effect
-                        button.addEventListener('mouseenter', () => {
-                            button.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
-                        });
-                        button.addEventListener('mouseleave', () => {
-                            button.style.backgroundColor = "transparent";
-                        });
-
-                        button.addEventListener("click", () => {
-                            setDenomination(prev => {
-                                const next = prev === 'SOL' ? 'USD' :
-                                    prev === 'USD' ? 'MCAP' : 'SOL';
-                                button.textContent = next;
-                                return next;
+                            // Add hover effect
+                            button.addEventListener('mouseenter', () => {
+                                button.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
                             });
-                            widgetRef.current.chart().resetData();
+                            button.addEventListener('mouseleave', () => {
+                                button.style.backgroundColor = "transparent";
+                            });
+
+                            button.addEventListener("click", () => {
+                                setDenomination(prev => {
+                                    const next = prev === 'SOL' ? 'USD' :
+                                        prev === 'USD' ? 'MCAP' : 'SOL';
+                                    button.textContent = next;
+                                    return next;
+                                });
+                                widgetRef.current.chart().resetData();
+                            });
                         });
-                    });
-                } catch (error) {
-                    console.error('Error setting up button:', error);
-                }
+
+                        const defaultTheme = {
+                            "chart": {
+                                "layout": {
+                                    "background": {
+                                        "type": "solid",
+                                        "color": "#ffffff"
+                                    }
+                                }
+                            }
+                        };
+
+                        widgetRef.current.applyOverrides(defaultTheme);
+                    } catch (error) {
+                        console.error('Error setting up button:', error);
+                    }
+                }, 0);
             });
         };
 
