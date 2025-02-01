@@ -44,6 +44,7 @@ body {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
 }
 
 .token-creation-form h2 {
@@ -154,31 +155,33 @@ button[type="submit"]:disabled {
     background-color: rgba(0, 0, 0, 0.5);
     display: flex;
     justify-content: center;
-    align-items: center;
-    z-index: 1000;
+    align-items: flex-start;
+    z-index: 50;
+    overflow-y: auto;
+    padding: 2rem 1rem;
 }
 
 .modal-content {
-    @apply bg-white text-gray-900 shadow-xl border border-gray-200;
-    position: relative;
+    background: white;
+    padding: 20px;
     border-radius: 8px;
-    padding: 1.5rem;
-    width: 95%;
-    max-width: 42rem;
-    max-height: 95vh;
+    position: relative;
+    width: 100%;
+    max-width: 90vw;
+    margin: auto;
+    max-height: min(90vh, 800px);
     overflow-y: auto;
-    margin: 1rem;
 }
 
 .modal-close {
     position: absolute;
-    top: 1rem;
-    right: 1rem;
+    right: 10px;
+    top: 10px;
     background: none;
     border: none;
-    color: #4a5568;
-    font-size: 1.5rem;
+    font-size: 24px;
     cursor: pointer;
+    color: #666;
 }
 
 .no-tokens {
