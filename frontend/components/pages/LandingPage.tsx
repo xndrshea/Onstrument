@@ -2,21 +2,30 @@ import { Link } from 'react-router-dom';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { TokenCreationForm } from '../TokenCreation/TokenCreationForm';
-import { useState } from 'react';
-import { Dialog } from '@headlessui/react';
+import { useState, useEffect } from 'react';
+import { Dialog, DialogPanel } from '@headlessui/react';
 
 export function LandingPage() {
     const { connected } = useWallet();
     const { setVisible } = useWalletModal();
     const [showQuickForm, setShowQuickForm] = useState(false);
+    const [pendingAction, setPendingAction] = useState<'quickForm' | null>(null);
 
     const handleQuickStart = () => {
         if (!connected) {
+            setPendingAction('quickForm');
             setVisible(true);
         } else {
-            setShowQuickForm(!showQuickForm);
+            setShowQuickForm(true);
         }
     };
+
+    useEffect(() => {
+        if (connected && pendingAction === 'quickForm') {
+            setShowQuickForm(true);
+            setPendingAction(null);
+        }
+    }, [connected, pendingAction]);
 
     return (
         <div className="min-h-screen bg-white">
@@ -33,10 +42,9 @@ export function LandingPage() {
                         <div className="flex flex-col items-center">
                             <button
                                 onClick={handleQuickStart}
-                                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
+                                className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-8 py-3.5 text-lg font-medium transition-colors duration-200 shadow-lg border border-blue-400"
                             >
-
-                                Start Project
+                                Launch Meme
                             </button>
                             <span className="text-sm text-gray-500 italic mt-2">in seconds</span>
                         </div>
@@ -44,9 +52,8 @@ export function LandingPage() {
                         <div className="flex flex-col items-center">
                             <Link
                                 to="/create"
-                                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
+                                className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-8 py-3.5 text-lg font-medium transition-colors duration-200 shadow-lg border border-sky-400"
                             >
-
                                 Start Project
                             </Link>
                             <span className="text-sm text-gray-500 italic mt-2">in minutes</span>
@@ -55,10 +62,9 @@ export function LandingPage() {
                         <div className="flex flex-col items-center">
                             <Link
                                 to="/contact"
-                                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
+                                className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg px-8 py-3.5 text-lg font-medium transition-colors duration-200 shadow-lg border border-cyan-400"
                             >
-
-                                Start Project
+                                Custom Tokenomics
                             </Link>
                             <span className="text-sm text-gray-500 italic mt-2">in days to weeks</span>
                         </div>
@@ -69,9 +75,9 @@ export function LandingPage() {
                     <Dialog open={showQuickForm} onClose={() => setShowQuickForm(false)} className="relative z-50">
                         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
                         <div className="fixed inset-0 flex items-center justify-center p-4">
-                            <Dialog.Panel className="bg-white rounded-lg p-6 w-full max-w-xl">
+                            <DialogPanel className="bg-white rounded-lg p-6 w-full max-w-xl">
                                 <TokenCreationForm />
-                            </Dialog.Panel>
+                            </DialogPanel>
                         </div>
                     </Dialog>
                 )}
@@ -157,7 +163,7 @@ export function LandingPage() {
                 </div>
 
                 {/* CTA Section */}
-                <div className="text-center bg-gradient-to-r from-blue-50 to-violet-50 rounded-2xl p-12">
+                <div className="text-center p-12">
                     <Link
                         to="/create"
                         className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200"
