@@ -323,17 +323,37 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 scale_mode: 'Normal',
                 custom_themes: {
                     light: {
-                        // Blue (buttons, selections)
-                        "color1": ["#f5f8ff", "#e5efff", "#d6e6ff", "#c6dcff", "#b7d3ff", "#a8caff", "#98c1ff", "#89b8ff", "#79afff", "#6aa6ff", "#4d94ff", "#4687ea", "#3f7ad5", "#386dbf", "#3161aa", "#2a5495", "#244880", "#1d3b6a", "#162e55", "#0f2240"],
+                        // Blue (buttons, selections) - 20 shades
+                        "color1": [
+                            "#f5f8ff", "#e5efff", "#d6e6ff", "#c6dcff", "#b7d3ff",
+                            "#a8caff", "#98c1ff", "#89b8ff", "#79afff", "#6aa6ff",
+                            "#5a9dff", "#4d94ff", "#4687ea", "#3f7ad5", "#386dbf",
+                            "#3161aa", "#2a5495", "#244880", "#1d3b6a", "#162e55"
+                        ],
 
-                        // Grey (text, lines)
-                        "color2": ["#f7f7f7", "#efefef", "#e7e7e7", "#dfdfdf", "#d7d7d7", "#cfcfcf", "#c7c7c7", "#bfbfbf", "#b7b7b7", "#afafaf", "#9f9f9f", "#919191", "#848484", "#767676", "#696969", "#5b5b5b", "#4e4e4e", "#404040", "#333333", "#262626"],
+                        // Grey (text, lines) - 20 shades
+                        "color2": [
+                            "#f7f7f7", "#efefef", "#e7e7e7", "#dfdfdf", "#d7d7d7",
+                            "#cfcfcf", "#c7c7c7", "#bfbfbf", "#b7b7b7", "#afafaf",
+                            "#a7a7a7", "#9f9f9f", "#919191", "#848484", "#767676",
+                            "#696969", "#5b5b5b", "#4e4e4e", "#404040", "#333333"
+                        ],
 
-                        // Red (down moves)
-                        "color3": ["#fff0f0", "#ffe1e1", "#ffd3d3", "#ffc4c4", "#ffb5b5", "#ffa6a6", "#ff9797", "#ff8888", "#ff7a7a", "#ff6b6b", "#ff4d4d", "#ea4747", "#d54040", "#bf3a3a", "#aa3333", "#952d2d", "#802727", "#6a2020", "#551a1a", "#401313"],
+                        // Red (down moves) - 20 shades
+                        "color3": [
+                            "#fff0f0", "#ffe1e1", "#ffd3d3", "#ffc4c4", "#ffb5b5",
+                            "#ffa6a6", "#ff9797", "#ff8888", "#ff7a7a", "#ff6b6b",
+                            "#ff5d5d", "#ff4d4d", "#ea4747", "#d54040", "#bf3a3a",
+                            "#aa3333", "#952d2d", "#802727", "#6a2020", "#551a1a"
+                        ],
 
-                        // Green (up moves)
-                        "color4": ["#f0fff7", "#e1fff0", "#d3ffe8", "#c4ffe1", "#b5ffda", "#a6ffd3", "#97ffcc", "#88ffc5", "#7affbe", "#6bffb7", "#4dffaa", "#47ea9b", "#40d58d", "#3abf7f", "#33aa71", "#2d9563", "#278055", "#206a47", "#1a5539", "#13402b"],
+                        // Green (up moves) - 20 shades
+                        "color4": [
+                            "#f0fff7", "#e1fff0", "#d3ffe8", "#c4ffe1", "#b5ffda",
+                            "#a6ffd3", "#97ffcc", "#88ffc5", "#7affbe", "#6bffb7",
+                            "#5cffb0", "#4dffaa", "#47ea9b", "#40d58d", "#3abf7f",
+                            "#33aa71", "#2d9563", "#278055", "#206a47", "#1a5539"
+                        ]
                     }
                 }
             });
