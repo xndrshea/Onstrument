@@ -15,12 +15,12 @@ export function TokenomicsRoadmap() {
 
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-8">
                     {[
-                        { text: "Onstrument Bonding Curves", status: "Completed" },
-                        { text: "Solana Tokens", status: "Completed" },
-                        { text: "Fully Integrated Telegram Bots" },
+                        { text: "Onstrument Projects.", status: "Completed" },
+                        { text: "Solana Ecosystem Trading", status: "Completed" },
+                        { text: "Integrated Telegram Bots" },
                         { text: "Onstrument News Terminal" },
                         { text: "Open Source" },
-                        { text: "All Future Products" }
+                        { text: "TBA" }
                     ].map((item, index) => (
                         <div key={typeof item === 'string' ? item : item.text} className="relative">
                             <div className="bg-white rounded-lg p-6 border border-blue-200 hover:border-violet-300 hover:bg-violet-50 transition-all duration-300 h-full shadow-sm">
