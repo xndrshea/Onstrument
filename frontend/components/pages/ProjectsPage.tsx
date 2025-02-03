@@ -61,13 +61,28 @@ export function ProjectsPage() {
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">Onstrument Projects</h1>
                     <div className="flex items-center gap-4">
-                        <Link
-                            to="/create"
-                            className="bg-purple-600 hover:bg-purple-700 text-white rounded-lg px-6 py-2 flex items-center gap-2"
-                        >
-                            <span className="text-xl">+</span>
-                            Start a Project
-                        </Link>
+                        <div className="flex flex-row gap-2">
+                            <button
+                                onClick={() => setIsModalOpen(true)}
+                                className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-blue-400"
+                            >
+                                Launch Meme
+                            </button>
+
+                            <Link
+                                to="/create"
+                                className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-sky-400"
+                            >
+                                Start Project
+                            </Link>
+
+                            <Link
+                                to="/contact"
+                                className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-cyan-400"
+                            >
+                                Custom Tokenomics
+                            </Link>
+                        </div>
                         <select
                             value={volumePeriod}
                             onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
@@ -112,28 +127,28 @@ export function ProjectsPage() {
                 )}
             </div>
 
-            {isModalOpen && !connected ? (
-                <Modal isOpen={true} onClose={() => setIsModalOpen(false)}>
-                    <div className="connect-wallet-prompt" style={{ padding: '20px', textAlign: 'center' }}>
-                        <h2>Connect Wallet Required</h2>
-                        <p>Please connect your wallet to create a token.</p>
-                        <button
-                            onClick={() => setVisible(true)}
-                            className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
-                        >
-                            Select Wallet
-                        </button>
-                    </div>
-                </Modal>
-            ) : (
+            {isModalOpen && (
                 <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-                    <TokenCreationForm
-                        onSuccess={() => setIsModalOpen(false)}
-                        onTokenCreated={() => {
-                            setRefreshTrigger(prev => prev + 1);
-                            setIsModalOpen(false);
-                        }}
-                    />
+                    {!connected ? (
+                        <div className="connect-wallet-prompt text-center">
+                            <h2>Connect Wallet Required</h2>
+                            <p>Please connect your wallet to create a token.</p>
+                            <button
+                                onClick={() => setVisible(true)}
+                                className="bg-purple-600 hover:bg-purple-700 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
+                            >
+                                Select Wallet
+                            </button>
+                        </div>
+                    ) : (
+                        <TokenCreationForm
+                            onSuccess={() => setIsModalOpen(false)}
+                            onTokenCreated={() => {
+                                setRefreshTrigger(prev => prev + 1);
+                                setIsModalOpen(false);
+                            }}
+                        />
+                    )}
                 </Modal>
             )}
         </div>

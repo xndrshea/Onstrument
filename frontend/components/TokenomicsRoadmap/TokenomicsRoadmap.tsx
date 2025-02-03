@@ -23,11 +23,11 @@ export function TokenomicsRoadmap() {
                         { text: "TBA" }
                     ].map((item, index) => (
                         <div key={typeof item === 'string' ? item : item.text} className="relative">
-                            <div className="bg-white rounded-lg p-6 border border-blue-200 hover:border-violet-300 hover:bg-violet-50 transition-all duration-300 h-full shadow-sm">
+                            <div className="bg-white rounded-lg p-6 border border-blue-200 hover:border-violet-300 hover:bg-violet-50 transition-all duration-300 h-full shadow-sm flex flex-col">
                                 <div className="text-blue-600 font-bold mb-2">Phase {index + 1}</div>
-                                <span className="text-gray-700">{typeof item === 'string' ? item : item.text}</span>
+                                <span className="text-gray-700 flex-grow">{typeof item === 'string' ? item : item.text}</span>
                                 {item.status && (
-                                    <div className="mt-2 text-sm text-emerald-600">✓ {item.status}</div>
+                                    <div className="mt-auto text-sm text-emerald-600">✓ {item.status}</div>
                                 )}
                             </div>
                             {index < 5 && (
@@ -77,7 +77,7 @@ export function TokenomicsRoadmap() {
                             and we're committed to rewarding our early supporters.
                         </p>
                         <p className="text-gray-700 text-lg">
-                            After the airdrop, a percentage of transactoin fees will go to buy backs. Indefinitely. YOU decide the overall tokenomics.
+                            After the airdrop, a percentage of transaction fees will go to buy backs. Indefinitely. YOU decide the overall tokenomics.
                             Nothing is set in stone.
                         </p>
                     </div>

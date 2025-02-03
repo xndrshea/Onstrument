@@ -14,9 +14,16 @@ export function Modal({ isOpen, onClose, children }: ModalProps) {
 
     return (
         <>
-            <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-            <div className="fixed inset-0 overflow-y-auto">
-                <div className="flex min-h-full items-center justify-center p-4">
+            <div
+                className="fixed inset-0 bg-black/30 z-50"
+                aria-hidden="true"
+                onClick={onClose}
+            />
+            <div className="fixed inset-0 overflow-y-auto z-50">
+                <div
+                    className="flex min-h-full items-center justify-center p-4"
+                    onClick={onClose}
+                >
                     <div
                         className="bg-white rounded-lg p-6 w-full max-w-xl relative"
                         onClick={e => e.stopPropagation()}

@@ -1368,4 +1368,73 @@ router.get('/price-history/:mintAddress/volume', async (req, res) => {
     }
 });
 
+// Add favorite token
+router.post('/favorites', ...[authMiddleware, csrfProtection], async (req, res) => {
+    try {
+
+        const { mintAddress } = req.body;
+        const userResult = await pool().query(
+            'SELECT user_id FROM onstrument.users WHERE wallet_address = $1',
+            [req.user?.walletAddress]
+        );
+        const userId = userResult.rows[0].user_id;
+
+        await pool().query(
+            `INSERT INTO onstrument.user_favorites (user_id, mint_address)
+             VALUES ($1, $2)
+             ON CONFLICT (user_id, mint_address) DO NOTHING`,
+            [userId, mintAddress]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to add favorite' });
+    }
+});
+
+// Remove favorite token
+router.delete('/favorites/:mintAddress', ...[authMiddleware, csrfProtection], async (req, res) => {
+    try {
+        const { mintAddress } = req.params;
+        const userResult = await pool().query(
+            'SELECT user_id FROM onstrument.users WHERE wallet_address = $1',
+            [req.user?.walletAddress]
+        );
+        const userId = userResult.rows[0].user_id;
+
+        await pool().query(
+            `DELETE FROM onstrument.user_favorites
+             WHERE user_id = $1 AND mint_address = $2`,
+            [userId, mintAddress]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to remove favorite' });
+    }
+});
+
+// Get user's favorite tokens
+router.get('/favorites', authMiddleware, async (req, res) => {
+    try {
+        const userResult = await pool().query(
+            'SELECT user_id FROM onstrument.users WHERE wallet_address = $1',
+            [req.user?.walletAddress]
+        );
+        const userId = userResult.rows[0].user_id;
+
+        const result = await pool().query(
+            `SELECT t.* 
+             FROM onstrument.tokens t
+             JOIN onstrument.user_favorites f ON t.mint_address = f.mint_address
+             WHERE f.user_id = $1`,
+            [userId]
+        );
+
+        res.json({ tokens: result.rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch favorites' });
+    }
+});
+
 export default router; 

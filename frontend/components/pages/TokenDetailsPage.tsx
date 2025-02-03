@@ -8,7 +8,9 @@ import { priceClient } from '../../services/priceClient';
 import { formatMarketCap, formatNumber } from '../../utils/formatting';
 import { filterService } from '../../services/filterService';
 import { Menu, MenuButton, MenuItem, MenuItems, Transition, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
-import { getAuthHeaders } from '../../utils/headers';
+import { getAuthHeaders, getCsrfHeaders } from '../../utils/headers';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useAuth } from '../../hooks/useAuthQuery';
 
 const MAINNET_USDC_ADDRESS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
@@ -207,6 +209,23 @@ const ProjectInfoSection = ({ token }: { token: TokenRecord | null }) => {
     );
 };
 
+const FavoriteButton = ({ token, isFavorited, onToggle }: { token: TokenRecord; isFavorited: boolean; onToggle: () => void }) => {
+    return (
+        <button
+            onClick={onToggle}
+            className="flex items-center gap-1 px-3 py-2 text-gray-600 hover:text-yellow-500 transition-colors text-sm"
+        >
+            <svg
+                className={`w-5 h-5 ${isFavorited ? 'text-yellow-500 fill-current' : 'text-gray-400'}`}
+                viewBox="0 0 20 20"
+            >
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+            </svg>
+            <span>{isFavorited ? 'Favorited' : 'Add to Favorites'}</span>
+        </button>
+    );
+};
+
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
     const location = useLocation();
@@ -228,6 +247,10 @@ export function TokenDetailsPage() {
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
     const [metadataImage, setMetadataImage] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [isFavorited, setIsFavorited] = useState(false);
+    const [filterType, setFilterType] = useState<'all' | 'favorites'>('all');
+    const { publicKey } = useWallet();
+    const { user } = useAuth();
 
     // Add useRef and useEffect for click-outside handling
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -296,9 +319,12 @@ export function TokenDetailsPage() {
                             };
 
                             // Update database
+                            const headers = new Headers({
+                                ...(await getAuthHeaders()).headers
+                            });
                             await fetch('/api/tokens/update-metadata', {
                                 method: 'POST',
-                                ...(await getAuthHeaders()),
+                                headers,
                                 body: JSON.stringify(updateData)
                             });
 
@@ -358,52 +384,91 @@ export function TokenDetailsPage() {
 
     // Updated TokenSelector fetch
     useEffect(() => {
-        const fetchTopTokens = async () => {
+        const fetchTokens = async () => {
             try {
-                // Build query parameters
-                const params = new URLSearchParams({
-                    page: '1',
-                    limit: '100',
-                    sortBy: sortField,
-                    sortDirection: sortDirection
-                });
+                const authHeaders = await getAuthHeaders();
+                const csrfHeaders = await getCsrfHeaders();
+                const requestConfig = {
+                    headers: {
+                        ...authHeaders.headers,
+                        ...csrfHeaders
+                    },
+                    credentials: 'include' as RequestCredentials
+                };
 
-                // If we're on a custom token page, use /api/tokens without tokenType filter
-                const endpoint = (token?.tokenType === 'custom' || tokenType === 'custom')
-                    ? `/api/tokens`  // For custom tokens, show all custom tokens
-                    : `/api/market/tokens?${params}`; // For dex tokens, use normal filtering
+                if (filterType === 'favorites') {
+                    console.log('Fetching favorites...');
+                    const response = await fetch('/api/favorites', requestConfig);
+                    const data = await response.json();
 
-                const response = await fetch(endpoint);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    // Transform snake_case to camelCase
+                    const transformedTokens = data.tokens.map((token: any) => ({
+                        mintAddress: token.mint_address,
+                        name: token.name,
+                        symbol: token.symbol,
+                        decimals: token.decimals,
+                        tokenType: token.token_type,
+                        imageUrl: token.image_url,
+                        currentPrice: token.current_price,
+                        marketCapUsd: token.market_cap_usd,
+                        volume24h: token.volume_24h,
+                        priceChange24h: token.price_change_24h
+                    }));
+
+                    console.log('Setting topTokens:', transformedTokens);
+                    setTopTokens(transformedTokens);
+                    console.log('Current filterType:', filterType);
+                } else {
+                    // Build query parameters
+                    const params = new URLSearchParams({
+                        page: '1',
+                        limit: '100',
+                        sortBy: sortField,
+                        sortDirection: sortDirection
+                    });
+
+                    const endpoint = (token?.tokenType === 'custom' || tokenType === 'custom')
+                        ? `/api/tokens`  // For custom tokens, show all custom tokens
+                        : `/api/market/tokens?${params}`; // For dex tokens, use normal filtering
+
+                    const response = await fetch(endpoint, requestConfig);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    const filteredTokens = filterService.filterTokens(data.tokens);
+                    setTopTokens(filteredTokens);
                 }
-
-                const data = await response.json();
-                const filteredTokens = filterService.filterTokens(data.tokens);
-                setTopTokens(filteredTokens);
             } catch (error) {
-                console.error('Error fetching top tokens:', error);
+                console.error('Error fetching tokens:', error);
             }
         };
-        fetchTopTokens();
-    }, [sortField, sortDirection, token?.tokenType, tokenType]);
+        fetchTokens();
+    }, [filterType, sortField, sortDirection, token?.tokenType, tokenType, user]);
 
     // Update the sorting function
     const sortTokens = (tokens: TokenRecord[]) => {
-        // Filter out fake USDC tokens and tokens without images
+        console.log('sortTokens input:', tokens);
+
+        if (filterType === 'favorites') {
+            // Don't filter favorites, just sort them
+            return tokens.sort((a, b) => {
+                const aValue = sortField === 'marketCapUsd' ? a.marketCapUsd : a[sortField];
+                const bValue = sortField === 'marketCapUsd' ? b.marketCapUsd : b[sortField];
+                return sortDirection === 'asc' ? Number(aValue) - Number(bValue) : Number(bValue) - Number(aValue);
+            });
+        }
+
+        // Original filtering logic for non-favorites
         const filteredTokens = tokens.filter(token =>
-            // Keep token if it's not a fake USDC AND has an image
             !(token.symbol === 'USDC' && token.mintAddress !== MAINNET_USDC_ADDRESS) &&
             (token.imageUrl || (token.content?.metadata?.image))
         );
 
-        const getFieldValue = (token: TokenRecord) => {
-            return sortField === 'marketCapUsd' ? token.marketCapUsd : token[sortField];
-        };
-
         return filteredTokens.sort((a, b) => {
-            const aValue = getFieldValue(a) || 0;
-            const bValue = getFieldValue(b) || 0;
+            const aValue = sortField === 'marketCapUsd' ? a.marketCapUsd : a[sortField];
+            const bValue = sortField === 'marketCapUsd' ? b.marketCapUsd : b[sortField];
             return sortDirection === 'asc' ? Number(aValue) - Number(bValue) : Number(bValue) - Number(aValue);
         });
     };
@@ -450,6 +515,99 @@ export function TokenDetailsPage() {
         fetchMetadata();
     }, [token?.metadataUrl]);
 
+    // Add this useEffect to check if token is favorited
+    useEffect(() => {
+        const checkFavoriteStatus = async () => {
+            if (!token?.mintAddress || !user) return;
+            try {
+                const authHeaders = await getAuthHeaders();
+                const csrfHeaders = await getCsrfHeaders();
+                const requestConfig = {
+                    headers: {
+                        ...authHeaders.headers,
+                        ...csrfHeaders
+                    },
+                    credentials: 'include' as RequestCredentials
+                };
+
+                const response = await fetch('/api/favorites', requestConfig);
+                const data = await response.json();
+
+                console.log('DB Tokens:', data.tokens.map((t: TokenRecord) => ({
+                    mint: (t as any).mint_address || t.mintAddress,
+                    matches: ((t as any).mint_address || t.mintAddress) === token.mintAddress
+                })));
+
+                // Handle both camelCase and snake_case
+                const isFav = data.tokens.some((t: TokenRecord) =>
+                    (t as any).mint_address === token.mintAddress || t.mintAddress === token.mintAddress
+                );
+
+                console.log('Comparison:', {
+                    dbMints: data.tokens.map((t: TokenRecord) => (t as any).mint_address || t.mintAddress),
+                    currentMint: token.mintAddress,
+                    isFav
+                });
+
+                setIsFavorited(isFav);
+            } catch (error) {
+                console.error('Error checking favorite status:', error);
+            }
+        };
+        checkFavoriteStatus();
+    }, [token?.mintAddress, user]);
+
+    // Add toggle function
+    const toggleFavorite = async () => {
+        if (!token || !publicKey || !user) return;
+        try {
+            const authHeaders = await getAuthHeaders();
+            const csrfHeaders = await getCsrfHeaders();
+            const requestConfig = {
+                headers: {
+                    ...authHeaders.headers,
+                    ...csrfHeaders
+                },
+                credentials: 'include' as RequestCredentials
+            };
+
+            console.log('Before API call - isFavorited:', isFavorited);
+
+            if (isFavorited) {
+                const deleteResponse = await fetch(`/api/favorites/${token.mintAddress}`, {
+                    method: 'DELETE',
+                    ...requestConfig
+                });
+                console.log('Delete response:', await deleteResponse.json());
+            } else {
+                const postResponse = await fetch('/api/favorites', {
+                    method: 'POST',
+                    ...requestConfig,
+                    body: JSON.stringify({ mintAddress: token.mintAddress })
+                });
+                console.log('Post response:', await postResponse.json());
+            }
+
+            console.log('State transition:', {
+                before: isFavorited,
+                after: !isFavorited,
+                tokenMint: token.mintAddress
+            });
+
+            setIsFavorited(!isFavorited);
+
+            const response = await fetch('/api/favorites', requestConfig);
+            const data = await response.json();
+            console.log('DB state after toggle:', {
+                tokens: data.tokens,
+                currentToken: token.mintAddress
+            });
+            setTopTokens(data.tokens);
+        } catch (error) {
+            console.error('Error toggling favorite:', error);
+        }
+    };
+
     const renderTokenSelector = () => (
         <Menu as="div" className="relative inline-flex items-center">
             <MenuButton className="flex items-center gap-1 px-3 py-2 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
@@ -463,6 +621,35 @@ export function TokenDetailsPage() {
                 className="w-[400px] bg-white border border-gray-200 rounded-md shadow-lg max-h-[400px] overflow-hidden z-[9999]"
                 anchor="bottom start"
             >
+                <div className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                    <div className="flex gap-2 p-2">
+                        <button
+                            onClick={() => {
+                                setFilterType('all');
+                                setTopTokens([]); // Clear tokens before fetching new ones
+                            }}
+                            className={`px-3 py-1 rounded-md ${filterType === 'all'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                        >
+                            All
+                        </button>
+                        <button
+                            onClick={() => {
+                                setFilterType('favorites');
+                                setTopTokens([]); // Clear tokens before fetching new ones
+                            }}
+                            className={`px-3 py-1 rounded-md ${filterType === 'favorites'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                        >
+                            Favorites
+                        </button>
+                    </div>
+                </div>
+
                 <div className="sticky top-0 bg-gray-50 grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 text-xs text-gray-600 border-b border-gray-200">
                     <span>Token</span>
                     <button
@@ -657,6 +844,11 @@ export function TokenDetailsPage() {
                                         )}
                                         <h1 className="text-lg font-mono text-gray-900 truncate">{token.symbol}</h1>
                                     </div>
+                                    <FavoriteButton
+                                        token={token}
+                                        isFavorited={isFavorited}
+                                        onToggle={toggleFavorite}
+                                    />
                                     {renderTokenSelector()}
                                 </div>
                                 <div className="mt-1 text-sm text-gray-600 font-mono truncate">
