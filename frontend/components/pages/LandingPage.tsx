@@ -99,7 +99,7 @@ export function LandingPage() {
 
                 {/* Recent Projects Section */}
                 <div className="mb-20">
-                    <h2 className="text-3xl font-bold text-center mb-8">Recent Projects</h2>
+                    <h2 className="text-3xl font-bold text-center mb-8">Most Recent Projects</h2>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         {recentProjects.slice(0, 5).map((project: any, index: number) => (
                             <Link
@@ -134,29 +134,33 @@ export function LandingPage() {
                 {/* How It Works Section */}
                 <div className="mb-20">
                     <h2 className="text-3xl font-bold text-center mb-12">How It Works</h2>
-                    <div className="space-y-8 max-w-4xl mx-auto">
-                        <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-8 rounded-2xl">
-                            <p className="text-xl text-gray-700">
-                                Whether you want to bootstrap your tech startup, publish a book, or create the next hot meme,
-                                Onstrument is the place to do it.
-                            </p>
+                    <div className="space-y-4 max-w-4xl mx-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
+                                <div className="text-blue-600 font-bold text-lg mb-2">1. Connect Wallet</div>
+                                <p className="text-gray-700">
+                                    Connect your Solana wallet.
+                                </p>
+                            </div>
+                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
+                                <div className="text-blue-600 font-bold text-lg mb-2">2. Define Project</div>
+                                <p className="text-gray-700">
+                                    Choose name, supply, image, etc.
+                                </p>
+                            </div>
+                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
+                                <div className="text-blue-600 font-bold text-lg mb-2">3. Create</div>
+                                <p className="text-gray-700">
+                                    Launch your token with one click.
+                                </p>
+                            </div>
+                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
+                                <div className="text-blue-600 font-bold text-lg mb-2">4. Build & Trade</div>
+                                <p className="text-gray-700">
+                                    Start trading and continue building your project.
+                                </p>
+                            </div>
                         </div>
-                        <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-8 rounded-2xl">
-                            <p className="text-xl text-gray-700">
-                                Onstrument adapts to its users. You can choose to build in public, post videos, and interact with your community.
-                                You can also choose to build in private, stay anonymous, and only interact with your team.
-                                All you need is a Solana wallet (for now).
-                            </p>
-                        </div>
-
-
-                        <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-8 rounded-2xl">
-                            <p className="text-xl text-gray-700">
-                                If you want custom tokenization solutions, reach out to us on Telegram or X. We can make anything happen,
-                                as long as it's on-chain.
-                            </p>
-                        </div>
-
                     </div>
                 </div>
 
@@ -179,7 +183,7 @@ export function LandingPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <div className="bg-white p-6 rounded-xl border border-blue-200 hover:border-violet-300 transition-all">
                             <h3 className="font-semibold text-gray-900 mb-2">Easy Launch</h3>
-                            <p className="text-gray-600">Start your project in minutes with our intuitive platform. No technical expertise required.</p>
+                            <p className="text-gray-600">Start your project in seconds with our intuitive platform. No technical expertise required.</p>
                         </div>
                         <div className="bg-white p-6 rounded-xl border border-blue-200 hover:border-violet-300 transition-all">
                             <h3 className="font-semibold text-gray-900 mb-2">Community First</h3>
@@ -188,25 +192,6 @@ export function LandingPage() {
                         <div className="bg-white p-6 rounded-xl border border-blue-200 hover:border-violet-300 transition-all">
                             <h3 className="font-semibold text-gray-900 mb-2">Full Control</h3>
                             <p className="text-gray-600">Maintain complete ownership of your project while using our powerful tools.</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Why Choose Section */}
-                <div className="mb-20">
-                    <h2 className="text-3xl font-bold text-center mb-12">Why Choose Onstrument?</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-8 rounded-2xl">
-                            <h3 className="text-2xl font-bold text-gray-900 mb-4">Built for Creators</h3>
-                            <p className="text-gray-600">
-                                From artists and educators to developers and entrepreneurs, our platform provides all the tools you need to succeed. Launch, manage, and grow your project with confidence.
-                            </p>
-                        </div>
-                        <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-8 rounded-2xl">
-                            <h3 className="text-2xl font-bold text-gray-900 mb-4">Community-Driven</h3>
-                            <p className="text-gray-600">
-                                Join a diverse ecosystem of creators and innovators. Share ideas, get feedback, and build relationships that help your project thrive.
-                            </p>
                         </div>
                     </div>
                 </div>

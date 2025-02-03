@@ -74,7 +74,7 @@ export function SearchBar() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search projects..."
+                placeholder="Search..."
                 className="w-64 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             />
 
