@@ -53,7 +53,7 @@ export function MarketPage() {
         <div className="min-h-screen bg-white">
             <div className="max-w-7xl mx-auto px-4 py-8">
                 <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="flex justify-between items-center mb-6">
+                    <div className="flex justify-between items-center px-6 py-4">
                         <h1 className="text-2xl font-bold text-gray-900">Market</h1>
                         <select
                             value={sortBy}
