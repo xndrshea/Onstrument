@@ -21,35 +21,37 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         id: 'monthly',
         name: 'Monthly',
         duration: 1,
-        priceUSD: 50,  // $50
+        priceUSD: 20,  // Changed from 50 to 20
         goldenPoints: 1,
         features: [
-            'Full Platform Access',
-            '1 Golden Point'
+            'No Transaction Fees',
+            '1 Golden Point',
+            'Migration Reward: 3 SOL'
         ]
     },
     {
         id: 'quarterly',
         name: '3 Months',
         duration: 3,
-        priceUSD: 150,  // $150
+        priceUSD: 60,  // Changed from 150 to 60 (20 * 3)
         goldenPoints: 5,
         features: [
-            'Full Platform Access',
+            'No Transaction Fees',
             '5 Golden Points',
-            'Same price, more rewards'
+            'Migration Reward: 3 SOL'
         ]
     },
     {
         id: 'semiannual',
         name: '6 Months',
         duration: 6,
-        priceUSD: 300,  // $300
+        priceUSD: 120,  // Changed from 300 to 120 (20 * 6)
         goldenPoints: 12,
         features: [
-            'Full Platform Access',
+            'No Transaction Fees',
             '12 Golden Points',
-            'Maximum reward rate'
+            'Migration Reward: 3 SOL',
+            'Beta Test Next Products'
         ]
     }
 ];
@@ -147,14 +149,14 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
             }}
         >
             <div
-                className={`relative bg-[#232427] rounded-lg w-full max-w-7xl transform ${isOpen ? 'translate-y-0' : '-translate-y-8'
-                    } transition-transform duration-300`}
+                className={`relative bg-white rounded-lg w-full max-w-7xl transform ${isOpen ? 'translate-y-0' : '-translate-y-8'
+                    } transition-transform duration-300 shadow-xl border border-gray-200`}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Close button */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
                 >
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -165,11 +167,11 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                 <div className="max-w-7xl mx-auto px-4 py-16">
                     {/* Header */}
                     <div className="text-center mb-12">
-                        <h2 className="text-4xl font-bold text-white mb-4">
+                        <h2 className="text-4xl font-bold text-gray-900 mb-4">
                             Unlock Premium Features
                         </h2>
-                        <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-                            Subscribe to access advanced features, earn Golden Points, and join an exclusive community of traders.
+                        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+                            Subscribe to never pay transaction fees, earn points, and help us build the best launchpad.
                         </p>
                     </div>
 
@@ -179,26 +181,26 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                             <div
                                 key={tier.id}
                                 className={`
-                                    bg-[#232427] rounded-xl p-6 border-2 
+                                    bg-white rounded-xl p-6 border-2 shadow-sm
                                     ${selectedTier?.id === tier.id
-                                        ? 'border-purple-500 transform scale-105 transition-all duration-200'
-                                        : 'border-blue-500/20 hover:border-blue-500/40'}
+                                        ? 'border-blue-500 transform scale-105 transition-all duration-200'
+                                        : 'border-gray-200 hover:border-blue-200'}
                                 `}
                             >
                                 <div className="text-center mb-6">
-                                    <h3 className="text-2xl font-bold text-white mb-2">{tier.name}</h3>
-                                    <div className="text-3xl font-bold text-purple-400 mb-2">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-2">{tier.name}</h3>
+                                    <div className="text-3xl font-bold text-blue-600 mb-2">
                                         ${tier.priceUSD}
                                     </div>
-                                    <div className="text-sm text-gray-400">
+                                    <div className="text-sm text-gray-500">
                                         {tier.goldenPoints} Golden Points
                                     </div>
                                 </div>
 
                                 <ul className="space-y-3 mb-6">
                                     {tier.features.map((feature, index) => (
-                                        <li key={index} className="flex items-center text-gray-300">
-                                            <svg className="w-5 h-5 text-purple-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <li key={index} className="flex items-center text-gray-600">
+                                            <svg className="w-5 h-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                             </svg>
                                             {feature}
@@ -209,7 +211,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                                 <button
                                     onClick={() => handleSubscribe(tier)}
                                     disabled={isProcessing}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-700 hover:to-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50"
+                                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isProcessing ? 'Processing...' : publicKey ? 'Subscribe Now' : 'Connect Wallet to Subscribe'}
                                 </button>
@@ -218,9 +220,9 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                     </div>
 
                     {/* Additional Info */}
-                    <div className="mt-12 text-center text-gray-400">
+                    <div className="mt-12 text-center text-gray-500">
                         <p>All subscriptions include unlimited access to premium features.</p>
-                        <p>Golden Points can be used for exclusive rewards and governance.</p>
+                        <p>Golden Points will be used for calculating your airdrop.</p>
                     </div>
                 </div>
             </div>

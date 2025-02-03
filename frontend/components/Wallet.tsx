@@ -79,18 +79,18 @@ export function Wallet({ onProfileClick }: { onProfileClick: () => void }) {
             </button>
 
             {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-[#1C1D21] ring-1 ring-black ring-opacity-5">
+                <div className="absolute right-0 mt-2 w-48 rounded-lg shadow-lg bg-white border border-gray-200">
                     <div className="py-1" role="menu">
                         <button
                             onClick={handleViewProfile}
-                            className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white"
+                            className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                             role="menuitem"
                         >
                             View Profile
                         </button>
                         <button
                             onClick={handleDisconnect}
-                            className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white"
+                            className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                             role="menuitem"
                         >
                             Disconnect

@@ -77,19 +77,19 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
 
     if (isLoading) {
         return (
-            <div className="bg-[#232427] rounded-lg p-6">
-                <h2 className="text-xl font-bold text-white mb-4">Portfolio</h2>
-                <div className="text-gray-400">Loading assets...</div>
+            <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Portfolio</h2>
+                <div className="text-gray-500">Loading assets...</div>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="bg-[#232427] rounded-lg p-6">
-                <h2 className="text-xl font-bold text-white mb-4">Portfolio</h2>
-                <div className="text-red-400">Error: {error}</div>
-                <div className="mt-2 text-sm text-gray-400">
+            <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Portfolio</h2>
+                <div className="text-red-500">Error: {error}</div>
+                <div className="mt-2 text-sm text-gray-500">
                     Network: {connection.rpcEndpoint.includes('devnet') ? 'Devnet' : 'Mainnet'}<br />
                     Wallet: {walletAddress}
                 </div>
@@ -98,16 +98,16 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
     }
 
     return (
-        <div className="bg-[#232427] rounded-lg p-6">
-            <h2 className="text-xl font-bold text-white mb-4">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
                 Portfolio
-                <span className="text-sm font-normal text-gray-400 ml-2">
+                <span className="text-sm font-normal text-gray-500 ml-2">
                     ({connection.rpcEndpoint.includes('devnet') ? 'Devnet' : 'Mainnet'})
                 </span>
             </h2>
 
             {assets.length === 0 ? (
-                <div className="text-gray-400">
+                <div className="text-gray-500">
                     No assets found in this wallet.<br />
                     <span className="text-sm">Wallet address: {walletAddress}</span>
                 </div>
@@ -115,19 +115,19 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
                         <thead>
-                            <tr className="text-left text-sm text-gray-400">
+                            <tr className="text-left text-sm text-gray-500 bg-gray-50">
                                 <th className="px-6 py-3">Token</th>
                                 <th className="px-6 py-3">Price</th>
                                 <th className="px-6 py-3">Market Cap</th>
                                 <th className="px-6 py-3">Volume (24h)</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-gray-200">
                             {assets.map((asset) => (
                                 <tr
                                     key={asset.id}
                                     onClick={() => handleTokenClick(asset)}
-                                    className="border-t border-gray-700 hover:bg-[#2A2D31] cursor-pointer transition-colors"
+                                    className="hover:bg-gray-50 cursor-pointer transition-colors"
                                 >
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
@@ -139,22 +139,22 @@ export function Portfolio({ walletAddress }: PortfolioProps) {
                                                 />
                                             )}
                                             <div>
-                                                <div className="font-medium text-white">
+                                                <div className="font-medium text-gray-900">
                                                     {asset.content.metadata.name}
                                                 </div>
-                                                <div className="text-sm text-gray-400">
+                                                <div className="text-sm text-gray-500">
                                                     {asset.content.metadata.symbol}
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-gray-300">
+                                    <td className="px-6 py-4 text-gray-700">
                                         ${formatNumber(asset.currentPrice || 0)}
                                     </td>
-                                    <td className="px-6 py-4 text-gray-300">
+                                    <td className="px-6 py-4 text-gray-700">
                                         {formatMarketCap(asset.marketCapUsd || null)}
                                     </td>
-                                    <td className="px-6 py-4 text-gray-300">
+                                    <td className="px-6 py-4 text-gray-700">
                                         ${formatNumber(asset.volume24h || 0)}
                                     </td>
                                 </tr>

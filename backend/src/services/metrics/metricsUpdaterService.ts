@@ -54,7 +54,6 @@ export class MetricsUpdaterService {
     private async scheduleUpdates(): Promise<void> {
         while (this.isRunning) {
             try {
-                logger.info('Starting update batch');
 
                 // Get top tokens by volume and any new tokens that haven't been checked
                 const tokensResult = await pool().query(`

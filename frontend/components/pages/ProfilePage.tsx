@@ -36,7 +36,7 @@ export function ProfilePage() {
 
     // Show loading while wallet is initializing or connecting
     if (isInitializing || connecting) {
-        return <div className="p-4 text-white">Loading profile...</div>;
+        return <div className="p-4 text-gray-600">Loading profile...</div>;
     }
 
     // Only redirect after wallet has fully initialized
@@ -46,40 +46,40 @@ export function ProfilePage() {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold text-white mb-8">Profile</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-8">Profile</h1>
 
             {user && (
                 <div className="space-y-8">
                     <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8">
                         {/* User Info Card */}
-                        <div className="bg-[#232427] rounded-lg p-6 h-fit">
-                            <h2 className="text-xl font-bold text-white mb-4">Account Details</h2>
-                            <div className="space-y-4 text-gray-300">
+                        <div className="bg-white rounded-lg p-6 h-fit border border-gray-200 shadow-sm">
+                            <h2 className="text-xl font-bold text-gray-900 mb-4">Account Details</h2>
+                            <div className="space-y-4">
                                 <div>
-                                    <p className="text-sm text-gray-400">Wallet Address</p>
-                                    <p className="break-all">{user.walletAddress}</p>
+                                    <p className="text-sm text-gray-500">Wallet Address</p>
+                                    <p className="text-gray-700 break-all">{user.walletAddress}</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-gray-400">Member Since</p>
-                                    <p>{new Date(user.createdAt).toLocaleDateString()}</p>
+                                    <p className="text-sm text-gray-500">Member Since</p>
+                                    <p className="text-gray-700">{new Date(user.createdAt).toLocaleDateString()}</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-gray-400">Subscription Status</p>
-                                    <p className={user.isSubscribed ? 'text-green-400' : 'text-gray-400'}>
+                                    <p className="text-sm text-gray-500">Subscription Status</p>
+                                    <p className={user.isSubscribed ? 'text-green-600' : 'text-gray-500'}>
                                         {user.isSubscribed ? 'Active' : 'Inactive'}
                                     </p>
                                 </div>
                                 {user.subscriptionExpiresAt && (
                                     <div>
-                                        <p className="text-sm text-gray-400">Subscription Expires</p>
-                                        <p>{new Date(user.subscriptionExpiresAt).toLocaleDateString()}</p>
+                                        <p className="text-sm text-gray-500">Subscription Expires</p>
+                                        <p className="text-gray-700">{new Date(user.subscriptionExpiresAt).toLocaleDateString()}</p>
                                     </div>
                                 )}
                             </div>
                         </div>
 
                         {/* Trading Stats */}
-                        <div className="bg-[#232427] rounded-lg p-6">
+                        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
                             <TradingStats />
                         </div>
                     </div>
