@@ -10,6 +10,7 @@ export function LandingPage() {
     const { setVisible } = useWalletModal();
     const [showQuickForm, setShowQuickForm] = useState(false);
     const [pendingAction, setPendingAction] = useState<'quickForm' | null>(null);
+    const [recentProjects, setRecentProjects] = useState([]);
 
     const handleQuickStart = () => {
         if (!connected) {
@@ -26,6 +27,20 @@ export function LandingPage() {
             setPendingAction(null);
         }
     }, [connected, pendingAction]);
+
+    useEffect(() => {
+        const fetchRecentProjects = async () => {
+            try {
+                const response = await fetch('/api/tokens?sortBy=newest&limit=5');
+                const data = await response.json();
+                setRecentProjects(data.tokens || []);
+            } catch (error) {
+                console.error('Failed to fetch recent projects:', error);
+            }
+        };
+
+        fetchRecentProjects();
+    }, []);
 
     return (
         <div className="min-h-screen bg-white">
@@ -81,6 +96,40 @@ export function LandingPage() {
                         </div>
                     </Dialog>
                 )}
+
+                {/* Recent Projects Section */}
+                <div className="mb-20">
+                    <h2 className="text-3xl font-bold text-center mb-8">Recent Projects</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        {recentProjects.slice(0, 5).map((project: any, index: number) => (
+                            <Link
+                                key={project.mint_address || index}
+                                to={`/token/${project.mintAddress}`}
+                                state={{ tokenType: 'custom' }}
+                                className="bg-gradient-to-br from-blue-50 to-violet-50 p-4 rounded-xl border border-blue-100 hover:border-violet-200 transition-all"
+                            >
+                                <div className="flex items-center gap-2 mb-2">
+                                    {project.image_url && (
+                                        <img
+                                            src={project.image_url}
+                                            alt={project.name}
+                                            className="w-8 h-8 rounded-full"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                            }}
+                                        />
+                                    )}
+                                    <h3 className="font-semibold text-gray-900 truncate">
+                                        {project.name}
+                                    </h3>
+                                </div>
+                                <p className="text-sm text-gray-600 truncate">
+                                    {project.symbol}
+                                </p>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
 
                 {/* How It Works Section */}
                 <div className="mb-20">

@@ -23,12 +23,6 @@ export function Wallet({ onProfileClick }: { onProfileClick: () => void }) {
     }, []);
 
     useEffect(() => {
-        // Debug log to see wallet info
-        console.log('Wallet info:', {
-            name: wallet?.adapter?.name,
-            isPhantom: wallet?.adapter?.name === 'Phantom',
-            wallet
-        });
     }, [wallet]);
 
     const handleConnect = () => {

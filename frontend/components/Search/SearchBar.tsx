@@ -6,6 +6,7 @@ interface SearchResult {
     name: string;
     symbol: string;
     token_type: string;
+    volume_24h: number;
 }
 
 export function SearchBar() {

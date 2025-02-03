@@ -27,7 +27,6 @@ export function ProjectsPage() {
             }
 
             const data = await response.json();
-            console.log('Raw token data:', data.tokens);
 
             setTokens(data.tokens.map((token: any) => ({
                 mintAddress: token.mintAddress,

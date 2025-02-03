@@ -5,6 +5,8 @@ const MAINNET_SOL_ADDRESS = 'So11111111111111111111111111111111111111112';
 
 const SUSPICIOUS_VOLUME_THRESHOLD = 1_000_000; // $1M in volume
 const MIN_MARKET_CAP = 10_000; // $10K market cap
+const MIN_LIQUIDITY = 10_000; // $10K minimum liquidity for tokens with high market cap
+const HIGH_MARKET_CAP_THRESHOLD = 1_000_000; // $1M market cap threshold
 
 export const filterService = {
     filterTokens: (tokens: TokenRecord[]) => {

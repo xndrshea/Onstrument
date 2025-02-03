@@ -129,6 +129,84 @@ const TokenInfoSection = ({ token }: { token: TokenRecord | null }) => {
     );
 };
 
+const ProjectInfoSection = ({ token }: { token: TokenRecord | null }) => {
+    if (!token) return null;
+
+    return (
+        <div className="mt-4">
+            <Disclosure>
+                {({ open }) => (
+                    <>
+                        <DisclosureButton className="flex w-full justify-between items-center px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-gray-900 border border-gray-200">
+                            <span>Project Information</span>
+                            <svg
+                                className={`w-5 h-5 transform ${open ? 'rotate-180' : ''} transition-transform`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </DisclosureButton>
+
+                        <DisclosurePanel className="px-4 py-3 bg-white mt-1 rounded-lg border border-gray-200">
+                            <div className="space-y-4">
+                                {token.projectCategory && (
+                                    <div>
+                                        <div className="text-gray-600">Category</div>
+                                        <div className="text-gray-900 capitalize">{token.projectCategory}</div>
+                                    </div>
+                                )}
+
+                                {!token.isAnonymous && token.teamMembers && token.teamMembers.length > 0 && (
+                                    <div>
+                                        <div className="text-gray-600 mb-2">Team Members</div>
+                                        <div className="space-y-2">
+                                            {token.teamMembers.map((member, index) => (
+                                                <div key={index} className="bg-gray-50 p-3 rounded-lg">
+                                                    <div className="font-medium">{member.name}</div>
+                                                    <div className="text-gray-600 text-sm">{member.role}</div>
+                                                    {member.social && (
+                                                        <a href={member.social} target="_blank" rel="noopener noreferrer"
+                                                            className="text-blue-500 text-sm hover:text-blue-600">
+                                                            Social Link
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {token.projectTitle && (
+                                    <div>
+                                        <div className="text-gray-600">Project Title</div>
+                                        <div className="text-gray-900">{token.projectTitle}</div>
+                                    </div>
+                                )}
+
+                                {token.projectDescription && (
+                                    <div>
+                                        <div className="text-gray-600">Project Description</div>
+                                        <div className="text-gray-900">{token.projectDescription}</div>
+                                    </div>
+                                )}
+
+                                {token.projectStory && (
+                                    <div>
+                                        <div className="text-gray-600">Project Story</div>
+                                        <div className="text-gray-900 whitespace-pre-wrap">{token.projectStory}</div>
+                                    </div>
+                                )}
+                            </div>
+                        </DisclosurePanel>
+                    </>
+                )}
+            </Disclosure>
+        </div>
+    );
+};
+
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
     const location = useLocation();
@@ -149,6 +227,7 @@ export function TokenDetailsPage() {
     });
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
     const [metadataImage, setMetadataImage] = useState<string | null>(null);
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
 
     // Add useRef and useEffect for click-outside handling
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -197,7 +276,6 @@ export function TokenDetailsPage() {
                 // First get token data from our database
                 const tokenData = await tokenService.getByMintAddress(mintAddress, tokenType);
                 setTokenWithLogging(tokenData);
-                console.log('TOKEN DATA', tokenData);
 
                 // If we're missing social/website URLs, fetch from DexScreener
                 if (tokenData && (!tokenData.twitterUrl || !tokenData.telegramUrl || !tokenData.websiteUrl)) {
@@ -357,6 +435,21 @@ export function TokenDetailsPage() {
         return token.imageUrl;
     };
 
+    // Add useEffect to fetch metadata
+    useEffect(() => {
+        const fetchMetadata = async () => {
+            if (!token?.metadataUrl) return;
+            try {
+                const response = await fetch(token.metadataUrl);
+                const metadata = await response.json();
+                setImageUrl(metadata.image);
+            } catch (error) {
+                console.error('Failed to fetch metadata:', error);
+            }
+        };
+        fetchMetadata();
+    }, [token?.metadataUrl]);
+
     const renderTokenSelector = () => (
         <Menu as="div" className="relative inline-flex items-center">
             <MenuButton className="flex items-center gap-1 px-3 py-2 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
@@ -419,10 +512,10 @@ export function TokenDetailsPage() {
                             className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-gray-50 text-gray-900"
                         >
                             <div className="flex items-center gap-2">
-                                {(token.tokenType === 'custom' ? metadataImage : token.imageUrl) && (
+                                {(token.tokenType === 'custom' ? imageUrl ?? '' : token.imageUrl) && (
                                     <img
-                                        src={token.tokenType === 'custom' ? metadataImage! : token.imageUrl!}
-                                        alt=""
+                                        src={token.tokenType === 'custom' ? imageUrl ?? '' : token.imageUrl}
+                                        alt={token.name}
                                         className="w-5 h-5 rounded-full"
                                         onError={(e) => {
                                             (e.target as HTMLImageElement).style.display = 'none';
@@ -465,6 +558,84 @@ export function TokenDetailsPage() {
     return (
         <div className="flex flex-col flex-1 bg-white text-gray-900 overflow-x-hidden">
             <div className="max-w-[1920px] mx-auto w-full p-4 space-y-4">
+                {/* Project Information Section - Only show if project data exists */}
+                {token && (token.projectTitle || token.projectDescription || token.projectCategory) && (
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-gray-200 rounded-lg p-6 shadow-sm">
+                        <div className="flex gap-8">
+                            {/* Image Section */}
+                            <div className="flex-shrink-0">
+                                {getImageUrl(token) && (
+                                    <img
+                                        src={getImageUrl(token)}
+                                        alt={token.name}
+                                        className="w-32 h-32 rounded-lg object-cover shadow-md border-2 border-white"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                        }}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Project Details Section */}
+                            <div className="flex-grow space-y-4">
+                                <div className="flex items-center gap-3">
+                                    {token.projectCategory && (
+                                        <div className="inline-block px-4 py-1.5 bg-blue-500 text-white rounded-full text-sm font-medium shadow-sm">
+                                            {token.projectCategory}
+                                        </div>
+                                    )}
+                                    <h1 className="text-3xl font-bold text-gray-900">
+                                        {token.projectTitle}
+                                    </h1>
+                                </div>
+
+                                {token.projectDescription && (
+                                    <p className="text-gray-700 text-lg leading-relaxed">
+                                        {token.projectDescription}
+                                    </p>
+                                )}
+
+                                {token.projectStory && (
+                                    <div className="mt-6 bg-white bg-opacity-50 rounded-lg p-4">
+                                        <h2 className="text-lg font-semibold text-gray-900 mb-2">Project Story</h2>
+                                        <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                                            {token.projectStory}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Team Members Section */}
+                        {!token.isAnonymous && token.teamMembers && token.teamMembers.length > 0 && (
+                            <div className="mt-8 pt-6 border-t border-gray-200">
+                                <h2 className="text-xl font-semibold text-gray-900 mb-4">Team</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {token.teamMembers.map((member, index) => (
+                                        <div key={index} className="bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                                            <div className="font-medium text-gray-900 text-lg">{member.name}</div>
+                                            <div className="text-blue-600 font-medium">{member.role}</div>
+                                            {member.social && (
+                                                <a
+                                                    href={member.social}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="mt-2 inline-flex items-center text-sm text-blue-500 hover:text-blue-600 transition-colors"
+                                                >
+                                                    <span>View Profile</span>
+                                                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                    </svg>
+                                                </a>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Top section with chart and trading interface */}
                 <div className="grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-4 overflow-x-hidden">
                     {/* Left column */}
@@ -474,9 +645,9 @@ export function TokenDetailsPage() {
                             <div className="flex flex-col">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center">
-                                        {getImageUrl(token) && (
+                                        {(token.tokenType === 'custom' ? imageUrl : token.imageUrl) && (
                                             <img
-                                                src={getImageUrl(token)}
+                                                src={token.tokenType === 'custom' ? imageUrl ?? '' : token.imageUrl}
                                                 alt={token.name}
                                                 className="w-10 h-10 rounded-full object-cover mr-3"
                                                 onError={(e) => {
@@ -511,6 +682,7 @@ export function TokenDetailsPage() {
 
                         <TradingInterface token={token} currentPrice={currentPrice} />
                         <TokenInfoSection token={token} />
+                        <ProjectInfoSection token={token} />
                     </div>
 
                     {/* Chart section */}
