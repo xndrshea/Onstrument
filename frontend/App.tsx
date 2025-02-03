@@ -21,6 +21,7 @@ import { LandingPage } from './components/pages/LandingPage'
 import { ProjectsPage } from './components/pages/ProjectsPage'
 import { CreateProjectPage } from './components/pages/CreateProjectPage'
 import { ContactPage } from './components/pages/ContactPage'
+import { ConsultingPage } from './components/pages/ConsultingPage'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -93,6 +94,7 @@ function App() {
                         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                         <Route path="/terms-of-service" element={<TermsOfService />} />
                         <Route path="/contact" element={<ContactPage />} />
+                        <Route path="/consulting" element={<ConsultingPage />} />
                     </Routes>
                 </main>
 

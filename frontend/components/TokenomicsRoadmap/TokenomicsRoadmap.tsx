@@ -36,6 +36,9 @@ export function TokenomicsRoadmap() {
                         </div>
                     ))}
                 </div>
+                <p className="text-center text-sm text-gray-600 italic mt-4">
+                    We are not short on ideas, but going forward we will be implementing based on YOUR feedback. Our roadmap will adapt. Please reach out. Every detail matters.
+                </p>
             </div>
 
             {/* Comparison Table */}
@@ -73,6 +76,10 @@ export function TokenomicsRoadmap() {
                             Join our community and earn your share of the airdrop. The points system is live,
                             and we're committed to rewarding our early supporters.
                         </p>
+                        <p className="text-gray-700 text-lg">
+                            After the airdrop, a percentage of transactoin fees will go to buy backs. Indefinitely. YOU decide the overall tokenomics.
+                            Nothing is set in stone.
+                        </p>
                     </div>
 
                     <div className="bg-white p-8 rounded-2xl border border-blue-200 shadow-sm">
@@ -82,7 +89,6 @@ export function TokenomicsRoadmap() {
                                 <>We will be distributing points every month, and a subscription gets you <span className="text-amber-600 font-bold">gold</span> points</>,
                                 "We will be airdropping a minimum of 80+ % to Onstrument users",
                                 "Maximum 20% for team",
-                                "A portion of the transaction fees will then start going to buy backs, but all airdrop details including qualification will be discussed with the community."
                             ].map((item, index) => (
                                 <div
                                     key={index}
