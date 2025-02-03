@@ -91,7 +91,7 @@ export function Header({ onProfileClick, onSubscribeClick, isSubscribed }: Heade
                             className="absolute right-8 top-16 bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-64"
                         >
                             <h3 className="text-sm font-semibold text-gray-900 mb-3">Connect with us:</h3>
-                            <p className="text-sm text-gray-600 mb-3">Your criticisms are extremely important to us</p>
+                            <p className="text-sm text-gray-600 mb-3">Your suggestions are extremely important to us</p>
                             <div className="space-y-2">
                                 <a
                                     href="https://t.me/onstrument"
