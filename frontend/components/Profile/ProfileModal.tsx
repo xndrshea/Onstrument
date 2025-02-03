@@ -33,6 +33,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     const [stats, setStats] = useState<TradingStatsRecord[]>([]);
     const [isLoadingStats, setIsLoadingStats] = useState(false);
     const navigate = useNavigate();
+    const isDev = !import.meta.env.PROD; // Check if we're in development environment
 
     useEffect(() => {
         if (publicKey) {
@@ -113,16 +114,16 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             }}
         >
             <div
-                className={`relative bg-[#232427] rounded-lg w-full max-w-2xl transform ${isOpen ? 'translate-y-0' : '-translate-y-8'
-                    } transition-transform duration-300`}
+                className={`relative bg-white rounded-lg w-full max-w-2xl transform ${isOpen ? 'translate-y-0' : '-translate-y-8'
+                    } transition-transform duration-300 shadow-xl border border-gray-200`}
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-white">Profile</h2>
+                        <h2 className="text-2xl font-bold text-gray-900">Profile</h2>
                         <button
                             onClick={onClose}
-                            className="text-gray-400 hover:text-white"
+                            className="text-gray-400 hover:text-gray-600"
                         >
                             ×
                         </button>
@@ -132,30 +133,40 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                     <div className="max-h-[80vh] overflow-y-auto">
                         {/* User info section */}
                         {user && (
-                            <div className="space-y-4 text-white mb-8">
-                                <p>User ID: <span className="text-gray-300">{user.userId}</span></p>
-                                <p>Wallet: <span className="text-gray-300">{user.walletAddress}</span></p>
+                            <div className="space-y-4 mb-8">
+                                <p className="text-gray-700">User ID: <span className="text-gray-900">{user.userId}</span></p>
+                                <p className="text-gray-700">Wallet: <span className="text-gray-900">{user.walletAddress}</span></p>
 
-                                <div className="flex items-center justify-between">
-                                    <span>Subscription Status:</span>
-                                    <button
-                                        onClick={handleToggleSubscription}
-                                        disabled={isLoading}
-                                        className={`px-4 py-2 rounded-md transition-colors ${user.isSubscribed
-                                            ? 'bg-green-500 hover:bg-green-600'
-                                            : 'bg-gray-500 hover:bg-gray-600'
-                                            }`}
-                                    >
-                                        {isLoading ? 'Loading...' : user.isSubscribed ? 'Subscribed' : 'Not Subscribed'}
-                                    </button>
-                                </div>
+                                {/* Only show toggle subscription in development */}
+                                {isDev && (
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-gray-700">Subscription Status:</span>
+                                        <button
+                                            onClick={handleToggleSubscription}
+                                            disabled={isLoading}
+                                            className={`px-4 py-2 rounded-md transition-colors ${user.isSubscribed
+                                                ? 'bg-green-500 hover:bg-green-600 text-white'
+                                                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                                }`}
+                                        >
+                                            {isLoading ? 'Loading...' : user.isSubscribed ? 'Subscribed' : 'Not Subscribed'}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Always show subscription status for non-dev environments */}
+                                {!isDev && user.isSubscribed && (
+                                    <p className="text-gray-700">
+                                        Subscription Status: <span className="text-green-600">Active</span>
+                                    </p>
+                                )}
 
                                 {user.subscriptionExpiresAt && (
-                                    <p>Expires: <span className="text-gray-300">
+                                    <p className="text-gray-700">Expires: <span className="text-gray-900">
                                         {new Date(user.subscriptionExpiresAt).toLocaleDateString()}
                                     </span></p>
                                 )}
-                                <p>Member Since: <span className="text-gray-300">
+                                <p className="text-gray-700">Member Since: <span className="text-gray-900">
                                     {new Date(user.createdAt).toLocaleDateString()}
                                 </span></p>
                             </div>
