@@ -3,6 +3,7 @@ import { TokenRecord } from '../../../shared/types/token'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { useState, useEffect } from 'react'
 import { formatMarketCap } from '../../utils/formatting';
+import { getCsrfHeaders } from '../../utils/headers';
 
 interface TokenCardProps {
     token: TokenRecord;
@@ -19,6 +20,7 @@ interface TokenMetadata {
 
 export function TokenCard({ token, volumePeriod }: TokenCardProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [volume, setVolume] = useState<number | null>(null);
 
     useEffect(() => {
         const fetchMetadata = async () => {
@@ -31,8 +33,28 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
                 console.error('Failed to fetch metadata:', error);
             }
         };
+
+        const fetchVolume = async () => {
+            try {
+                // Always use 24h for volume display when sorting by newest/oldest/marketCapUsd
+                const displayPeriod = ['newest', 'oldest', 'marketCapUsd'].includes(volumePeriod)
+                    ? '24h'
+                    : volumePeriod;
+
+                const response = await fetch(
+                    `/api/price-history/${token.mintAddress}/volume?period=${displayPeriod}`,
+                    { headers: await getCsrfHeaders() }
+                );
+                const data = await response.json();
+                setVolume(data.volume);
+            } catch (error) {
+                console.error('Failed to fetch volume:', error);
+            }
+        };
+
         fetchMetadata();
-    }, [token.metadataUrl]);
+        fetchVolume();
+    }, [token.metadataUrl, token.mintAddress, volumePeriod]);
 
     return (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all">
@@ -67,8 +89,13 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
                     </p>
 
                     <div className="flex justify-between items-center mt-auto">
-                        <div className="text-sm font-medium text-gray-700">
-                            Market Cap: {token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
+                        <div className="flex flex-col gap-1">
+                            <div className="text-sm font-medium text-gray-700">
+                                Market Cap: {token.marketCapUsd ? formatMarketCap(token.marketCapUsd) : 'N/A'}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                                24h Volume: {volume ? `$${volume.toLocaleString()}` : 'N/A'}
+                            </div>
                         </div>
                     </div>
                 </div>
