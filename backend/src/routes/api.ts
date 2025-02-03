@@ -190,7 +190,6 @@ router.get('/system/status', async (_req, res) => {
 // Token creation endpoint
 router.post('/tokens', authMiddleware, async (req, res) => {
     try {
-
         const {
             mintAddress,
             curveAddress,
@@ -206,8 +205,16 @@ router.post('/tokens', authMiddleware, async (req, res) => {
             websiteUrl,
             twitterUrl,
             docsUrl,
-            telegramUrl
+            telegramUrl,
+            // Project data
+            projectCategory,
+            teamMembers,
+            isAnonymous,
+            projectTitle,
+            projectDescription,
+            projectStory
         } = req.body;
+
 
         // Get current SOL price
         const solPriceResult = await pool().query(`
@@ -224,97 +231,112 @@ router.post('/tokens', authMiddleware, async (req, res) => {
         const virtualSolana = 30;
         const initialMarketCapUsd = virtualSolana * solanaPrice;
 
+        // Start a transaction since we're making multiple related updates
+        const client = await pool().connect();
+        try {
+            await client.query('BEGIN');
 
-        // Insert token
-        const insertQuery = `
-            INSERT INTO onstrument.tokens (
-                mint_address,
-                curve_address,
-                token_vault,
+            // Insert token (existing logic)
+            const insertTokenQuery = `
+                INSERT INTO onstrument.tokens (
+                    mint_address,
+                    curve_address,
+                    token_vault,
+                    name,
+                    symbol,
+                    description,
+                    metadata_url,
+                    website_url,
+                    docs_url,
+                    twitter_url,
+                    telegram_url,
+                    curve_config,
+                    decimals,
+                    token_type,
+                    supply,
+                    market_cap_usd,
+                    current_price,
+                    created_at,
+                    project_category,
+                    team_members,
+                    is_anonymous,
+                    project_title,
+                    project_description,
+                    project_story
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'custom', $14, $15, $16, 
+                    CURRENT_TIMESTAMP, $17, $18, $19, $20, $21, $22
+                )
+                RETURNING *
+            `;
+
+            const values = [
+                mintAddress,
+                curveAddress,
+                tokenVault,
                 name,
                 symbol,
                 description,
-                metadata_url,
-                website_url,
-                docs_url,
-                twitter_url,
-                telegram_url,
-                curve_config,
+                metadataUri,
+                websiteUrl || null,
+                docsUrl || null,
+                twitterUrl || null,
+                telegramUrl || null,
+                curveConfig,
                 decimals,
-                token_type,
-                supply,
-                market_cap_usd,
-                current_price,
-                created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'custom', $14, $15, $16, CURRENT_TIMESTAMP)
-            RETURNING *
-        `;
+                totalSupply,
+                initialMarketCapUsd,
+                initialPriceUsd,
+                projectCategory,
+                JSON.stringify(teamMembers),
+                isAnonymous,
+                projectTitle,
+                projectDescription,
+                projectStory
+            ];
 
-        const values = [
-            mintAddress,
-            curveAddress,
-            tokenVault,
-            name,
-            symbol,
-            description,
-            metadataUri,
-            websiteUrl || null,
-            docsUrl || null,
-            twitterUrl || null,
-            telegramUrl || null,
-            curveConfig,
-            decimals,
-            totalSupply,
-            initialMarketCapUsd,
-            initialPriceUsd
-        ];
+            console.log('About to execute query with values:', values);
 
+            const result = await client.query(insertTokenQuery, values);
+            console.log('Query result:', result.rows[0]);
 
-        const result = await pool().query(insertQuery, values);
+            // Record initial price (existing logic)
+            if (initialPriceUsd && initialPriceUsd > 0) {
+                const priceHistoryQuery = `
+                    INSERT INTO onstrument.price_history (
+                        time,
+                        mint_address,
+                        open,
+                        high,
+                        low,
+                        close,
+                        volume,
+                        market_cap,
+                        is_buy,
+                        trade_count,
+                        buy_count,
+                        sell_count
+                    ) VALUES (
+                        date_trunc('minute', CURRENT_TIMESTAMP),
+                        $1, $2, $2, $2, $2, 0, $3,
+                        true, 1, 1, 0
+                    )
+                `;
 
-        // Record initial price
-        if (initialPriceUsd && initialPriceUsd > 0) {
-            const priceHistoryQuery = `
-                INSERT INTO onstrument.price_history (
-                    time,
-                    mint_address,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                    market_cap,
-                    is_buy,
-                    trade_count,
-                    buy_count,
-                    sell_count
-                ) VALUES (
-                    date_trunc('minute', CURRENT_TIMESTAMP),
-                    $1,
-                    $2,
-                    $2,
-                    $2,
-                    $2,
-                    0,
-                    $3,
-                    true,
-                    1,
-                    1,
-                    0
-                )
-            `;
+                await client.query(priceHistoryQuery, [mintAddress, initialPriceUsd, initialMarketCapUsd]);
+            }
 
-            await pool().query(priceHistoryQuery, [mintAddress, initialPriceUsd, initialMarketCapUsd]);
-            console.log('Price history recorded');
+            await client.query('COMMIT');
+            res.json(result.rows[0]);
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
         }
-
-        res.json(result.rows[0]);
     } catch (error) {
-        console.error('Token creation API error:', {
-            error,
-            message: (error as Error).message,
-            stack: (error as Error).stack
-        });
+        console.error('Token creation API error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -527,12 +549,20 @@ router.get('/tokens/:mintAddress', async (req, res) => {
     try {
         const { mintAddress } = req.params;
 
-        const query = `
-            SELECT * FROM onstrument.tokens 
-            WHERE mint_address = $1
+        const tokenQuery = `
+            SELECT 
+                t.*,
+                t.project_category,
+                t.team_members,
+                t.is_anonymous,
+                t.project_title,
+                t.project_description,
+                t.project_story
+            FROM onstrument.tokens t
+            WHERE t.mint_address = $1
         `;
 
-        const result = await pool().query(query, [mintAddress]);
+        const result = await pool().query(tokenQuery, [mintAddress]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -569,7 +599,8 @@ router.get('/search/tokens', async (req, res) => {
                 symbol,
                 token_type,
                 verified,
-                image_url
+                image_url,
+                volume_24h
             FROM onstrument.tokens 
             WHERE 
                 (LOWER(name) LIKE LOWER($1) OR 
@@ -580,6 +611,7 @@ router.get('/search/tokens', async (req, res) => {
             AND symbol IS NOT NULL
             ORDER BY 
                 verified DESC,
+                volume_24h DESC,
                 name ASC
             LIMIT 10
         `;

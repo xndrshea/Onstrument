@@ -107,6 +107,12 @@ export interface TokenRecord {
     baseTokenPriceNativeCurrency?: number;
     quoteTokenPriceNativeCurrency?: number;
     initialPrice?: number;
+    projectCategory?: string;
+    teamMembers?: Array<{ name: string; role: string; social: string; }>;
+    isAnonymous?: boolean;
+    projectTitle?: string;
+    projectDescription?: string;
+    projectStory?: string;
 }
 
 export interface TokenFormData {
@@ -121,6 +127,12 @@ export interface TokenFormData {
     supply: number;
     totalSupply: BN;
     curveConfig: curveConfig;
+    projectCategory: string;
+    teamMembers: Array<{ name: string; role: string; social: string; }>;
+    isAnonymous: boolean;
+    projectTitle: string;
+    projectDescription: string;
+    projectStory: string;
 }
 
 export interface DexToken {

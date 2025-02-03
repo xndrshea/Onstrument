@@ -12,12 +12,20 @@ import { pinataService } from '../../services/pinataService'
 interface TokenCreationFormProps {
     onSuccess?: () => void
     onTokenCreated?: () => void
+    projectData?: {
+        category: string
+        teamMembers: Array<{ name: string; role: string; social: string; }>
+        isAnonymous: boolean
+        projectTitle: string
+        projectDescription: string
+        projectStory: string
+    }
 }
 
 const MAX_SUPPLY = 1_000_000_000_000; // 1 trillion
 const MIN_SUPPLY = 10;
 
-export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFormProps) {
+export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: TokenCreationFormProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
     const tokenTransactionService = new TokenTransactionService(wallet, connection, { tokenType: 'custom' })
@@ -56,8 +64,28 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
             migrationStatus: 'active',
             isSubscribed: isSubscribed,
             developer: wallet.publicKey?.toString() || ''
-        }
+        },
+        projectCategory: projectData?.category || '',
+        teamMembers: projectData?.teamMembers || [],
+        isAnonymous: projectData?.isAnonymous || false,
+        projectTitle: projectData?.projectTitle || '',
+        projectDescription: projectData?.projectDescription || '',
+        projectStory: projectData?.projectStory || ''
     })
+
+    useEffect(() => {
+        if (projectData) {
+            setFormData(prev => ({
+                ...prev,
+                projectCategory: projectData.category,
+                teamMembers: projectData.teamMembers,
+                isAnonymous: projectData.isAnonymous,
+                projectTitle: projectData.projectTitle,
+                projectDescription: projectData.projectDescription,
+                projectStory: projectData.projectStory
+            }));
+        }
+    }, [projectData]);
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -110,6 +138,14 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault()
+        console.log('Project Data being sent:', {
+            category: formData.projectCategory,
+            teamMembers: formData.teamMembers,
+            isAnonymous: formData.isAnonymous,
+            projectTitle: formData.projectTitle,
+            projectDescription: formData.projectDescription,
+            projectStory: formData.projectStory
+        });
         if (!validateForm()) return
 
         setIsLoading(true)
@@ -149,6 +185,15 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                 }
             }
 
+            const projectData = {
+                category: formData.projectCategory,
+                teamMembers: formData.teamMembers,
+                isAnonymous: formData.isAnonymous,
+                projectTitle: formData.projectTitle,
+                projectDescription: formData.projectDescription,
+                projectStory: formData.projectStory
+            }
+
             const result = await tokenTransactionService.createToken(
                 params,
                 formData.description,
@@ -157,7 +202,8 @@ export function TokenCreationForm({ onSuccess, onTokenCreated }: TokenCreationFo
                     twitterUrl: formData.twitterUrl,
                     docsUrl: formData.docsUrl,
                     telegramUrl: formData.telegramUrl
-                }
+                },
+                projectData
             );
 
             if (!result || !result.mintAddress) {

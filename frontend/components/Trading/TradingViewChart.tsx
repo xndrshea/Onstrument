@@ -66,7 +66,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         script.onload = () => {
             if (!window.TradingView) return;
 
-            widgetRef.current = new (window as any).TradingView.widget({
+            const widget = new (window as any).TradingView.widget({
                 container: containerRef.current,
                 width,
                 height,
@@ -106,21 +106,11 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     "mainSeriesProperties.priceAxisProperties.log": false,
                     "mainSeriesProperties.priceAxisProperties.logDisabled": false,
                     "paneProperties.background": "#ffffff",
-                    "paneProperties.backgroundType": "solid",
-                    "paneProperties.backgroundGradientStartColor": "#ffffff",
-                    "paneProperties.backgroundGradientEndColor": "#ffffff",
                     "paneProperties.vertGridProperties.color": "#f1f5f9",
                     "paneProperties.horzGridProperties.color": "#f1f5f9",
                     "paneProperties.crossHairProperties.color": "#64748b",
                     "paneProperties.crossHairProperties.style": 2,
                     "paneProperties.crossHairProperties.width": 1,
-                    "chartProperties.background": "#ffffff",
-                    "chartProperties.backgroundType": "solid",
-                    "chartProperties.paneProperties.background": "#ffffff",
-                    "chartProperties.paneProperties.backgroundType": "solid",
-                    "sessions.vertlines.color": "#e2e8f0",
-                    "sessions.vertlines.style": 2,
-                    "sessions.vertlines.visible": false,
                     "scalesProperties.backgroundColor": "#ffffff",
                     "scalesProperties.textColor": "#64748b",
                     "scalesProperties.lineColor": "#f1f5f9",
@@ -128,32 +118,15 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     "mainSeriesProperties.candleStyle.downColor": "#ef4444",
                     "mainSeriesProperties.candleStyle.drawWick": true,
                     "mainSeriesProperties.candleStyle.drawBorder": true,
-                    "mainSeriesProperties.candleStyle.borderColor": "#000000",
                     "mainSeriesProperties.candleStyle.borderUpColor": "#22c55e",
                     "mainSeriesProperties.candleStyle.borderDownColor": "#ef4444",
                     "mainSeriesProperties.candleStyle.wickUpColor": "#22c55e",
                     "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444",
-                    "paneProperties.legendProperties.showBackground": true,
-                    "paneProperties.legendProperties.backgroundTransparency": 0,
-                    "paneProperties.legendProperties.backgroundColor": "#ffffff",
-                    "paneProperties.legendProperties.textColor": "#64748b",
-                    "toolbarBg": "#ffffff",
-                    "toolbarColor": "#64748b",
-                    "header_widget.background": "#ffffff",
-                    "header_widget.symbolSearch": "#64748b",
-                    "header_symbol_search.background": "#ffffff",
-                    "symbolWatermarkProperties.transparency": 0,
-                    "symbolWatermarkProperties.color": "rgba(0, 0, 0, 0)",
-                    "crossHairProperties.color": "#64748b",
-                    "crossHairProperties.style": 2,
-                    "crossHairProperties.transparency": 0,
-                    "crossHairProperties.width": 1,
                 },
                 studies_overrides: {
                     "volume.volume.color.0": "#ef4444",
                     "volume.volume.color.1": "#22c55e",
-                    "volume.volume.transparency": 50,
-                    "volume.volume.backgroundTransparency": 100
+                    "volume.volume.transparency": 50
                 },
                 loading_screen: {
                     backgroundColor: "#ffffff",
@@ -165,9 +138,11 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 charts_storage_api_version: "1.1",
                 datafeed: {
                     onReady: (callback: any) => {
-                        callback({
-                            supported_resolutions: ['1', '5', '15', '30', '60', '240', 'D', 'W', 'M']
-                        });
+                        setTimeout(() => {
+                            callback({
+                                supported_resolutions: ['1', '5', '15', '30', '60', '240', 'D', 'W', 'M']
+                            });
+                        }, 0);
                     },
                     resolveSymbol: (symbolName: string, onSymbolResolvedCallback: any) => {
                         setTimeout(() => {
@@ -321,112 +296,36 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 },
                 auto_scale: false,
                 scale_mode: 'Normal',
-                custom_themes: {
-                    light: {
-                        // Blue (color1)
-                        "color1": [
-                            "#f5f8ff", "#e5efff", "#d6e6ff", "#c6dcff", "#b7d3ff",
-                            "#a8caff", "#98c1ff", "#89b8ff", "#79afff", "#6aa6ff",
-                            "#5a9dff", "#4d94ff", "#4687ea", "#3f7ad5", "#386dbf",
-                            "#3161aa", "#2a5495", "#244880", "#1d3b6a", "#162e55"
-                        ],
-                        // Grey (color2)
-                        "color2": [
-                            "#f7f7f7", "#efefef", "#e7e7e7", "#dfdfdf", "#d7d7d7",
-                            "#cfcfcf", "#c7c7c7", "#bfbfbf", "#b7b7b7", "#afafaf",
-                            "#a7a7a7", "#9f9f9f", "#919191", "#848484", "#767676",
-                            "#696969", "#5b5b5b", "#4e4e4e", "#404040", "#333333"
-                        ],
-                        // Red (color3)
-                        "color3": [
-                            "#fff0f0", "#ffe1e1", "#ffd3d3", "#ffc4c4", "#ffb5b5",
-                            "#ffa6a6", "#ff9797", "#ff8888", "#ff7a7a", "#ff6b6b",
-                            "#ff5d5d", "#ff4d4d", "#ea4747", "#d54040", "#bf3a3a",
-                            "#aa3333", "#952d2d", "#802727", "#6a2020", "#551a1a"
-                        ],
-                        // Green (color4)
-                        "color4": [
-                            "#f0fff7", "#e1fff0", "#d3ffe8", "#c4ffe1", "#b5ffda",
-                            "#a6ffd3", "#97ffcc", "#88ffc5", "#7affbe", "#6bffb7",
-                            "#5cffb0", "#4dffaa", "#47ea9b", "#40d58d", "#3abf7f",
-                            "#33aa71", "#2d9563", "#278055", "#206a47", "#1a5539"
-                        ],
-                        // Orange (color5)
-                        "color5": [
-                            "#fff7f0", "#ffefe1", "#ffe7d3", "#ffdfc4", "#ffd7b5",
-                            "#ffcfa6", "#ffc797", "#ffbf88", "#ffb77a", "#ffaf6b",
-                            "#ffa75d", "#ff9f4d", "#ea9147", "#d58340", "#bf763a",
-                            "#aa6833", "#955b2d", "#804e27", "#6a4120", "#55341a"
-                        ],
-                        // Purple (color6)
-                        "color6": [
-                            "#f7f0ff", "#efe1ff", "#e7d3ff", "#dfc4ff", "#d7b5ff",
-                            "#cfa6ff", "#c797ff", "#bf88ff", "#b77aff", "#af6bff",
-                            "#a75dff", "#9f4dff", "#9147ea", "#8340d5", "#763abf",
-                            "#6833aa", "#5b2d95", "#4e2780", "#41206a", "#341a55"
-                        ],
-                        // Yellow (color7)
-                        "color7": [
-                            "#fffff0", "#ffffe1", "#ffffd3", "#ffffc4", "#ffffb5",
-                            "#ffffa6", "#ffff97", "#ffff88", "#ffff7a", "#ffff6b",
-                            "#ffff5d", "#ffff4d", "#eaea47", "#d5d540", "#bfbf3a",
-                            "#aaaa33", "#95952d", "#808027", "#6a6a20", "#55551a"
-                        ]
-                    }
-                }
             });
 
-            widgetRef.current.onReady(() => {
-                setTimeout(() => {
-                    try {
-                        // Wait for header to be ready before creating button
-                        widgetRef.current.headerReady().then(() => {
-                            const button = widgetRef.current.createButton();
+            widgetRef.current = widget;
 
-                            // Match TradingView's button styling
-                            button.textContent = denomination;
-                            button.style.color = "#1e293b";
-                            button.style.padding = "0 12px";
-                            button.style.display = "flex";
-                            button.style.alignItems = "center";
-                            button.style.height = "100%";
-                            button.style.cursor = "pointer";
+            widget.onChartReady(() => {
+                const button = widget.createButton();
+                button.textContent = denomination;
+                button.style.color = "#1e293b";
+                button.style.padding = "0 12px";
+                button.style.display = "flex";
+                button.style.alignItems = "center";
+                button.style.height = "100%";
+                button.style.cursor = "pointer";
 
-                            // Add hover effect
-                            button.addEventListener('mouseenter', () => {
-                                button.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
-                            });
-                            button.addEventListener('mouseleave', () => {
-                                button.style.backgroundColor = "transparent";
-                            });
+                button.addEventListener('mouseenter', () => {
+                    button.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
+                });
+                button.addEventListener('mouseleave', () => {
+                    button.style.backgroundColor = "transparent";
+                });
 
-                            button.addEventListener("click", () => {
-                                setDenomination(prev => {
-                                    const next = prev === 'SOL' ? 'USD' :
-                                        prev === 'USD' ? 'MCAP' : 'SOL';
-                                    button.textContent = next;
-                                    return next;
-                                });
-                                widgetRef.current.chart().resetData();
-                            });
-                        });
-
-                        const defaultTheme = {
-                            "chart": {
-                                "layout": {
-                                    "background": {
-                                        "type": "solid",
-                                        "color": "#ffffff"
-                                    }
-                                }
-                            }
-                        };
-
-                        widgetRef.current.applyOverrides(defaultTheme);
-                    } catch (error) {
-                        console.error('Error setting up button:', error);
-                    }
-                }, 0);
+                button.addEventListener("click", () => {
+                    setDenomination(prev => {
+                        const next = prev === 'SOL' ? 'USD' :
+                            prev === 'USD' ? 'MCAP' : 'SOL';
+                        button.textContent = next;
+                        return next;
+                    });
+                    widget.chart().resetData();
+                });
             });
         };
 

@@ -19,6 +19,8 @@ import { UserService } from './services/userService'
 import { useScrollLock } from './hooks/useScrollLock'
 import { LandingPage } from './components/pages/LandingPage'
 import { ProjectsPage } from './components/pages/ProjectsPage'
+import { CreateProjectPage } from './components/pages/CreateProjectPage'
+import { ContactPage } from './components/pages/ContactPage'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -82,6 +84,7 @@ function App() {
                 }}>
                     <Routes>
                         <Route path="/" element={<LandingPage />} />
+                        <Route path="/create" element={<CreateProjectPage />} />
                         <Route path="/projects" element={<ProjectsPage />} />
                         <Route path="/market" element={<MarketPage />} />
                         <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
@@ -89,6 +92,7 @@ function App() {
                         <Route path="/profile" element={<ProfilePage />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                         <Route path="/terms-of-service" element={<TermsOfService />} />
+                        <Route path="/contact" element={<ContactPage />} />
                     </Routes>
                 </main>
 

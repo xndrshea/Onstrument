@@ -72,11 +72,6 @@ export class BondingCurve {
 
 
     async createTokenWithCurve(params: createTokenParams): Promise<{ mint: PublicKey, curve: PublicKey, tokenVault: PublicKey }> {
-        // Add before creating PDAs
-        console.log('Creating PDAs with:', {
-            tokenSeed: params.tokenSeed,
-            wallet: this.wallet!.publicKey!.toString()
-        });
 
         // Check SOL balance before proceeding
         const balance = await this.connection.getBalance(this.wallet!.publicKey!);
@@ -270,11 +265,6 @@ export class BondingCurve {
                     // If we can't identify the specific error, provide a more generic message
                     throw new Error('Transaction failed during simulation. Please check your inputs and try again.');
                 }
-
-                // Log program logs from simulation for debugging
-                if (sim.value.logs) {
-                    console.log('Program logs:', sim.value.logs);
-                }
             } catch (simError: any) {
                 // Handle simulation errors
                 console.error('Simulation error:', simError);
@@ -299,7 +289,6 @@ export class BondingCurve {
             // Log explorer link
             const isDevnet = this.connection.rpcEndpoint.includes('devnet');
             const explorerUrl = `https://explorer.solana.com/tx/${signature}${isDevnet ? '?cluster=devnet' : ''}`;
-            console.log('Transaction sent:', signature);
             console.log('View transaction:', explorerUrl);
 
             return signature;

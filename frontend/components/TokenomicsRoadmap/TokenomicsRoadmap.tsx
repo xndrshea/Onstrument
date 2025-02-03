@@ -15,7 +15,7 @@ export function TokenomicsRoadmap() {
 
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-8">
                     {[
-                        { text: "Onstrument Projects.", status: "Completed" },
+                        { text: "Onstrument Projects", status: "Completed" },
                         { text: "Solana Ecosystem Trading", status: "Completed" },
                         { text: "Integrated Telegram Bots" },
                         { text: "Onstrument News Terminal" },

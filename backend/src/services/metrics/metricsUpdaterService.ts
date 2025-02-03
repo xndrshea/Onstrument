@@ -75,17 +75,7 @@ export class MetricsUpdaterService {
                     )
                 `);
 
-                logger.info('Selected tokens for update', {
-                    count: tokensResult.rows.length,
-                    tokens: tokensResult.rows.map(t => ({
-                        mint: t.mint_address,
-                        volume: t.volume_24h,
-                        lastUpdate: t.last_price_update
-                    }))
-                });
-
                 await this.updateAllMetrics(tokensResult.rows);
-                logger.info('Completed batch update');
 
                 // Wait 5 seconds before next batch
                 await new Promise(resolve => setTimeout(resolve, 5000));
@@ -105,22 +95,11 @@ export class MetricsUpdaterService {
         const client = await dbPool.connect();
 
         try {
-            logger.info('Starting metrics update', { tokenCount: tokens.length });
 
             const addresses = tokens.map(t => t.mint_address).join(',');
-            logger.info('Fetching DexScreener data', { addresses });
 
             const response = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${addresses}`);
             const pairs = await response.json() as DexScreenerResponse[];
-
-            logger.info('DexScreener response received', {
-                pairsCount: pairs.length,
-                pairs: pairs.map(p => ({
-                    address: p.baseToken.address,
-                    volume: p.volume?.h24
-                }))
-            });
-
             const pairMap = new Map(pairs.map(pair => [pair.baseToken.address, pair]));
             await client.query('BEGIN');
 
@@ -128,15 +107,8 @@ export class MetricsUpdaterService {
                 for (const token of tokens) {
                     const pair = pairMap.get(token.mint_address);
                     if (!pair) {
-                        logger.warn('No pair data found', { token: token.mint_address });
                         continue;
                     }
-
-                    logger.info('Updating token', {
-                        token: token.mint_address,
-                        newVolume: pair.volume?.h24,
-                        newPrice: pair.priceUsd
-                    });
 
                     const result = await client.query(`
                         UPDATE onstrument.tokens 
@@ -187,16 +159,9 @@ export class MetricsUpdaterService {
                         Number(pair.liquidity?.usd || 0),
                         pair.baseToken.address
                     ]);
-
-                    logger.info('Token update complete', {
-                        token: token.mint_address,
-                        updated: result!.rowCount! > 0,
-                        newValues: result!.rows![0]
-                    });
                 }
 
                 await client.query('COMMIT');
-                logger.info('Batch commit complete', { tokenCount: tokens.length });
 
             } catch (error) {
                 await client.query('ROLLBACK');
@@ -215,7 +180,6 @@ export class MetricsUpdaterService {
             throw error;
         } finally {
             client.release();
-            logger.info('Database connection released');
         }
     }
 

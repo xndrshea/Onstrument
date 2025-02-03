@@ -53,6 +53,7 @@ export class TokenService {
 
     async create(token: TokenRecord): Promise<TokenRecord> {
         try {
+            console.log('Creating token with data:', token);
             const requestData = {
                 mintAddress: token.mintAddress,
                 curveAddress: token.curveAddress,
@@ -68,7 +69,14 @@ export class TokenService {
                 twitterUrl: token.twitterUrl || '',
                 docsUrl: token.docsUrl || '',
                 telegramUrl: token.telegramUrl || '',
-                tokenVault: token.tokenVault
+                tokenVault: token.tokenVault,
+                // Add project data
+                projectCategory: token.projectCategory,
+                teamMembers: token.teamMembers,
+                isAnonymous: token.isAnonymous,
+                projectTitle: token.projectTitle,
+                projectDescription: token.projectDescription,
+                projectStory: token.projectStory
             };
 
             const response = await fetch(`${API_BASE_URL}/tokens`, {
@@ -85,18 +93,13 @@ export class TokenService {
             }
 
             const data = JSON.parse(responseText);
-
             return {
                 ...token,
                 ...data,
                 tokenType: 'custom' as const
             };
         } catch (error) {
-            console.error('Token service create error:', {
-                error,
-                message: (error as Error).message,
-                stack: (error as Error).stack
-            });
+            console.error('Token service create error:', error);
             throw error;
         }
     }

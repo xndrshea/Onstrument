@@ -42,9 +42,18 @@ export class TokenTransactionService {
             twitterUrl?: string;
             docsUrl?: string;
             telegramUrl?: string;
+        },
+        projectData?: {
+            category: string;
+            teamMembers: Array<{ name: string; role: string; social: string; }>;
+            isAnonymous: boolean;
+            projectTitle: string;
+            projectDescription: string;
+            projectStory: string;
         }
     ): Promise<TokenRecord> {
         try {
+            console.log('Project Data in createToken:', projectData);
             // Remove the token seed generation since it's in the params
             const { mint, curve, tokenVault } = await this.bondingCurve.createTokenWithCurve(params);
 
@@ -52,7 +61,7 @@ export class TokenTransactionService {
             const newBondingCurve = new BondingCurve(this.connection, this.wallet, mint, curve);
             const initialPrice = await newBondingCurve.getInitialPrice();
 
-            // Create token record with description and initial price
+            // Create token record with all data
             const tokenRecord: TokenRecord = {
                 mintAddress: mint.toString(),
                 curveAddress: curve.toString(),
@@ -71,9 +80,16 @@ export class TokenTransactionService {
                 websiteUrl: socialLinks.websiteUrl || '',
                 twitterUrl: socialLinks.twitterUrl || '',
                 docsUrl: socialLinks.docsUrl || '',
-                telegramUrl: socialLinks.telegramUrl || ''
+                telegramUrl: socialLinks.telegramUrl || '',
+                projectCategory: projectData?.category || '',
+                teamMembers: projectData?.teamMembers || [],
+                isAnonymous: projectData?.isAnonymous || false,
+                projectTitle: projectData?.projectTitle || '',
+                projectDescription: projectData?.projectDescription || '',
+                projectStory: projectData?.projectStory || ''
             };
 
+            console.log('Token record being sent to tokenService:', tokenRecord);
             // Save to database through tokenService
             return await this.tokenService.create(tokenRecord);
         } catch (error: any) {
