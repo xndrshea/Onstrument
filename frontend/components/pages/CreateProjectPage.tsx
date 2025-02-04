@@ -154,7 +154,7 @@ export function CreateProjectPage() {
                                                 newTeamMembers[index].name = e.target.value;
                                                 setTeamMembers(newTeamMembers);
                                             }}
-                                            className="w-full p-2 mb-2 border rounded"
+                                            className="w-full p-2 mb-2 border rounded focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                                         />
                                         <input
                                             type="text"
@@ -165,7 +165,7 @@ export function CreateProjectPage() {
                                                 newTeamMembers[index].role = e.target.value;
                                                 setTeamMembers(newTeamMembers);
                                             }}
-                                            className="w-full p-2 mb-2 border rounded"
+                                            className="w-full p-2 mb-2 border rounded focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                                         />
                                         <input
                                             type="text"
@@ -176,7 +176,7 @@ export function CreateProjectPage() {
                                                 newTeamMembers[index].social = e.target.value;
                                                 setTeamMembers(newTeamMembers);
                                             }}
-                                            className="w-full p-2 border rounded"
+                                            className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                                         />
                                     </div>
                                 ))}
