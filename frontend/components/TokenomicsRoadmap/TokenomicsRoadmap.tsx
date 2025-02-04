@@ -4,6 +4,16 @@ import './TokenomicsRoadmap.css';
 export function TokenomicsRoadmap() {
     return (
         <div className="roadmap-container">
+            {/* Transaction Fee Banner */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600 p-6 mb-8 rounded-xl shadow-lg">
+                <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10"></div>
+                <div className="relative">
+                    <p className="text-center text-xl font-bold text-white">
+                        50% of all transaction fees are distributed to our subscribers
+                    </p>
+                </div>
+            </div>
+
             {/* Roadmap Section */}
             <div className="roadmap-section mb-16">
                 <div className="text-center mb-8">
@@ -54,6 +64,7 @@ export function TokenomicsRoadmap() {
 
                 {/* Table rows - using a lighter theme */}
                 {[
+                    ["Fee Distribution", "0%", "50%"],
                     ["Onstrument Transaction Fee", "1%", "0%"],
                     ["Market Transaction Fee", "1%", "0%"],
                     ["Migration Reward", "0.5 SOL", "3 SOL"],
@@ -87,7 +98,7 @@ export function TokenomicsRoadmap() {
                             {[
                                 "Points system is already live",
                                 <>We will be distributing points every month, and a subscription gets you <span className="text-amber-600 font-bold">gold</span> points</>,
-                                "We will be airdropping a minimum of 80+ % to Onstrument users",
+                                "We will be airdropping a minimum of 80%+ to Onstrument users",
                                 "Maximum 20% for team",
                             ].map((item, index) => (
                                 <div

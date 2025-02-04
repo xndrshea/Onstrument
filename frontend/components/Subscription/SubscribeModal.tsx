@@ -24,9 +24,10 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         priceUSD: 20,  // Changed from 50 to 20
         goldenPoints: 1,
         features: [
-            'No Transaction Fees',
+            'Share 50% of Platform Trading Fees',
+            'Zero Trading Fees',
             '1 Golden Point',
-            'Migration Reward: 3 SOL'
+            '3 SOL Migration Reward'
         ]
     },
     {
@@ -36,9 +37,10 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         priceUSD: 60,  // Changed from 150 to 60 (20 * 3)
         goldenPoints: 5,
         features: [
-            'No Transaction Fees',
+            'Share 50% of Platform Trading Fees',
+            'Zero Trading Fees',
             '5 Golden Points',
-            'Migration Reward: 3 SOL'
+            '3 SOL Migration Reward'
         ]
     },
     {
@@ -48,10 +50,11 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         priceUSD: 120,  // Changed from 300 to 120 (20 * 6)
         goldenPoints: 12,
         features: [
-            'No Transaction Fees',
+            'Share 50% of Platform Trading Fees',
+            'Zero Trading Fees',
             '12 Golden Points',
-            'Migration Reward: 3 SOL',
-            'Beta Test Next Products'
+            '3 SOL Migration Reward',
+            'Early Access to New Features'
         ]
     }
 ];
@@ -171,7 +174,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                             Unlock Premium Features
                         </h2>
                         <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                            Subscribe to never pay transaction fees, earn points, and help us build the best launchpad.
+                            Subscribe to receive fee distribution, never pay transaction fees, earn points, and help us build the best launchpad.
                         </p>
                     </div>
 
