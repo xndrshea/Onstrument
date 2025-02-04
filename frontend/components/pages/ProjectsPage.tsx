@@ -58,47 +58,51 @@ export function ProjectsPage() {
     return (
         <div className="min-h-screen bg-white">
             <div className="max-w-7xl mx-auto px-4 py-8">
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">Onstrument Projects</h1>
-                    <div className="flex items-center gap-4">
-                        <div className="flex flex-row gap-2">
-                            <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-blue-400"
+                <div className="flex flex-col gap-6 mb-8">
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-3xl font-bold text-gray-900">Onstrument Projects</h1>
+                        <div className="flex items-center gap-2">
+                            <span className="text-gray-600 text-sm">Sort by:</span>
+                            <select
+                                value={volumePeriod}
+                                onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
+                                className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2"
                             >
-                                Launch Meme
-                            </button>
-
-                            <Link
-                                to="/create"
-                                className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-sky-400"
-                            >
-                                Start Project
-                            </Link>
-
-                            <Link
-                                to="/contact"
-                                className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-cyan-400"
-                            >
-                                Custom Tokenomics
-                            </Link>
+                                <option value="marketCapUsd">Market Cap</option>
+                                <option value="5m">5m Volume</option>
+                                <option value="30m">30m Volume</option>
+                                <option value="1h">1h Volume</option>
+                                <option value="4h">4h Volume</option>
+                                <option value="12h">12h Volume</option>
+                                <option value="24h">24h Volume</option>
+                                <option value="all">All Time Volume</option>
+                                <option value="newest">New</option>
+                                <option value="oldest">Old</option>
+                            </select>
                         </div>
-                        <select
-                            value={volumePeriod}
-                            onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
-                            className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2"
+                    </div>
+
+                    <div className="flex justify-center gap-4">
+                        <button
+                            onClick={() => setIsModalOpen(true)}
+                            className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-blue-400"
                         >
-                            <option value="marketCapUsd">Market Cap</option>
-                            <option value="5m">5m Volume</option>
-                            <option value="30m">30m Volume</option>
-                            <option value="1h">1h Volume</option>
-                            <option value="4h">4h Volume</option>
-                            <option value="12h">12h Volume</option>
-                            <option value="24h">24h Volume</option>
-                            <option value="all">All Time Volume</option>
-                            <option value="newest">New</option>
-                            <option value="oldest">Old</option>
-                        </select>
+                            Launch Meme
+                        </button>
+
+                        <Link
+                            to="/create"
+                            className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-sky-400"
+                        >
+                            Start Project
+                        </Link>
+
+                        <Link
+                            to="/contact"
+                            className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 shadow-lg border border-cyan-400"
+                        >
+                            Custom Tokenomics
+                        </Link>
                     </div>
                 </div>
 
