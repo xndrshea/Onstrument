@@ -41,6 +41,7 @@ export interface TokenRecord {
     twitterUrl?: string;
     telegramUrl?: string;
     metadataUrl?: string;
+    metadataUri?: string;
     createdAt?: string;
     curveAddress?: string;
     curveConfig?: any;

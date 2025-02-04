@@ -108,12 +108,7 @@ export class BondingCurve {
             this.program.programId
         );
 
-        // Log PDAs for debugging
-        console.log('PDAs:', {
-            mint: mintPDA.toString(),
-            curve: curvePDA.toString(),
-            tokenVault: tokenVaultPDA.toString()
-        });
+   
 
         const [metadataPDA] = PublicKey.findProgramAddressSync(
             [
@@ -267,7 +262,6 @@ export class BondingCurve {
                 }
             } catch (simError: any) {
                 // Handle simulation errors
-                console.error('Simulation error:', simError);
 
                 if (simError.message) {
                     // Clean up technical error messages

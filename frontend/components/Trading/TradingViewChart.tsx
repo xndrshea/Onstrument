@@ -31,10 +31,10 @@ interface TradingViewChartProps {
 // Add this near the top where you define other styles
 const containerStyle = {
     backgroundColor: '#FFFFFF',
-    '& .chart-container': {
+    '& .chartContainer': {
         backgroundColor: '#FFFFFF !important',
     },
-    '& .tv-chart-container': {
+    '& .tvChartContainer': {
         backgroundColor: '#FFFFFF !important',
     }
 };
@@ -326,7 +326,7 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 });
 
                 // Get the chart container and force background color via CSS
-                const chartContainer = containerRef.current?.querySelector('.chart-container');
+                const chartContainer = containerRef.current?.querySelector('.chartContainer');
                 if (chartContainer) {
                     (chartContainer as HTMLElement).style.backgroundColor = '#FFFFFF';
                 }

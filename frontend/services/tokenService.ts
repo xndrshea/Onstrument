@@ -53,7 +53,6 @@ export class TokenService {
 
     async create(token: TokenRecord): Promise<TokenRecord> {
         try {
-            console.log('Creating token with data:', token);
             const requestData = {
                 mintAddress: token.mintAddress,
                 curveAddress: token.curveAddress,

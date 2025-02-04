@@ -226,6 +226,63 @@ const FavoriteButton = ({ token, isFavorited, onToggle }: { token: TokenRecord; 
     );
 };
 
+// Create separate components for different token types
+const OnstrumentMenuItem = ({ token, navigate }: { token: TokenRecord, navigate: any }) => {
+    const [tokenImage, setTokenImage] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchMetadata = async () => {
+            if (!token.metadataUri) return;
+            try {
+                const response = await fetch(token.metadataUri);
+                const metadata = await response.json();
+                setTokenImage(metadata.image);
+            } catch (error) {
+                console.error('Failed to fetch metadata:', error);
+            }
+        };
+        fetchMetadata();
+    }, [token.metadataUri]);
+
+    return (
+        <MenuItem
+            as="div"
+            onClick={() => navigate(`/token/${token.mintAddress}`, { state: { tokenType: 'custom' } })}
+            className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-gray-50 text-gray-900"
+        >
+            <div className="flex items-center gap-2">
+                {tokenImage && (
+                    <img src={tokenImage} alt={token.name} className="w-5 h-5 rounded-full"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                )}
+                <span className="font-medium">{token.symbol}</span>
+            </div>
+            <div className="text-left text-gray-600">{formatMarketCap(token.marketCapUsd || null)}</div>
+            <div className="text-right text-gray-600">${formatNumber(token.volume24h || 0)}</div>
+        </MenuItem>
+    );
+};
+
+const RegularMenuItem = ({ token, navigate }: { token: TokenRecord, navigate: any }) => (
+    <MenuItem
+        as="div"
+        onClick={() => navigate(`/token/${token.mintAddress}`, { state: { tokenType: token.tokenType || 'dex' } })}
+        className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-gray-50 text-gray-900"
+    >
+        <div className="flex items-center gap-2">
+            {token.imageUrl && (
+                <img src={token.imageUrl} alt={token.name} className="w-5 h-5 rounded-full"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+            )}
+            <span className="font-medium">{token.symbol}</span>
+        </div>
+        <div className="text-left text-gray-600">{formatMarketCap(token.marketCapUsd || null)}</div>
+        <div className="text-right text-gray-600">${formatNumber(token.volume24h || 0)}</div>
+    </MenuItem>
+);
+
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
     const location = useLocation();
@@ -248,7 +305,7 @@ export function TokenDetailsPage() {
     const [metadataImage, setMetadataImage] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [isFavorited, setIsFavorited] = useState(false);
-    const [filterType, setFilterType] = useState<'all' | 'favorites'>('all');
+    const [filterType, setFilterType] = useState<'All' | 'Onstrument' | 'Favorites'>('All');
     const { publicKey } = useWallet();
     const { user } = useAuth();
 
@@ -396,13 +453,23 @@ export function TokenDetailsPage() {
                     credentials: 'include' as RequestCredentials
                 };
 
-                let tokens;
-                if (filterType === 'favorites') {
+                if (filterType === 'Onstrument') {
+                    const response = await fetch('/api/tokens?sortBy=24h&limit=100', requestConfig);
+                    if (!response.ok) throw new Error('Failed to fetch tokens');
+                    const data = await response.json();
+                    const tokens = data.tokens.map((token: any) => ({
+                        ...token,
+                        volume24h: token.volume,
+                        marketCapUsd: token.marketCapUsd || 0,
+                        currentPrice: token.currentPrice || 0,
+                        metadataUrl: token.metadataUri,
+                        description: token.description || 'No description available'
+                    }));
+                    setTopTokens(tokens);
+                } else if (filterType === 'Favorites') {
                     const response = await fetch('/api/favorites', requestConfig);
                     const data = await response.json();
-
-                    // Transform snake_case to camelCase
-                    tokens = data.tokens.map((token: any) => ({
+                    const tokens = data.tokens.map((token: any) => ({
                         mintAddress: token.mint_address,
                         name: token.name,
                         symbol: token.symbol,
@@ -414,49 +481,38 @@ export function TokenDetailsPage() {
                         volume24h: token.volume_24h,
                         priceChange24h: token.price_change_24h
                     }));
+                    setTopTokens(tokens);
                 } else {
-                    // Build query parameters
+                    // All tokens (market tokens only)
                     const params = new URLSearchParams({
                         page: '1',
                         limit: '100',
                         sortBy: sortField,
                         sortDirection: sortDirection
                     });
-
-                    const endpoint = (token?.tokenType === 'custom' || tokenType === 'custom')
-                        ? `/api/tokens`  // For custom tokens, show all custom tokens
-                        : `/api/market/tokens?${params}`; // For dex tokens, use normal filtering
-
-                    const response = await fetch(endpoint, requestConfig);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-
+                    const response = await fetch(`/api/market/tokens?${params}`, requestConfig);
+                    if (!response.ok) throw new Error('Failed to fetch market tokens');
                     const data = await response.json();
-                    tokens = filterService.filterTokens(data.tokens);
+                    setTopTokens(filterService.filterTokens(data.tokens));
                 }
-
-                setTopTokens(tokens);
             } catch (error) {
                 console.error('Error fetching tokens:', error);
             }
         };
+
         fetchTokens();
-    }, [filterType, sortField, sortDirection, token?.tokenType, tokenType, user]);
+    }, [filterType, sortField, sortDirection, user]);
 
     // Update the sorting function
     const sortTokens = (tokens: TokenRecord[]) => {
+        if (!tokens) return [];
 
-        if (filterType === 'favorites') {
-            // Don't filter favorites, just sort them
-            return tokens.sort((a, b) => {
-                const aValue = sortField === 'marketCapUsd' ? a.marketCapUsd : a[sortField];
-                const bValue = sortField === 'marketCapUsd' ? b.marketCapUsd : b[sortField];
-                return sortDirection === 'asc' ? Number(aValue) - Number(bValue) : Number(bValue) - Number(aValue);
-            });
+        // For Onstrument tokens, return them directly without any filtering
+        if (filterType === 'Onstrument') {
+            return tokens;
         }
 
-        // Original filtering logic for non-favorites
+        // Original filtering logic only for other types
         const filteredTokens = tokens.filter(token =>
             !(token.symbol === 'USDC' && token.mintAddress !== MAINNET_USDC_ADDRESS) &&
             (token.imageUrl || (token.content?.metadata?.image))
@@ -575,7 +631,7 @@ export function TokenDetailsPage() {
             setIsFavorited(!isFavorited);
 
             // Only refetch tokens if we're in favorites view
-            if (filterType === 'favorites') {
+            if (filterType === 'Favorites') {
                 const response = await fetch('/api/favorites', requestConfig);
                 const data = await response.json();
                 const transformedTokens = data.tokens.map((token: any) => ({
@@ -614,12 +670,12 @@ export function TokenDetailsPage() {
                     <div className="flex gap-2 p-2">
                         <button
                             onClick={() => {
-                                if (filterType !== 'all') {  // Only clear and change if switching TO all
-                                    setTopTokens([]); // Clear tokens before fetching new ones
-                                    setFilterType('all');
+                                if (filterType !== 'All') {
+                                    setTopTokens([]);
+                                    setFilterType('All');
                                 }
                             }}
-                            className={`px-3 py-1 rounded-md ${filterType === 'all'
+                            className={`px-3 py-1 rounded-md ${filterType === 'All'
                                 ? 'bg-blue-500 text-white'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
@@ -628,12 +684,25 @@ export function TokenDetailsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                if (filterType !== 'favorites') {  // Only clear and change if switching TO favorites
-                                    setTopTokens([]); // Clear tokens before fetching new ones
-                                    setFilterType('favorites');
+                                if (filterType !== 'Onstrument') {
+                                    setFilterType('Onstrument');
                                 }
                             }}
-                            className={`px-3 py-1 rounded-md ${filterType === 'favorites'
+                            className={`px-3 py-1 rounded-md ${filterType === 'Onstrument'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                        >
+                            Onstrument
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (filterType !== 'Favorites') {
+                                    setTopTokens([]);
+                                    setFilterType('Favorites');
+                                }
+                            }}
+                            className={`px-3 py-1 rounded-md ${filterType === 'Favorites'
                                 ? 'bg-blue-500 text-white'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
@@ -681,36 +750,9 @@ export function TokenDetailsPage() {
 
                 <div className="overflow-y-auto max-h-[360px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                     {sortTokens(topTokens).map(token => (
-                        <MenuItem
-                            key={token.mintAddress}
-                            as="div"
-                            onClick={() => {
-                                navigate(`/token/${token.mintAddress}`, {
-                                    state: { tokenType: token.tokenType || 'dex' }
-                                });
-                            }}
-                            className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-gray-50 text-gray-900"
-                        >
-                            <div className="flex items-center gap-2">
-                                {(token.tokenType === 'custom' ? imageUrl ?? '' : token.imageUrl) && (
-                                    <img
-                                        src={token.tokenType === 'custom' ? imageUrl ?? '' : token.imageUrl}
-                                        alt={token.name}
-                                        className="w-5 h-5 rounded-full"
-                                        onError={(e) => {
-                                            (e.target as HTMLImageElement).style.display = 'none';
-                                        }}
-                                    />
-                                )}
-                                <span className="font-medium">{token.symbol}</span>
-                            </div>
-                            <div className="text-left text-gray-600">
-                                {formatMarketCap(token.marketCapUsd || null)}
-                            </div>
-                            <div className="text-right text-gray-600">
-                                ${formatNumber(token.volume24h || 0)}
-                            </div>
-                        </MenuItem>
+                        filterType === 'Onstrument'
+                            ? <OnstrumentMenuItem key={token.mintAddress} token={token} navigate={navigate} />
+                            : <RegularMenuItem key={token.mintAddress} token={token} navigate={navigate} />
                     ))}
                 </div>
             </MenuItems>
