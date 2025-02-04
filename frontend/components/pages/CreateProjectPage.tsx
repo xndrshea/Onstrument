@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TokenCreationForm } from '../TokenCreation/TokenCreationForm';
 
@@ -17,6 +17,10 @@ export function CreateProjectPage() {
     const [teamError, setTeamError] = useState('');
     const [storyError, setStoryError] = useState('');
     const navigate = useNavigate();
+
+    useEffect(() => {
+        window.scrollTo(0, 0);
+    }, []);
 
     const handleNextStep = () => {
         if (!selectedCategory) {
@@ -100,7 +104,7 @@ export function CreateProjectPage() {
                             <p className="text-gray-600">Your first project! Welcome.</p>
                             <button
                                 onClick={handleNextStep}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg"
+                                className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-2 rounded-lg shadow-lg border border-sky-400"
                             >
                                 Next: Project Basics
                             </button>
@@ -195,7 +199,7 @@ export function CreateProjectPage() {
                             </button>
                             <button
                                 onClick={handleTeamsNext}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg"
+                                className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-2 rounded-lg shadow-lg border border-sky-400"
                             >
                                 Next: Project Story
                             </button>
@@ -270,7 +274,7 @@ export function CreateProjectPage() {
                             </button>
                             <button
                                 onClick={handleStoryNext}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg"
+                                className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-2 rounded-lg shadow-lg border border-sky-400"
                             >
                                 Next: Project Basics
                             </button>
@@ -308,10 +312,14 @@ export function CreateProjectPage() {
                             {['Category', 'Teams', 'Story', 'Basics'].map((step, index) => (
                                 <div
                                     key={step}
-                                    className={`flex items-center space-x-2 ${currentStep === step.toLowerCase() ? 'text-purple-600 font-medium' : 'text-gray-500'
+                                    className={`flex items-center space-x-2 ${currentStep === step.toLowerCase()
+                                        ? 'text-sky-500 font-medium'
+                                        : 'text-gray-500'
                                         }`}
                                 >
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${currentStep === step.toLowerCase() ? 'bg-purple-600 text-white' : 'bg-gray-200'
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${currentStep === step.toLowerCase()
+                                        ? 'bg-sky-500 text-white'
+                                        : 'bg-gray-200'
                                         }`}>
                                         {index + 1}
                                     </div>
