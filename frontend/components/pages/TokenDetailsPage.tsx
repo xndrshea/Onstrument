@@ -139,17 +139,6 @@ const ProjectInfoSection = ({ token }: { token: TokenRecord | null }) => {
             <Disclosure>
                 {({ open }) => (
                     <>
-                        <DisclosureButton className="flex w-full justify-between items-center px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-gray-900 border border-gray-200">
-                            <span>Project Information</span>
-                            <svg
-                                className={`w-5 h-5 transform ${open ? 'rotate-180' : ''} transition-transform`}
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </DisclosureButton>
 
                         <DisclosurePanel className="px-4 py-3 bg-white mt-1 rounded-lg border border-gray-200">
                             <div className="space-y-4">

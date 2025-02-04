@@ -78,7 +78,6 @@ function App() {
                 />
 
                 <main style={{
-                    padding: '20px',
                     color: '#1a1b1f',
                     flex: '1 1 auto',
                     minHeight: 0

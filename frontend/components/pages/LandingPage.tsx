@@ -113,9 +113,9 @@ export function LandingPage() {
 
     return (
         <div className="min-h-screen bg-white">
-            <div className="max-w-7xl mx-auto px-4 py-16">
-                {/* Hero Section */}
-                <div className="text-center mb-16">
+            <div className="mx-auto py-16">
+                {/* Hero Section - centered */}
+                <div className="max-w-7xl mx-auto px-4 mb-16 text-center">
                     <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-violet-500 mb-6">
                         For The Builders
                     </h1>
@@ -166,45 +166,33 @@ export function LandingPage() {
                     </Dialog>
                 )}
 
-                {/* Replace Recent Projects with full token list */}
+                {/* Projects Section */}
                 <div className="mb-8">
-                    <div className="flex justify-between items-center mb-12">
-                        <h2 className="text-3xl font-bold text-gray-900">Projects</h2>
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-600 text-sm">Sort by:</span>
-                            <select
-                                value={volumePeriod}
-                                onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
-                                className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2"
-                            >
-                                <option value="marketCapUsd">Market Cap</option>
-                                <option value="5m">5m Volume</option>
-                                <option value="30m">30m Volume</option>
-                                <option value="1h">1h Volume</option>
-                                <option value="4h">4h Volume</option>
-                                <option value="12h">12h Volume</option>
-                                <option value="24h">24h Volume</option>
-                                <option value="all">All Time Volume</option>
-                                <option value="newest">New</option>
-                                <option value="oldest">Old</option>
-                            </select>
+                    <div>
+                        <div className="flex justify-between items-center mb-12 px-4">
+                            <h2 className="text-3xl font-bold text-gray-900">Projects</h2>
+                            <div className="flex items-center gap-2">
+                                <span className="text-gray-600 text-sm">Sort by:</span>
+                                <select
+                                    value={volumePeriod}
+                                    onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
+                                    className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2"
+                                >
+                                    <option value="marketCapUsd">Market Cap</option>
+                                    <option value="5m">5m Volume</option>
+                                    <option value="30m">30m Volume</option>
+                                    <option value="1h">1h Volume</option>
+                                    <option value="4h">4h Volume</option>
+                                    <option value="12h">12h Volume</option>
+                                    <option value="24h">24h Volume</option>
+                                    <option value="all">All Time Volume</option>
+                                    <option value="newest">New</option>
+                                    <option value="oldest">Old</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
 
-                    {isLoading ? (
-                        <div className="text-center text-gray-400 py-8">Loading tokens...</div>
-                    ) : error ? (
-                        <div className="text-center text-red-500 py-8">
-                            {error}
-                            <button
-                                onClick={fetchTokens}
-                                className="ml-4 text-blue-400 hover:text-blue-300"
-                            >
-                                Retry
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-4">
                             {tokens.map(token => (
                                 <TokenCard
                                     key={token.mintAddress}
@@ -213,48 +201,50 @@ export function LandingPage() {
                                 />
                             ))}
                         </div>
-                    )}
-
-                    {/* Pagination */}
-                    {!isLoading && !error && totalPages > 1 && (
-                        <div className="flex justify-center items-center gap-2 mt-8">
-                            <button
-                                onClick={() => handlePageChange(currentPage - 1)}
-                                disabled={currentPage === 1}
-                                className={`px-4 py-2 rounded-lg ${currentPage === 1
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                    }`}
-                            >
-                                Previous
-                            </button>
-
-                            <span className="text-gray-600">
-                                Page {currentPage} of {totalPages}
-                            </span>
-
-                            <button
-                                onClick={() => handlePageChange(currentPage + 1)}
-                                disabled={currentPage === totalPages}
-                                className={`px-4 py-2 rounded-lg ${currentPage === totalPages
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                    }`}
-                            >
-                                Next
-                            </button>
-                        </div>
-                    )}
+                    </div>
                 </div>
 
+                {/* Pagination */}
+                {!isLoading && !error && totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-2 mt-8">
+                        <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className={`px-4 py-2 rounded-lg ${currentPage === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                        >
+                            Previous
+                        </button>
+
+                        <span className="text-gray-600">
+                            Page {currentPage} of {totalPages}
+                        </span>
+
+                        <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className={`px-4 py-2 rounded-lg ${currentPage === totalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                        >
+                            Next
+                        </button>
+                    </div>
+                )}
+
                 {/* CTA Section */}
-                <div className="text-center p-12">
-                    <Link
-                        to="/create"
-                        className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200 shadow-lg border border-sky-400"
-                    >
-                        Start Building
-                    </Link>
+                <div className="max-w-7xl mx-auto px-4">
+                    <div className="text-center p-12">
+                        <Link
+                            to="/create"
+                            className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200 shadow-lg border border-sky-400"
+                        >
+                            Start Building
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>
