@@ -3,17 +3,17 @@ import React from 'react';
 export function TermsOfService() {
     return (
         <div className="max-w-7xl mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold text-white mb-8">Terms of Service</h1>
-            <div className="bg-[#232427] rounded-lg p-6 space-y-6 text-gray-300">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">Terms of Service</h1>
+            <div className="bg-white dark:bg-[#232427] rounded-lg p-6 space-y-6 text-gray-600 dark:text-gray-300">
                 <p className="text-sm">Last Updated: January 23, 2025</p>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">1. Agreement to Terms</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">1. Agreement to Terms</h2>
                     <p>These Terms of Service ("Terms") constitute a legally binding agreement between you and Onstrument Inc., a Delaware corporation ("Onstrument," "we," "our," or "us"), governing your use of our trading platform and associated services ("Platform").</p>
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">2. Risk Warning</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">2. Risk Warning</h2>
                     <p className="mb-2">Trading digital assets involves significant risk of loss. You acknowledge that:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Digital asset values can be highly volatile</li>
@@ -25,7 +25,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">3. Eligibility</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">3. Eligibility</h2>
                     <p className="mb-2">You must:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Be at least 18 years old</li>
@@ -36,10 +36,10 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">4. Platform Services</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">4. Platform Services</h2>
                     <div className="space-y-4">
                         <div>
-                            <h3 className="text-xl font-medium text-white mb-2">4.1 Trading Services</h3>
+                            <h3 className="text-xl font-medium text-gray-900 dark:text-white mb-2">4.1 Trading Services</h3>
                             <ul className="list-disc pl-6 space-y-1">
                                 <li>Real-time trading on blockchains</li>
                                 <li>Advanced charting and analysis tools</li>
@@ -48,7 +48,7 @@ export function TermsOfService() {
                             </ul>
                         </div>
                         <div>
-                            <h3 className="text-xl font-medium text-white mb-2">4.2 Service Limitations</h3>
+                            <h3 className="text-xl font-medium text-gray-900 dark:text-white mb-2">4.2 Service Limitations</h3>
                             <ul className="list-disc pl-6 space-y-1">
                                 <li>We provide services on an "as is" basis</li>
                                 <li>We may modify or discontinue services at any time</li>
@@ -60,7 +60,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">5. User Obligations</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">5. User Obligations</h2>
                     <p className="mb-2">You agree to:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Provide accurate information</li>
@@ -72,7 +72,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">6. Fees and Payments</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">6. Fees and Payments</h2>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Fees are posted on our website</li>
                         <li>All blockchain transaction fees are your responsibility</li>
@@ -80,7 +80,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">7. Intellectual Property</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">7. Intellectual Property</h2>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Platform content and technology are our property</li>
                         <li>Limited license granted for personal platform use</li>
@@ -90,12 +90,12 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">8. Data Privacy</h2>
-                    <p>Usage of your data is governed by our <a href="/privacy-policy" className="text-blue-400 hover:text-blue-300 underline">Privacy Policy</a>.</p>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">8. Data Privacy</h2>
+                    <p>Usage of your data is governed by our <a href="/privacy-policy" className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 underline">Privacy Policy</a>.</p>
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">9. Security</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">9. Security</h2>
                     <p className="mb-2">You are responsible for:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Securing your wallet and credentials</li>
@@ -106,7 +106,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">10. Prohibited Activities</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">10. Prohibited Activities</h2>
                     <p className="mb-2">You may not:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Manipulate markets or prices</li>
@@ -119,7 +119,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">11. Termination</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">11. Termination</h2>
                     <p className="mb-2">We may:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Suspend or terminate access without notice</li>
@@ -131,12 +131,12 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">12. Disclaimer of Warranties</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">12. Disclaimer of Warranties</h2>
                     <p className="uppercase font-semibold">THE PLATFORM IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND.</p>
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">13. Limitation of Liability</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">13. Limitation of Liability</h2>
                     <p className="mb-2">TO THE MAXIMUM EXTENT PERMITTED BY LAW:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>We are not liable for any trading losses or investment decisions</li>
@@ -153,7 +153,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">14. Indemnification</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">14. Indemnification</h2>
                     <p className="mb-2">You agree to indemnify us against all claims arising from:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Your platform use</li>
@@ -164,7 +164,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">15. Dispute Resolution</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">15. Dispute Resolution</h2>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Disputes resolved through binding arbitration</li>
                         <li>Arbitration conducted in Delaware</li>
@@ -175,7 +175,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">16. Changes to Terms</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">16. Changes to Terms</h2>
                     <p className="mb-2">We may modify these terms:</p>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>With notice for material changes</li>
@@ -185,7 +185,7 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">17. Governing Law</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">17. Governing Law</h2>
                     <ul className="list-disc pl-6 space-y-1">
                         <li>Delaware law governs</li>
                         <li>US federal law where applicable</li>
@@ -194,21 +194,21 @@ export function TermsOfService() {
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">18. Contact</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">18. Contact</h2>
                     <p>Legal notices to: alexander@onstrument.com</p>
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">19. Severability</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">19. Severability</h2>
                     <p>If any provision is invalid, other terms remain in effect.</p>
                 </section>
 
                 <section>
-                    <h2 className="text-2xl font-semibold text-white mb-4">20. Complete Agreement</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">20. Complete Agreement</h2>
                     <p>These Terms constitute the entire agreement regarding platform use.</p>
                 </section>
 
-                <div className="mt-8 pt-8 border-t border-gray-700">
+                <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
                     <p className="text-center font-semibold">BY USING THE PLATFORM, YOU AGREE TO THESE TERMS.</p>
                 </div>
             </div>
