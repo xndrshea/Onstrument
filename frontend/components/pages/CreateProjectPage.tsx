@@ -179,7 +179,7 @@ export function CreateProjectPage() {
                                 ))}
                                 <button
                                     onClick={() => setTeamMembers([...teamMembers, { name: '', role: '', social: '' }])}
-                                    className="text-purple-600 hover:text-purple-700 font-medium"
+                                    className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-2 rounded-lg shadow-lg border border-sky-400"
                                 >
                                     + Add Team Member
                                 </button>
