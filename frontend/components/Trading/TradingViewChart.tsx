@@ -66,6 +66,8 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         script.onload = () => {
             if (!window.TradingView) return;
 
+            console.log('Chart styles:', chartStyle);
+
             const widget = new (window as any).TradingView.widget({
                 container: containerRef.current,
                 width,

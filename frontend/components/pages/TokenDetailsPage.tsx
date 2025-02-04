@@ -449,7 +449,6 @@ export function TokenDetailsPage() {
 
     // Update the sorting function
     const sortTokens = (tokens: TokenRecord[]) => {
-        console.log('sortTokens input:', tokens);
 
         if (filterType === 'favorites') {
             // Don't filter favorites, just sort them
@@ -533,21 +532,13 @@ export function TokenDetailsPage() {
                 const response = await fetch('/api/favorites', requestConfig);
                 const data = await response.json();
 
-                console.log('DB Tokens:', data.tokens.map((t: TokenRecord) => ({
-                    mint: (t as any).mint_address || t.mintAddress,
-                    matches: ((t as any).mint_address || t.mintAddress) === token.mintAddress
-                })));
+
 
                 // Handle both camelCase and snake_case
                 const isFav = data.tokens.some((t: TokenRecord) =>
                     (t as any).mint_address === token.mintAddress || t.mintAddress === token.mintAddress
                 );
 
-                console.log('Comparison:', {
-                    dbMints: data.tokens.map((t: TokenRecord) => (t as any).mint_address || t.mintAddress),
-                    currentMint: token.mintAddress,
-                    isFav
-                });
 
                 setIsFavorited(isFav);
             } catch (error) {
