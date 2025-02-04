@@ -446,7 +446,7 @@ router.get('/tokens', async (req, res) => {
                 '12h': "NOW() - INTERVAL '12 hours'",
                 '24h': "NOW() - INTERVAL '24 hours'",
                 'all': null
-            }[sortBy];
+            }[sortBy as string];
 
             query = `
                 WITH volume_data AS (
@@ -482,7 +482,7 @@ router.get('/tokens', async (req, res) => {
 
         const result = await pool().query(query, [limit, offset]);
 
-        const tokens = result.rows.map(token => ({
+        const tokens = result.rows.map((token: any) => ({
             mintAddress: token.mint_address,
             curveAddress: token.curve_address,
             name: token.name,
