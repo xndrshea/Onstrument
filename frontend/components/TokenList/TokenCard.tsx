@@ -36,13 +36,9 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
 
         const fetchVolume = async () => {
             try {
-                // Always use 24h for volume display when sorting by newest/oldest/marketCapUsd
-                const displayPeriod = ['newest', 'oldest', 'marketCapUsd'].includes(volumePeriod)
-                    ? '24h'
-                    : volumePeriod;
-
+                // Always fetch 24h volume regardless of sorting period
                 const response = await fetch(
-                    `/api/price-history/${token.mintAddress}/volume?period=${displayPeriod}`,
+                    `/api/price-history/${token.mintAddress}/volume?period=24h`,
                     { headers: await getCsrfHeaders() }
                 );
                 const data = await response.json();
@@ -54,7 +50,7 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
 
         fetchMetadata();
         fetchVolume();
-    }, [token.metadataUrl, token.mintAddress, volumePeriod]);
+    }, [token.metadataUrl, token.mintAddress]);
 
     return (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all">
