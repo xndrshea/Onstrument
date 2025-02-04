@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TokenCreationForm } from '../TokenCreation/TokenCreationForm';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 
 type ProjectStep = 'category' | 'teams' | 'story' | 'basics';
 
@@ -17,6 +19,7 @@ export function CreateProjectPage() {
     const [teamError, setTeamError] = useState('');
     const [storyError, setStoryError] = useState('');
     const navigate = useNavigate();
+    const { connected } = useWallet();
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -79,7 +82,7 @@ export function CreateProjectPage() {
 
                         <div className="space-y-4">
                             <select
-                                className={`w-full p-3 border ${categoryError ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent`}
+                                className={`w-full p-3 border ${categoryError ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent appearance-none`}
                                 onChange={(e) => {
                                     setSelectedCategory(e.target.value);
                                     setCategoryError('');
@@ -225,7 +228,7 @@ export function CreateProjectPage() {
                                     type="text"
                                     value={projectTitle}
                                     onChange={(e) => setProjectTitle(e.target.value)}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent appearance-none"
                                     placeholder="Enter your project title"
                                     required
                                 />
@@ -239,7 +242,7 @@ export function CreateProjectPage() {
                                     type="text"
                                     value={projectDescription}
                                     onChange={(e) => setProjectDescription(e.target.value)}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent appearance-none"
                                     placeholder="Brief overview of your project (140 characters)"
                                     maxLength={140}
                                     required
@@ -253,7 +256,7 @@ export function CreateProjectPage() {
                                 <textarea
                                     value={projectStory}
                                     onChange={(e) => setProjectStory(e.target.value)}
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent min-h-[200px]"
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent appearance-none min-h-[200px]"
                                     placeholder="Tell us about your project, its goals, and why people should be excited about it..."
                                     required
                                 />
@@ -282,20 +285,47 @@ export function CreateProjectPage() {
                     </div>
                 );
             case 'basics':
+                if (!connected) {
+                    return (
+                        <div className="max-w-2xl mx-auto py-12 text-center">
+                            <h1 className="text-3xl font-bold mb-4">
+                                Connect Your Wallet
+                            </h1>
+                            <p className="text-gray-600 mb-8">
+                                Please connect your wallet to continue creating your project
+                            </p>
+                            <div className="flex justify-center mb-8">
+                                <WalletMultiButton />
+                            </div>
+                            <button
+                                onClick={() => setCurrentStep('story')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                ← Back
+                            </button>
+                        </div>
+                    );
+                }
                 return (
                     <div className="max-w-2xl mx-auto py-12">
                         <TokenCreationForm
-                            onSuccess={() => navigate('/projects')}
-                            onTokenCreated={() => navigate('/projects')}
                             projectData={{
                                 category: selectedCategory,
                                 teamMembers: isAnonymous ? [] : teamMembers,
                                 isAnonymous,
                                 projectTitle,
                                 projectDescription,
-                                projectStory
+                                projectStory,
                             }}
                         />
+                        <div className="flex justify-between items-center mt-8">
+                            <button
+                                onClick={() => setCurrentStep('story')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                ← Back
+                            </button>
+                        </div>
                     </div>
                 );
             default:
