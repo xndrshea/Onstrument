@@ -154,10 +154,13 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                     </div>
                                 )}
 
-                                {/* Always show subscription status for non-dev environments */}
-                                {!isDev && user.isSubscribed && (
+                                {/* Show subscription status for all environments */}
+                                {!isDev && (
                                     <p className="text-gray-700">
-                                        Subscription Status: <span className="text-green-600">Active</span>
+                                        Subscription Status: {' '}
+                                        <span className={user.isSubscribed ? 'text-green-600' : 'text-gray-500'}>
+                                            {user.isSubscribed ? 'Active' : 'Not Subscribed'}
+                                        </span>
                                     </p>
                                 )}
 
