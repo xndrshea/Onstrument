@@ -21,6 +21,7 @@ import { LandingPage } from './components/pages/LandingPage'
 import { CreateProjectPage } from './components/pages/CreateProjectPage'
 import { ContactPage } from './components/pages/ContactPage'
 import { ConsultingPage } from './components/pages/ConsultingPage'
+import { LiveChat } from './components/Chat/LiveChat'
 
 function App() {
     const { connected, publicKey } = useWallet()
@@ -96,6 +97,7 @@ function App() {
                     </Routes>
                 </main>
 
+                <LiveChat />
                 <Footer />
 
                 {isModalOpen && !connected ? (
