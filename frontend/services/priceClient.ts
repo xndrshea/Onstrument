@@ -33,7 +33,6 @@ class WebSocketClient {
             };
 
             this.ws.onclose = (event) => {
-                console.log('DEBUG - WebSocket closed:', event.code, event.reason);
             };
 
         } catch (error) {

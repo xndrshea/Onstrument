@@ -48,11 +48,9 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
 
     useEffect(() => {
         if (!containerRef.current) {
-            console.log('Container ref not ready');
             return;
         }
         if (widgetRef.current) {
-            console.log('Widget already exists');
             return;
         }
 
@@ -71,7 +69,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
 
         script.onerror = (error) => {
             console.error('Script failed to load:', error);
-            console.log('Document head children:', document.head.children);
         };
 
         script.onload = () => {
@@ -79,11 +76,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 console.error('TradingView not loaded');
                 return;
             }
-
-            console.log('TradingView initialization starting');
-            console.log('Chart styles:', chartStyle);
-            console.log('Container ref:', containerRef.current);
-            console.log('Initial denomination:', denomination);
 
             const widget = new (window as any).TradingView.widget({
                 container: containerRef.current,
@@ -317,22 +309,12 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 scale_mode: 'Normal',
             });
 
-            console.log('Widget configuration:', {
-                backgroundColor: chartStyle.layout.backgroundColor,
-                textColor: chartStyle.layout.textColor,
-                theme: "light"
-            });
+
 
             widgetRef.current = widget;
 
             widget.onChartReady(() => {
-                console.log('Chart is ready');
-                console.log('Current theme:', widget.getTheme());
 
-                // Remove the getChartProperties call that's causing the error
-                // console.log('Chart background:', widget.getChartProperties().paneProperties.background);
-
-                // Instead, force the theme and colors directly
                 widget.changeTheme('light');
                 widget.applyOverrides({
                     "paneProperties.background": "#FFFFFF",
@@ -351,7 +333,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
             });
 
             widget.headerReady().then(() => {
-                console.log('Header is ready, creating denomination button');
                 const button = widget.createButton();
                 button.textContent = denomination;
                 button.style.color = "#1e293b";
@@ -377,7 +358,6 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     });
                     widget.chart().resetData();
                 });
-                console.log('Denomination button created');
             }).catch((error: any) => {
                 console.error('Error creating header button:', error);
             });

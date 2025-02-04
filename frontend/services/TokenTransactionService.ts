@@ -29,11 +29,6 @@ export class TokenTransactionService {
         this.tokenService = new TokenService();
     }
 
-    private generateTokenSeed(): string {
-        // Generate a random 8-character string
-        return Math.random().toString(36).substring(2, 10);
-    }
-
     async createToken(
         params: createTokenParams,
         description: string,
@@ -53,7 +48,6 @@ export class TokenTransactionService {
         }
     ): Promise<TokenRecord> {
         try {
-            console.log('Project Data in createToken:', projectData);
             // Remove the token seed generation since it's in the params
             const { mint, curve, tokenVault } = await this.bondingCurve.createTokenWithCurve(params);
 
@@ -89,11 +83,9 @@ export class TokenTransactionService {
                 projectStory: projectData?.projectStory || ''
             };
 
-            console.log('Token record being sent to tokenService:', tokenRecord);
             // Save to database through tokenService
             return await this.tokenService.create(tokenRecord);
         } catch (error: any) {
-            console.error('Token creation error:', error);
             throw error;
         }
     }

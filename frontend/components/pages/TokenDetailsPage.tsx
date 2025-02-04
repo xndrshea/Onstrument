@@ -397,7 +397,6 @@ export function TokenDetailsPage() {
                 };
 
                 if (filterType === 'favorites') {
-                    console.log('Fetching favorites...');
                     const response = await fetch('/api/favorites', requestConfig);
                     const data = await response.json();
 
@@ -415,9 +414,7 @@ export function TokenDetailsPage() {
                         priceChange24h: token.price_change_24h
                     }));
 
-                    console.log('Setting topTokens:', transformedTokens);
                     setTopTokens(transformedTokens);
-                    console.log('Current filterType:', filterType);
                 } else {
                     // Build query parameters
                     const params = new URLSearchParams({
@@ -562,37 +559,26 @@ export function TokenDetailsPage() {
                 credentials: 'include' as RequestCredentials
             };
 
-            console.log('Before API call - isFavorited:', isFavorited);
 
             if (isFavorited) {
                 const deleteResponse = await fetch(`/api/favorites/${token.mintAddress}`, {
                     method: 'DELETE',
                     ...requestConfig
                 });
-                console.log('Delete response:', await deleteResponse.json());
             } else {
                 const postResponse = await fetch('/api/favorites', {
                     method: 'POST',
                     ...requestConfig,
                     body: JSON.stringify({ mintAddress: token.mintAddress })
                 });
-                console.log('Post response:', await postResponse.json());
             }
 
-            console.log('State transition:', {
-                before: isFavorited,
-                after: !isFavorited,
-                tokenMint: token.mintAddress
-            });
 
             setIsFavorited(!isFavorited);
 
             const response = await fetch('/api/favorites', requestConfig);
             const data = await response.json();
-            console.log('DB state after toggle:', {
-                tokens: data.tokens,
-                currentToken: token.mintAddress
-            });
+
             setTopTokens(data.tokens);
         } catch (error) {
             console.error('Error toggling favorite:', error);
