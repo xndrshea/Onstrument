@@ -18,7 +18,6 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { UserService } from './services/userService'
 import { useScrollLock } from './hooks/useScrollLock'
 import { LandingPage } from './components/pages/LandingPage'
-import { ProjectsPage } from './components/pages/ProjectsPage'
 import { CreateProjectPage } from './components/pages/CreateProjectPage'
 import { ContactPage } from './components/pages/ContactPage'
 import { ConsultingPage } from './components/pages/ConsultingPage'
@@ -86,7 +85,6 @@ function App() {
                     <Routes>
                         <Route path="/" element={<LandingPage />} />
                         <Route path="/create" element={<CreateProjectPage />} />
-                        <Route path="/projects" element={<ProjectsPage />} />
                         <Route path="/market" element={<MarketPage />} />
                         <Route path="/tokenomics-roadmap" element={<TokenomicsRoadmap />} />
                         <Route path="/token/:mintAddress" element={<TokenDetailsPage />} />

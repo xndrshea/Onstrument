@@ -42,12 +42,6 @@ export function Header({ onProfileClick, onSubscribeClick, isSubscribed }: Heade
                         </Link>
                         <nav className="hidden md:flex space-x-1">
                             <Link
-                                to="/projects"
-                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-                            >
-                                Onstrument Projects
-                            </Link>
-                            <Link
                                 to="/market"
                                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
                             >

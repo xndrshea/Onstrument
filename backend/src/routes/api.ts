@@ -344,20 +344,22 @@ router.post('/tokens', authMiddleware, async (req, res) => {
 // Get custom tokens for homepage
 router.get('/tokens', async (req, res) => {
     try {
-        const sortBy = req.query.sortBy as '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCapUsd' || '24h';
+        const { sortBy = 'newest', page = 1, limit = 100 } = req.query;
+        const offset = (Number(page) - 1) * Number(limit);
+
+        let countQuery = `
+            SELECT COUNT(*) 
+            FROM onstrument.tokens 
+            WHERE token_type = 'custom'
+        `;
+
+        // Get total count first
+        const countResult = await pool().query(countQuery);
+        const total = parseInt(countResult.rows[0].count);
 
         let query;
-        if (['newest', 'oldest'].includes(sortBy)) {
-            // For newest/oldest sorting
+        if (sortBy === 'newest') {
             query = `
-                WITH volume_data AS (
-                    SELECT 
-                        mint_address,
-                        SUM(volume) as total_volume
-                    FROM onstrument.price_history_1d
-                    WHERE bucket > NOW() - INTERVAL '24 hours'
-                    GROUP BY mint_address
-                )
                 SELECT 
                     t.mint_address,
                     t.curve_address,
@@ -374,12 +376,45 @@ router.get('/tokens', async (req, res) => {
                     t.market_cap_usd as "marketCapUsd",
                     COALESCE(vd.total_volume, 0) as volume
                 FROM onstrument.tokens t
-                LEFT JOIN volume_data vd ON t.mint_address = vd.mint_address
+                LEFT JOIN (
+                    SELECT mint_address, SUM(volume) as total_volume
+                    FROM onstrument.price_history_1d
+                    WHERE bucket > NOW() - INTERVAL '24 hours'
+                    GROUP BY mint_address
+                ) vd ON t.mint_address = vd.mint_address
                 WHERE t.token_type = 'custom'
-                ORDER BY t.created_at ${sortBy === 'newest' ? 'DESC' : 'ASC'}
+                ORDER BY t.created_at DESC
+                LIMIT $1 OFFSET $2
+            `;
+        } else if (sortBy === 'oldest') {
+            query = `
+                SELECT 
+                    t.mint_address,
+                    t.curve_address,
+                    t.name,
+                    t.symbol,
+                    t.decimals,
+                    t.description,
+                    t.metadata_url,
+                    t.curve_config,
+                    t.created_at,
+                    t.token_type,
+                    t.supply,
+                    t.current_price,
+                    t.market_cap_usd as "marketCapUsd",
+                    COALESCE(vd.total_volume, 0) as volume
+                FROM onstrument.tokens t
+                LEFT JOIN (
+                    SELECT mint_address, SUM(volume) as total_volume
+                    FROM onstrument.price_history_1d
+                    WHERE bucket > NOW() - INTERVAL '24 hours'
+                    GROUP BY mint_address
+                ) vd ON t.mint_address = vd.mint_address
+                WHERE t.token_type = 'custom'
+                ORDER BY t.created_at ASC
+                LIMIT $1 OFFSET $2
             `;
         } else if (sortBy === 'marketCapUsd') {
-            // Market cap sorting
             query = `
                 SELECT 
                     t.mint_address,
@@ -399,6 +434,7 @@ router.get('/tokens', async (req, res) => {
                 FROM onstrument.tokens t
                 WHERE t.token_type = 'custom'
                 ORDER BY t.market_cap_usd DESC NULLS LAST
+                LIMIT $1 OFFSET $2
             `;
         } else {
             // Volume-based sorting
@@ -440,10 +476,11 @@ router.get('/tokens', async (req, res) => {
                 LEFT JOIN volume_data vd ON t.mint_address = vd.mint_address
                 WHERE t.token_type = 'custom'
                 ORDER BY volume DESC
+                LIMIT $1 OFFSET $2
             `;
         }
 
-        const result = await pool().query(query);
+        const result = await pool().query(query, [limit, offset]);
 
         const tokens = result.rows.map(token => ({
             mintAddress: token.mint_address,
@@ -463,7 +500,12 @@ router.get('/tokens', async (req, res) => {
             marketCapUsd: token.marketCapUsd ? Number(token.marketCapUsd) : null
         }));
 
-        res.json({ tokens });
+        res.json({
+            tokens,
+            total,
+            page: Number(page),
+            totalPages: Math.ceil(total / Number(limit))
+        });
     } catch (error) {
         logger.error('Database error:', error);
         res.status(500).json({ error: 'Internal server error' });

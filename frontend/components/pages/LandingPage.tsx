@@ -4,6 +4,8 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { TokenCreationForm } from '../TokenCreation/TokenCreationForm';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogPanel } from '@headlessui/react';
+import { TokenCard } from '../TokenList/TokenCard';
+import { TokenRecord } from '../../../shared/types/token';
 
 export function LandingPage() {
     const { connected } = useWallet();
@@ -11,6 +13,13 @@ export function LandingPage() {
     const [showQuickForm, setShowQuickForm] = useState(false);
     const [pendingAction, setPendingAction] = useState<'quickForm' | null>(null);
     const [recentProjects, setRecentProjects] = useState([]);
+    const [tokens, setTokens] = useState<TokenRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCapUsd' | 'newest' | 'oldest'>('newest');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const ITEMS_PER_PAGE = 100;
 
     const handleQuickStart = () => {
         if (!connected) {
@@ -41,6 +50,66 @@ export function LandingPage() {
 
         fetchRecentProjects();
     }, []);
+
+    const fetchTokens = async () => {
+        setIsLoading(true);
+        try {
+            const response = await fetch(`/api/tokens?sortBy=${volumePeriod}&page=${currentPage}&limit=${ITEMS_PER_PAGE}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            setTotalPages(Math.ceil(data.total / ITEMS_PER_PAGE));
+
+            const tokensWithVolume = await Promise.all(data.tokens.map(async (token: any) => {
+                if (volumePeriod === '24h') {
+                    return {
+                        ...token,
+                        volume: token.volume
+                    };
+                }
+
+                const volumeResponse = await fetch(`/api/price-history/${token.mintAddress}/volume?period=24h`);
+                const volumeData = await volumeResponse.json();
+
+                return {
+                    ...token,
+                    volume: volumeData.volume
+                };
+            }));
+
+            setTokens(tokensWithVolume.map((token: any) => ({
+                mintAddress: token.mintAddress,
+                name: token.name,
+                symbol: token.symbol,
+                tokenType: 'custom',
+                description: token.description,
+                metadataUrl: token.metadataUri,
+                curveConfig: token.curveConfig,
+                createdAt: token.createdAt,
+                volume: token.volume,
+                supply: token.supply,
+                totalSupply: token.totalSupply,
+                currentPrice: token.currentPrice,
+                marketCapUsd: token.marketCapUsd
+            })));
+        } catch (error) {
+            console.error('Error fetching tokens:', error);
+            setError(error instanceof Error ? error.message : 'Failed to fetch tokens');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchTokens();
+    }, [volumePeriod, currentPage]);
+
+    const handlePageChange = (newPage: number) => {
+        setCurrentPage(newPage);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
     return (
         <div className="min-h-screen bg-white">
@@ -97,103 +166,85 @@ export function LandingPage() {
                     </Dialog>
                 )}
 
-                {/* Recent Projects Section */}
-                <div className="mb-20">
-                    <h2 className="text-3xl font-bold text-center mb-8">Most Recent Projects</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                        {recentProjects.slice(0, 5).map((project: any, index: number) => (
-                            <Link
-                                key={project.mint_address || index}
-                                to={`/token/${project.mintAddress}`}
-                                state={{ tokenType: 'custom' }}
-                                className="bg-gradient-to-br from-blue-50 to-violet-50 p-4 rounded-xl border border-blue-100 hover:border-violet-200 transition-all"
+                {/* Replace Recent Projects with full token list */}
+                <div className="mb-8">
+                    <div className="flex justify-between items-center mb-12">
+                        <h2 className="text-3xl font-bold text-gray-900">Projects</h2>
+                        <div className="flex items-center gap-2">
+                            <span className="text-gray-600 text-sm">Sort by:</span>
+                            <select
+                                value={volumePeriod}
+                                onChange={(e) => setVolumePeriod(e.target.value as typeof volumePeriod)}
+                                className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2"
                             >
-                                <div className="flex items-center gap-2 mb-2">
-                                    {project.image_url && (
-                                        <img
-                                            src={project.image_url}
-                                            alt={project.name}
-                                            className="w-8 h-8 rounded-full"
-                                            onError={(e) => {
-                                                (e.target as HTMLImageElement).style.display = 'none';
-                                            }}
-                                        />
-                                    )}
-                                    <h3 className="font-semibold text-gray-900 truncate">
-                                        {project.name}
-                                    </h3>
-                                </div>
-                                <p className="text-sm text-gray-600 truncate">
-                                    {project.symbol}
-                                </p>
-                            </Link>
-                        ))}
+                                <option value="marketCapUsd">Market Cap</option>
+                                <option value="5m">5m Volume</option>
+                                <option value="30m">30m Volume</option>
+                                <option value="1h">1h Volume</option>
+                                <option value="4h">4h Volume</option>
+                                <option value="12h">12h Volume</option>
+                                <option value="24h">24h Volume</option>
+                                <option value="all">All Time Volume</option>
+                                <option value="newest">New</option>
+                                <option value="oldest">Old</option>
+                            </select>
+                        </div>
                     </div>
-                </div>
 
-                {/* How It Works Section */}
-                <div className="mb-20">
-                    <h2 className="text-3xl font-bold text-center mb-12">How It Works</h2>
-                    <div className="space-y-4 max-w-4xl mx-auto">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
-                                <div className="text-blue-600 font-bold text-lg mb-2">1. Connect Wallet</div>
-                                <p className="text-gray-700">
-                                    Connect your Solana wallet.
-                                </p>
-                            </div>
-                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
-                                <div className="text-blue-600 font-bold text-lg mb-2">2. Define Project</div>
-                                <p className="text-gray-700">
-                                    Choose name, supply, image, etc.
-                                </p>
-                            </div>
-                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
-                                <div className="text-blue-600 font-bold text-lg mb-2">3. Create</div>
-                                <p className="text-gray-700">
-                                    Launch your token with one click.
-                                </p>
-                            </div>
-                            <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-6 rounded-2xl">
-                                <div className="text-blue-600 font-bold text-lg mb-2">4. Build & Trade</div>
-                                <p className="text-gray-700">
-                                    Start trading and continue building your project.
-                                </p>
-                            </div>
+                    {isLoading ? (
+                        <div className="text-center text-gray-400 py-8">Loading tokens...</div>
+                    ) : error ? (
+                        <div className="text-center text-red-500 py-8">
+                            {error}
+                            <button
+                                onClick={fetchTokens}
+                                className="ml-4 text-blue-400 hover:text-blue-300"
+                            >
+                                Retry
+                            </button>
                         </div>
-                    </div>
-                </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {tokens.map(token => (
+                                <TokenCard
+                                    key={token.mintAddress}
+                                    token={token}
+                                    volumePeriod={volumePeriod}
+                                />
+                            ))}
+                        </div>
+                    )}
 
-                {/* Our Mission Section */}
-                <div className="mb-20">
-                    <h2 className="text-3xl font-bold text-center mb-8">Our Mission</h2>
-                    <div className="max-w-4xl mx-auto">
-                        <p className="text-xl text-gray-600 mb-6">
-                            We believe crypto can be a force for good. Onstrument empowers the best creators to bring their
-                            real ideas to life.
-                        </p>
-                        <p className="text-xl text-gray-600 mb-6">
-                            We are committed to the builders first and foremost, and will continuously adapt to your needs.
-                        </p>
-                    </div>
-                </div>
+                    {/* Pagination */}
+                    {!isLoading && !error && totalPages > 1 && (
+                        <div className="flex justify-center items-center gap-2 mt-8">
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className={`px-4 py-2 rounded-lg ${currentPage === 1
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }`}
+                            >
+                                Previous
+                            </button>
 
-                {/* Success Stories */}
-                <div className="mb-20">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <div className="bg-white p-6 rounded-xl border border-blue-200 hover:border-violet-300 transition-all">
-                            <h3 className="font-semibold text-gray-900 mb-2">Easy Launch</h3>
-                            <p className="text-gray-600">Start your project in seconds with our intuitive platform. No technical expertise required.</p>
+                            <span className="text-gray-600">
+                                Page {currentPage} of {totalPages}
+                            </span>
+
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className={`px-4 py-2 rounded-lg ${currentPage === totalPages
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }`}
+                            >
+                                Next
+                            </button>
                         </div>
-                        <div className="bg-white p-6 rounded-xl border border-blue-200 hover:border-violet-300 transition-all">
-                            <h3 className="font-semibold text-gray-900 mb-2">Community First</h3>
-                            <p className="text-gray-600">Build and engage with your community from day one. Turn supporters into active participants.</p>
-                        </div>
-                        <div className="bg-white p-6 rounded-xl border border-blue-200 hover:border-violet-300 transition-all">
-                            <h3 className="font-semibold text-gray-900 mb-2">Full Control</h3>
-                            <p className="text-gray-600">Maintain complete ownership of your project while using our powerful tools.</p>
-                        </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* CTA Section */}
