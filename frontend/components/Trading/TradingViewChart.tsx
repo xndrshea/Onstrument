@@ -64,9 +64,15 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         };
 
         script.onload = () => {
-            if (!window.TradingView) return;
+            if (!window.TradingView) {
+                console.error('TradingView not loaded');
+                return;
+            }
 
+            console.log('TradingView initialization starting');
             console.log('Chart styles:', chartStyle);
+            console.log('Container ref:', containerRef.current);
+            console.log('Initial denomination:', denomination);
 
             const widget = new (window as any).TradingView.widget({
                 container: containerRef.current,
@@ -300,9 +306,22 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                 scale_mode: 'Normal',
             });
 
+            console.log('Widget configuration:', {
+                backgroundColor: chartStyle.layout.backgroundColor,
+                textColor: chartStyle.layout.textColor,
+                theme: "light"
+            });
+
             widgetRef.current = widget;
 
             widget.onChartReady(() => {
+                console.log('Chart is ready');
+                console.log('Current theme:', widget.getTheme());
+                console.log('Chart background:', widget.getChartProperties().paneProperties.background);
+            });
+
+            widget.headerReady().then(() => {
+                console.log('Header is ready, creating denomination button');
                 const button = widget.createButton();
                 button.textContent = denomination;
                 button.style.color = "#1e293b";
@@ -328,6 +347,9 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
                     });
                     widget.chart().resetData();
                 });
+                console.log('Denomination button created');
+            }).catch((error: any) => {
+                console.error('Error creating header button:', error);
             });
         };
 
