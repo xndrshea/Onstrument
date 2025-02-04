@@ -107,6 +107,30 @@ class WebSocketClient {
             console.error('WebSocket message error:', error);
         }
     }
+
+    public sendChatMessage(message: string, userId: string) {
+        const chatMessage = {
+            type: 'chat',
+            message: message,
+            userId: userId
+        };
+        this.ws?.send(JSON.stringify(chatMessage));
+    }
+
+    public subscribeToChatMessages(callback: (data: any) => void) {
+        const handler = (event: MessageEvent) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'chat') {
+                callback({
+                    username: data.username,
+                    message: data.message,
+                    timestamp: data.timestamp
+                });
+            }
+        };
+        this.ws?.addEventListener('message', handler);
+        return () => this.ws?.removeEventListener('message', handler);
+    }
 }
 
 export const priceClient = {
@@ -121,10 +145,16 @@ export const priceClient = {
     isConnected: (network: 'mainnet' | 'devnet') =>
         WebSocketClient.getInstance().isConnected(network),
 
+    sendChatMessage: (message: string, userId: string) =>
+        WebSocketClient.getInstance().sendChatMessage(message, userId),
+
     // Keep existing price history methods
     getPriceHistory: async (mintAddress: string): Promise<CandlestickData<Time>[]> => {
         const response = await fetch(`/api/ohlcv/${mintAddress}?resolution=1&from=${Math.floor(Date.now() / 1000 - 300)}&to=${Math.floor(Date.now() / 1000)}`);
         if (!response.ok) throw new Error('Failed to fetch price history');
         return await response.json();
-    }
+    },
+
+    subscribeToChatMessages: (callback: (data: any) => void) =>
+        WebSocketClient.getInstance().subscribeToChatMessages(callback),
 };

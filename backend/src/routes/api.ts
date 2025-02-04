@@ -1479,4 +1479,15 @@ router.get('/favorites', authMiddleware, async (req, res) => {
     }
 });
 
+// Update the chat history endpoint
+router.get('/chat/history', async (req, res) => {
+    try {
+        const history = await wsManager.getChatHistory();  // No params needed
+        res.json(history);
+    } catch (error) {
+        logger.error('Error fetching chat history:', error);
+        res.status(500).json({ error: 'Failed to fetch chat history' });
+    }
+});
+
 export default router; 

@@ -2,11 +2,13 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { logger } from '../../utils/logger';
 import express from 'express';
+import { getPool } from '../../config/database';
 
 interface WebSocketClient extends WebSocket {
     id: string;
     isAlive: boolean;
     subscriptions: Set<string>;
+    username?: string;
 }
 
 export class WebSocketManager extends EventEmitter {
@@ -14,10 +16,16 @@ export class WebSocketManager extends EventEmitter {
     private wss: WebSocket.Server | null = null;
     private clients: Map<string, WebSocketClient> = new Map();
     private readonly HEARTBEAT_INTERVAL = 30000;
+    private messageRateLimit = new Map<string, number>();
+    private readonly MESSAGE_HISTORY_LIMIT = 100; // Messages to keep per query
+    private readonly MESSAGE_RETENTION_DAYS = 7;  // Days to keep messages
+    private readonly CLEANUP_INTERVAL = 7 * 24 * 60 * 60 * 1000; // Weekly cleanup
 
     private constructor() {
         super();
         setInterval(() => this.checkConnections(), this.HEARTBEAT_INTERVAL);
+        // Run cleanup weekly instead of daily
+        setInterval(() => this.cleanupOldMessages(), this.CLEANUP_INTERVAL);
     }
 
     static getInstance(): WebSocketManager {
@@ -81,7 +89,15 @@ export class WebSocketManager extends EventEmitter {
         });
     }
 
-    private handleClientMessage(client: WebSocketClient, message: any) {
+    private async handleClientMessage(client: WebSocketClient, message: any) {
+        // Rate limit: 1 message per second per user
+        const now = Date.now();
+        const lastMessage = this.messageRateLimit.get(message.userId) || 0;
+        if (now - lastMessage < 1000) {
+            return; // Silently drop messages that exceed rate limit
+        }
+        this.messageRateLimit.set(message.userId, now);
+
         switch (message.type) {
             case 'subscribe':
                 if (message.mintAddress) {
@@ -91,6 +107,31 @@ export class WebSocketManager extends EventEmitter {
             case 'unsubscribe':
                 if (message.mintAddress) {
                     client.subscriptions.delete(message.mintAddress);
+                }
+                break;
+            case 'chat':
+                try {
+                    // Ensure user_id exists
+                    if (!message.userId) {
+                        logger.error('Missing userId in chat message');
+                        return;
+                    }
+
+                    await getPool().query(
+                        'INSERT INTO onstrument.chat_messages (user_id, message) VALUES ($1, $2)',
+                        [message.userId, message.message]
+                    );
+
+                    const displayName = `user_${message.userId.slice(0, 4)}`;
+
+                    this.broadcastChat({
+                        type: 'chat',
+                        username: displayName,
+                        message: message.message,
+                        timestamp: Date.now()
+                    });
+                } catch (error) {
+                    logger.error('Error storing chat message:', error);
                 }
                 break;
         }
@@ -188,6 +229,49 @@ export class WebSocketManager extends EventEmitter {
         this.wss.handleUpgrade(req, socket, Buffer.from(''), (ws) => {
             this.wss!.emit('connection', ws, req);
         });
+    }
+
+    public broadcastChat(chatMessage: any) {
+        this.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(chatMessage));
+            }
+        });
+    }
+
+    public async getChatHistory() {
+        try {
+            const result = await getPool().query(
+                `SELECT message, created_at, user_id 
+                 FROM onstrument.chat_messages 
+                 ORDER BY created_at ASC  -- Oldest first, newest last
+                 LIMIT 1000`
+            );
+
+            return result.rows.map(row => ({
+                type: 'chat',
+                username: `user_${row.user_id.slice(0, 4)}`,
+                message: row.message,
+                timestamp: row.created_at.getTime()
+            }));
+        } catch (error) {
+            logger.error('Error fetching chat history:', error);
+            return [];
+        }
+    }
+
+    // Add a cleanup method
+    private async cleanupOldMessages() {
+        try {
+            const result = await getPool().query(
+                `DELETE FROM onstrument.chat_messages 
+                 WHERE created_at < NOW() - INTERVAL '${this.MESSAGE_RETENTION_DAYS} days'
+                 RETURNING COUNT(*) as deleted_count`
+            );
+            logger.info(`Cleaned up ${result.rows[0].deleted_count} old chat messages`);
+        } catch (error) {
+            logger.error('Error cleaning up old messages:', error);
+        }
     }
 }
 
