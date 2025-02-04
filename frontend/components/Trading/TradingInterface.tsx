@@ -416,7 +416,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                     <p className="text-gray-600 mb-4">Please connect your wallet to trade</p>
                     <button
                         onClick={() => setVisible(true)}
-                        className="bg-sky-500 hover:bg-sky-600 text-white px-6 py-2 rounded-lg shadow-lg border border-sky-400"
+                        className="bg-blue-500 hover:bg-blue-600 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white"
                     >
                         Connect Wallet
                     </button>
