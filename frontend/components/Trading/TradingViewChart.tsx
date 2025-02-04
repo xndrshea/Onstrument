@@ -28,6 +28,17 @@ interface TradingViewChartProps {
     };
 }
 
+// Add this near the top where you define other styles
+const containerStyle = {
+    backgroundColor: '#FFFFFF',
+    '& .chart-container': {
+        backgroundColor: '#FFFFFF !important',
+    },
+    '& .tv-chart-container': {
+        backgroundColor: '#FFFFFF !important',
+    }
+};
+
 export function TradingViewChart({ token, width = 600, height = 300, currentPrice, onPriceUpdate, chartStyle }: TradingViewChartProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const widgetRef = useRef<any>(null);
@@ -317,7 +328,26 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
             widget.onChartReady(() => {
                 console.log('Chart is ready');
                 console.log('Current theme:', widget.getTheme());
-                console.log('Chart background:', widget.getChartProperties().paneProperties.background);
+
+                // Remove the getChartProperties call that's causing the error
+                // console.log('Chart background:', widget.getChartProperties().paneProperties.background);
+
+                // Instead, force the theme and colors directly
+                widget.changeTheme('light');
+                widget.applyOverrides({
+                    "paneProperties.background": "#FFFFFF",
+                    "paneProperties.backgroundType": "solid",
+                    "mainSeriesProperties.candleStyle.upColor": "#22c55e",
+                    "mainSeriesProperties.candleStyle.downColor": "#ef4444",
+                    "mainSeriesProperties.candleStyle.wickUpColor": "#22c55e",
+                    "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444",
+                });
+
+                // Get the chart container and force background color via CSS
+                const chartContainer = containerRef.current?.querySelector('.chart-container');
+                if (chartContainer) {
+                    (chartContainer as HTMLElement).style.backgroundColor = '#FFFFFF';
+                }
             });
 
             widget.headerReady().then(() => {
@@ -370,7 +400,11 @@ export function TradingViewChart({ token, width = 600, height = 300, currentPric
         }
     }, [denomination]);
 
-    return <div ref={containerRef} />;
+    return <div
+        ref={containerRef}
+        style={containerStyle}
+        className="tradingview-chart"
+    />;
 }
 
 // Helper function to convert resolution to milliseconds
