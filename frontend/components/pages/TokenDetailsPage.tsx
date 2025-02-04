@@ -396,12 +396,13 @@ export function TokenDetailsPage() {
                     credentials: 'include' as RequestCredentials
                 };
 
+                let tokens;
                 if (filterType === 'favorites') {
                     const response = await fetch('/api/favorites', requestConfig);
                     const data = await response.json();
 
                     // Transform snake_case to camelCase
-                    const transformedTokens = data.tokens.map((token: any) => ({
+                    tokens = data.tokens.map((token: any) => ({
                         mintAddress: token.mint_address,
                         name: token.name,
                         symbol: token.symbol,
@@ -413,8 +414,6 @@ export function TokenDetailsPage() {
                         volume24h: token.volume_24h,
                         priceChange24h: token.price_change_24h
                     }));
-
-                    setTopTokens(transformedTokens);
                 } else {
                     // Build query parameters
                     const params = new URLSearchParams({
@@ -434,9 +433,10 @@ export function TokenDetailsPage() {
                     }
 
                     const data = await response.json();
-                    const filteredTokens = filterService.filterTokens(data.tokens);
-                    setTopTokens(filteredTokens);
+                    tokens = filterService.filterTokens(data.tokens);
                 }
+
+                setTopTokens(tokens);
             } catch (error) {
                 console.error('Error fetching tokens:', error);
             }
@@ -559,27 +559,39 @@ export function TokenDetailsPage() {
                 credentials: 'include' as RequestCredentials
             };
 
-
             if (isFavorited) {
-                const deleteResponse = await fetch(`/api/favorites/${token.mintAddress}`, {
+                await fetch(`/api/favorites/${token.mintAddress}`, {
                     method: 'DELETE',
                     ...requestConfig
                 });
             } else {
-                const postResponse = await fetch('/api/favorites', {
+                await fetch('/api/favorites', {
                     method: 'POST',
                     ...requestConfig,
                     body: JSON.stringify({ mintAddress: token.mintAddress })
                 });
             }
 
-
             setIsFavorited(!isFavorited);
 
-            const response = await fetch('/api/favorites', requestConfig);
-            const data = await response.json();
-
-            setTopTokens(data.tokens);
+            // Only refetch tokens if we're in favorites view
+            if (filterType === 'favorites') {
+                const response = await fetch('/api/favorites', requestConfig);
+                const data = await response.json();
+                const transformedTokens = data.tokens.map((token: any) => ({
+                    mintAddress: token.mint_address,
+                    name: token.name,
+                    symbol: token.symbol,
+                    decimals: token.decimals,
+                    tokenType: token.token_type,
+                    imageUrl: token.image_url,
+                    currentPrice: token.current_price,
+                    marketCapUsd: token.market_cap_usd,
+                    volume24h: token.volume_24h,
+                    priceChange24h: token.price_change_24h
+                }));
+                setTopTokens(transformedTokens);
+            }
         } catch (error) {
             console.error('Error toggling favorite:', error);
         }
@@ -602,8 +614,10 @@ export function TokenDetailsPage() {
                     <div className="flex gap-2 p-2">
                         <button
                             onClick={() => {
-                                setFilterType('all');
-                                setTopTokens([]); // Clear tokens before fetching new ones
+                                if (filterType !== 'all') {  // Only clear and change if switching TO all
+                                    setTopTokens([]); // Clear tokens before fetching new ones
+                                    setFilterType('all');
+                                }
                             }}
                             className={`px-3 py-1 rounded-md ${filterType === 'all'
                                 ? 'bg-blue-500 text-white'
@@ -614,8 +628,10 @@ export function TokenDetailsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                setFilterType('favorites');
-                                setTopTokens([]); // Clear tokens before fetching new ones
+                                if (filterType !== 'favorites') {  // Only clear and change if switching TO favorites
+                                    setTopTokens([]); // Clear tokens before fetching new ones
+                                    setFilterType('favorites');
+                                }
                             }}
                             className={`px-3 py-1 rounded-md ${filterType === 'favorites'
                                 ? 'bg-blue-500 text-white'
