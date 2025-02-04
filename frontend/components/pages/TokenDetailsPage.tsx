@@ -853,31 +853,33 @@ export function TokenDetailsPage() {
                     <div className="space-y-4 overflow-x-hidden">
                         {/* Token header */}
                         <div className="bg-white border border-gray-200 rounded-lg p-3 overflow-x-hidden shadow-sm">
-                            <div className="flex flex-col">
+                            <div className="flex flex-col space-y-2">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center">
                                         {(token.tokenType === 'custom' ? imageUrl : token.imageUrl) && (
                                             <img
                                                 src={token.tokenType === 'custom' ? imageUrl ?? '' : token.imageUrl}
                                                 alt={token.name}
-                                                className="w-10 h-10 rounded-full object-cover mr-3"
+                                                className="w-10 h-10 rounded-full object-cover mr-3 flex-shrink-0"
                                                 onError={(e) => {
                                                     (e.target as HTMLImageElement).style.display = 'none';
                                                 }}
                                             />
                                         )}
-                                        <h1 className="text-lg font-mono text-gray-900 truncate">{token.symbol}</h1>
+                                        <div className="min-w-0">
+                                            <h1 className="text-lg font-mono text-gray-900 break-all">{token.symbol}</h1>
+                                            <div className="text-sm text-gray-600 font-mono break-all">
+                                                {token.name}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <FavoriteButton
-                                        token={token}
-                                        isFavorited={isFavorited}
-                                        onToggle={toggleFavorite}
-                                    />
                                     {renderTokenSelector()}
                                 </div>
-                                <div className="mt-1 text-sm text-gray-600 font-mono truncate">
-                                    {token.name}
-                                </div>
+                                <FavoriteButton
+                                    token={token}
+                                    isFavorited={isFavorited}
+                                    onToggle={toggleFavorite}
+                                />
                             </div>
                         </div>
 
