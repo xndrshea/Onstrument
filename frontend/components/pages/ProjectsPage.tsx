@@ -28,7 +28,26 @@ export function ProjectsPage() {
 
             const data = await response.json();
 
-            setTokens(data.tokens.map((token: any) => ({
+            // For each token, fetch its 24h volume separately if we're not already sorting by 24h
+            const tokensWithVolume = await Promise.all(data.tokens.map(async (token: any) => {
+                if (volumePeriod === '24h') {
+                    return {
+                        ...token,
+                        volume: token.volume
+                    };
+                }
+
+                // Fetch 24h volume
+                const volumeResponse = await fetch(`/api/price-history/${token.mintAddress}/volume?period=24h`);
+                const volumeData = await volumeResponse.json();
+
+                return {
+                    ...token,
+                    volume: volumeData.volume
+                };
+            }));
+
+            setTokens(tokensWithVolume.map((token: any) => ({
                 mintAddress: token.mintAddress,
                 name: token.name,
                 symbol: token.symbol,
