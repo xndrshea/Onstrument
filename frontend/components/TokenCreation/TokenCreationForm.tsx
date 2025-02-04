@@ -138,14 +138,6 @@ export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: To
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault()
-        console.log('Project Data being sent:', {
-            category: formData.projectCategory,
-            teamMembers: formData.teamMembers,
-            isAnonymous: formData.isAnonymous,
-            projectTitle: formData.projectTitle,
-            projectDescription: formData.projectDescription,
-            projectStory: formData.projectStory
-        });
         if (!validateForm()) return
 
         setIsLoading(true)
@@ -366,7 +358,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: To
                         <div className="form-group">
                             <label>Website URL</label>
                             <input
-                                type="url"
+                                type="text"
                                 value={formData.websiteUrl || ''}
                                 onChange={e => setFormData({ ...formData, websiteUrl: e.target.value })}
                                 placeholder="https://example.com"
@@ -376,7 +368,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: To
                         <div className="form-group">
                             <label>Documentation URL</label>
                             <input
-                                type="url"
+                                type="text"
                                 value={formData.docsUrl || ''}
                                 onChange={e => setFormData({ ...formData, docsUrl: e.target.value })}
                                 placeholder="https://docs.example.com"
@@ -386,7 +378,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: To
                         <div className="form-group">
                             <label>Twitter URL</label>
                             <input
-                                type="url"
+                                type="text"
                                 value={formData.twitterUrl || ''}
                                 onChange={e => setFormData({ ...formData, twitterUrl: e.target.value })}
                                 placeholder="https://twitter.com/username"
@@ -396,7 +388,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: To
                         <div className="form-group">
                             <label>Telegram URL</label>
                             <input
-                                type="url"
+                                type="text"
                                 value={formData.telegramUrl || ''}
                                 onChange={e => setFormData({ ...formData, telegramUrl: e.target.value })}
                                 placeholder="https://t.me/username"
