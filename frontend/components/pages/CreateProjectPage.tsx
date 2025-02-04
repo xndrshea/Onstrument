@@ -79,7 +79,7 @@ export function CreateProjectPage() {
 
                         <div className="space-y-4">
                             <select
-                                className={`w-full p-3 border ${categoryError ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent`}
+                                className={`w-full p-3 border ${categoryError ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent`}
                                 onChange={(e) => {
                                     setSelectedCategory(e.target.value);
                                     setCategoryError('');
