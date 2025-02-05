@@ -199,6 +199,19 @@ export class BondingCurveProcessor extends BaseProcessor {
                 isBuy: true
             });
 
+            // Store trade in database
+            await pool().query(`
+                INSERT INTO onstrument.live_trades 
+                (mint_address, price, volume, is_sell, wallet_address, trade_timestamp)
+                VALUES ($1, $2, $3, $4, $5, NOW())
+            `, [
+                mint.toString(),
+                priceInUsd,
+                volumeUsd,
+                false,
+                buyer.toString()
+            ]);
+
             wsManager.broadcastPrice(
                 mint.toString(),
                 priceInUsd,
@@ -250,6 +263,19 @@ export class BondingCurveProcessor extends BaseProcessor {
                 timestamp: new Date(),
                 isBuy: false
             });
+
+            // Store trade in database
+            await pool().query(`
+                INSERT INTO onstrument.live_trades 
+                (mint_address, price, volume, is_sell, wallet_address, trade_timestamp)
+                VALUES ($1, $2, $3, $4, $5, NOW())
+            `, [
+                mint.toString(),
+                priceInUsd,
+                volumeUsd,
+                true,
+                seller.toString()
+            ]);
 
             wsManager.broadcastPrice(
                 mint.toString(),

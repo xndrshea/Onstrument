@@ -773,34 +773,6 @@ router.get('/ohlcv/:mintAddress', async (req, res) => {
     }
 });
 
-// Get trade history
-router.get('/trades/:mintAddress', async (req, res) => {
-    try {
-        const { mintAddress } = req.params;
-        const { limit = '50' } = req.query;
-
-        const trades = await pool().query(`
-            SELECT 
-                signature,
-                wallet_address,
-                side,
-                amount,
-                total,
-                price,
-                timestamp
-            FROM onstrument.trades 
-            WHERE token_address = $1 
-            ORDER BY timestamp DESC 
-            LIMIT $2
-        `, [mintAddress, parseInt(limit as string)]);
-
-        res.json(trades.rows);
-    } catch (error) {
-        logger.error('Error fetching trade history:', error);
-        res.status(500).json({ error: 'Failed to fetch trades' });
-    }
-});
-
 // WebSocket status
 router.get('/ws/status', async (_req, res) => {
     try {
@@ -1487,6 +1459,59 @@ router.get('/chat/history', async (req, res) => {
     } catch (error) {
         logger.error('Error fetching chat history:', error);
         res.status(500).json({ error: 'Failed to fetch chat history' });
+    }
+});
+
+// Fetch recent trades
+router.get('/trades/recent', async (req, res) => {
+    try {
+        const result = await pool().query(`
+            SELECT 
+                mint_address as "mintAddress",
+                price,
+                volume,
+                is_sell as "isSell",
+                wallet_address as "walletAddress",
+                trade_timestamp as "timestamp",
+                symbol
+            FROM onstrument.live_trades 
+            ORDER BY trade_timestamp DESC 
+            LIMIT 50
+        `);
+
+        res.json(result.rows || []);
+    } catch (error) {
+        logger.error('Error fetching trade history:', error);
+        res.status(500).json({
+            error: 'Failed to fetch recent trades',
+            details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+        });
+    }
+});
+
+// Modify existing DEX trade broadcast endpoint to store trades
+router.post('/trades/dex', async (req, res) => {
+    try {
+        const { mintAddress, price, volume, isSell, walletAddress } = req.body;
+
+        await pool().query(`
+            INSERT INTO onstrument.live_trades 
+            (mint_address, price, volume, is_sell, wallet_address, trade_timestamp)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+        `, [mintAddress, price, volume, isSell, walletAddress]);
+
+        wsManager.broadcastPrice(
+            mintAddress,
+            price,
+            volume,
+            isSell,
+            walletAddress
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('Error broadcasting DEX trade:', error);
+        res.status(500).json({ error: 'Failed to broadcast trade' });
     }
 });
 
