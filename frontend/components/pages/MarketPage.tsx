@@ -63,7 +63,6 @@ export function MarketPage() {
                             <option value="volume24h">24h Volume</option>
                             <option value="volume1h">1h Volume</option>
                             <option value="volume5m">5m Volume</option>
-                            <option value="marketCapUsd">Market Cap</option>
                             <option value="priceChange24h">24h Change</option>
                         </select>
                     </div>

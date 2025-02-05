@@ -369,8 +369,7 @@ router.get('/tokens', async (req, res) => {
                         t.token_type,
                         t.supply,
                         t.current_price,
-                        t.market_cap_usd as "marketCapUsd",
-                        t.volume_24h as volume
+                        t.market_cap_usd as "marketCapUsd"
                     FROM onstrument.tokens t
                     WHERE t.token_type = 'custom'
                     ORDER BY t.created_at DESC
@@ -393,8 +392,16 @@ router.get('/tokens', async (req, res) => {
                         t.supply,
                         t.current_price,
                         t.market_cap_usd as "marketCapUsd",
-                        t.volume_24h as volume
+                        COALESCE(ph.volume, 0) as volume
                     FROM onstrument.tokens t
+                    LEFT JOIN (
+                        SELECT 
+                            mint_address,
+                            SUM(volume) as volume
+                        FROM onstrument.price_history
+                        WHERE "time" > NOW() - INTERVAL '24 hours'
+                        GROUP BY mint_address
+                    ) ph ON t.mint_address = ph.mint_address
                     WHERE t.token_type = 'custom'
                     ORDER BY t.market_cap_usd DESC NULLS LAST
                     LIMIT $1 OFFSET $2
@@ -416,10 +423,18 @@ router.get('/tokens', async (req, res) => {
                         t.supply,
                         t.current_price,
                         t.market_cap_usd as "marketCapUsd",
-                        t.volume_24h as volume
+                        COALESCE(ph.volume, 0) as volume
                     FROM onstrument.tokens t
+                    LEFT JOIN (
+                        SELECT 
+                            mint_address,
+                            SUM(volume) as volume
+                        FROM onstrument.price_history
+                        WHERE "time" > NOW() - INTERVAL '24 hours'
+                        GROUP BY mint_address
+                    ) ph ON t.mint_address = ph.mint_address
                     WHERE t.token_type = 'custom'
-                    ORDER BY t.volume_24h DESC
+                    ORDER BY ph.volume DESC NULLS LAST
                     LIMIT $1 OFFSET $2
                 `;
                 break;
@@ -439,10 +454,18 @@ router.get('/tokens', async (req, res) => {
                         t.supply,
                         t.current_price,
                         t.market_cap_usd as "marketCapUsd",
-                        t.volume_1h as volume
+                        COALESCE(ph.volume, 0) as volume
                     FROM onstrument.tokens t
+                    LEFT JOIN (
+                        SELECT 
+                            mint_address,
+                            SUM(volume) as volume
+                        FROM onstrument.price_history
+                        WHERE "time" > NOW() - INTERVAL '1 hour'
+                        GROUP BY mint_address
+                    ) ph ON t.mint_address = ph.mint_address
                     WHERE t.token_type = 'custom'
-                    ORDER BY t.volume_1h DESC
+                    ORDER BY ph.volume DESC NULLS LAST
                     LIMIT $1 OFFSET $2
                 `;
                 break;
@@ -462,10 +485,18 @@ router.get('/tokens', async (req, res) => {
                         t.supply,
                         t.current_price,
                         t.market_cap_usd as "marketCapUsd",
-                        t.volume_5m as volume
+                        COALESCE(ph.volume, 0) as volume
                     FROM onstrument.tokens t
+                    LEFT JOIN (
+                        SELECT 
+                            mint_address,
+                            SUM(volume) as volume
+                        FROM onstrument.price_history
+                        WHERE "time" > NOW() - INTERVAL '5 minutes'
+                        GROUP BY mint_address
+                    ) ph ON t.mint_address = ph.mint_address
                     WHERE t.token_type = 'custom'
-                    ORDER BY t.volume_5m DESC
+                    ORDER BY ph.volume DESC NULLS LAST
                     LIMIT $1 OFFSET $2
                 `;
                 break;
@@ -485,10 +516,18 @@ router.get('/tokens', async (req, res) => {
                         t.supply,
                         t.current_price,
                         t.market_cap_usd as "marketCapUsd",
-                        t.volume_24h as volume
+                        COALESCE(ph.volume, 0) as volume
                     FROM onstrument.tokens t
+                    LEFT JOIN (
+                        SELECT 
+                            mint_address,
+                            SUM(volume) as volume
+                        FROM onstrument.price_history
+                        WHERE "time" > NOW() - INTERVAL '24 hours'
+                        GROUP BY mint_address
+                    ) ph ON t.mint_address = ph.mint_address
                     WHERE t.token_type = 'custom'
-                    ORDER BY t.created_at DESC
+                    ORDER BY ph.volume DESC NULLS LAST
                     LIMIT $1 OFFSET $2
                 `;
         }

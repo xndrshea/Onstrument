@@ -40,20 +40,6 @@ export function LandingPage() {
         }
     }, [connected, pendingAction]);
 
-    useEffect(() => {
-        const fetchRecentProjects = async () => {
-            try {
-                const response = await fetch('/api/tokens?sortBy=newest&limit=5');
-                const data = await response.json();
-                setRecentProjects(data.tokens || []);
-            } catch (error) {
-                console.error('Failed to fetch recent projects:', error);
-            }
-        };
-
-        fetchRecentProjects();
-    }, []);
-
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
@@ -158,7 +144,7 @@ export function LandingPage() {
                 <div className="mb-8">
                     <div>
                         <div className="flex justify-between items-center mb-12 px-4">
-                            <h2 className="text-3xl font-bold text-gray-900">Projects</h2>
+                            <h2 className="text-3xl font-bold text-gray-900">Onstrument</h2>
                             <div className="flex items-center gap-2">
                                 <span className="text-gray-600 text-sm">Sort by:</span>
                                 <select
