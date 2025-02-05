@@ -347,137 +347,150 @@ router.get('/tokens', async (req, res) => {
         const { sortBy = 'newest', page = 1, limit = 100 } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
 
-        let countQuery = `
-            SELECT COUNT(*) 
-            FROM onstrument.tokens 
-            WHERE token_type = 'custom'
-        `;
-
-        // Get total count first
+        // Get total count using filtered index
+        const countQuery = `SELECT COUNT(*) FROM onstrument.tokens WHERE token_type = 'custom'`;
         const countResult = await pool().query(countQuery);
         const total = parseInt(countResult.rows[0].count);
 
         let query;
-        if (sortBy === 'newest') {
-            query = `
-                SELECT 
-                    t.mint_address,
-                    t.curve_address,
-                    t.name,
-                    t.symbol,
-                    t.decimals,
-                    t.description,
-                    t.metadata_url,
-                    t.curve_config,
-                    t.created_at,
-                    t.token_type,
-                    t.supply,
-                    t.current_price,
-                    t.market_cap_usd as "marketCapUsd",
-                    COALESCE(vd.total_volume, 0) as volume
-                FROM onstrument.tokens t
-                LEFT JOIN (
-                    SELECT mint_address, SUM(volume) as total_volume
-                    FROM onstrument.price_history_1d
-                    WHERE bucket > NOW() - INTERVAL '24 hours'
-                    GROUP BY mint_address
-                ) vd ON t.mint_address = vd.mint_address
-                WHERE t.token_type = 'custom'
-                ORDER BY t.created_at DESC
-                LIMIT $1 OFFSET $2
-            `;
-        } else if (sortBy === 'oldest') {
-            query = `
-                SELECT 
-                    t.mint_address,
-                    t.curve_address,
-                    t.name,
-                    t.symbol,
-                    t.decimals,
-                    t.description,
-                    t.metadata_url,
-                    t.curve_config,
-                    t.created_at,
-                    t.token_type,
-                    t.supply,
-                    t.current_price,
-                    t.market_cap_usd as "marketCapUsd",
-                    COALESCE(vd.total_volume, 0) as volume
-                FROM onstrument.tokens t
-                LEFT JOIN (
-                    SELECT mint_address, SUM(volume) as total_volume
-                    FROM onstrument.price_history_1d
-                    WHERE bucket > NOW() - INTERVAL '24 hours'
-                    GROUP BY mint_address
-                ) vd ON t.mint_address = vd.mint_address
-                WHERE t.token_type = 'custom'
-                ORDER BY t.created_at ASC
-                LIMIT $1 OFFSET $2
-            `;
-        } else if (sortBy === 'marketCapUsd') {
-            query = `
-                SELECT 
-                    t.mint_address,
-                    t.curve_address,
-                    t.name,
-                    t.symbol,
-                    t.decimals,
-                    t.description,
-                    t.metadata_url,
-                    t.curve_config,
-                    t.created_at,
-                    t.token_type,
-                    t.supply,
-                    t.current_price,
-                    t.market_cap_usd as "marketCapUsd",
-                    0 as volume
-                FROM onstrument.tokens t
-                WHERE t.token_type = 'custom'
-                ORDER BY t.market_cap_usd DESC NULLS LAST
-                LIMIT $1 OFFSET $2
-            `;
-        } else {
-            // Volume-based sorting
-            const volumeInterval = {
-                '5m': "NOW() - INTERVAL '5 minutes'",
-                '30m': "NOW() - INTERVAL '30 minutes'",
-                '1h': "NOW() - INTERVAL '1 hour'",
-                '4h': "NOW() - INTERVAL '4 hours'",
-                '12h': "NOW() - INTERVAL '12 hours'",
-                '24h': "NOW() - INTERVAL '24 hours'",
-                'all': null
-            }[sortBy as string];
-
-            query = `
-                WITH volume_data AS (
+        switch (sortBy) {
+            case 'newest':
+                query = `
                     SELECT 
-                        mint_address,
-                        SUM(volume) as total_volume
-                    FROM onstrument.price_history
-                    ${volumeInterval ? `WHERE time > ${volumeInterval}` : ''}
-                    GROUP BY mint_address
-                )
-                SELECT 
-                    t.mint_address,
-                    t.curve_address,
-                    t.name,
-                    t.symbol,
-                    t.decimals,
-                    t.description,
-                    t.metadata_url,
-                    t.curve_config,
-                    t.created_at,
-                    t.token_type,
-                    t.supply,
-                    t.current_price,
-                    t.market_cap_usd as "marketCapUsd",
-                    COALESCE(vd.total_volume, 0) as volume
-                FROM onstrument.tokens t
-                LEFT JOIN volume_data vd ON t.mint_address = vd.mint_address
-                WHERE t.token_type = 'custom'
-                ORDER BY volume DESC
-                LIMIT $1 OFFSET $2
-            `;
+                        t.mint_address,
+                        t.curve_address,
+                        t.name,
+                        t.symbol,
+                        t.decimals,
+                        t.description,
+                        t.metadata_url,
+                        t.curve_config,
+                        t.created_at,
+                        t.token_type,
+                        t.supply,
+                        t.current_price,
+                        t.market_cap_usd as "marketCapUsd",
+                        t.volume_24h as volume
+                    FROM onstrument.tokens t
+                    WHERE t.token_type = 'custom'
+                    ORDER BY t.created_at DESC
+                    LIMIT $1 OFFSET $2
+                `;
+                break;
+            case 'marketCapUsd':
+                query = `
+                    SELECT 
+                        t.mint_address,
+                        t.curve_address,
+                        t.name,
+                        t.symbol,
+                        t.decimals,
+                        t.description,
+                        t.metadata_url,
+                        t.curve_config,
+                        t.created_at,
+                        t.token_type,
+                        t.supply,
+                        t.current_price,
+                        t.market_cap_usd as "marketCapUsd",
+                        t.volume_24h as volume
+                    FROM onstrument.tokens t
+                    WHERE t.token_type = 'custom'
+                    ORDER BY t.market_cap_usd DESC NULLS LAST
+                    LIMIT $1 OFFSET $2
+                `;
+                break;
+            case 'volume24h':
+                query = `
+                    SELECT 
+                        t.mint_address,
+                        t.curve_address,
+                        t.name,
+                        t.symbol,
+                        t.decimals,
+                        t.description,
+                        t.metadata_url,
+                        t.curve_config,
+                        t.created_at,
+                        t.token_type,
+                        t.supply,
+                        t.current_price,
+                        t.market_cap_usd as "marketCapUsd",
+                        t.volume_24h as volume
+                    FROM onstrument.tokens t
+                    WHERE t.token_type = 'custom'
+                    ORDER BY t.volume_24h DESC
+                    LIMIT $1 OFFSET $2
+                `;
+                break;
+            case 'volume1h':
+                query = `
+                    SELECT 
+                        t.mint_address,
+                        t.curve_address,
+                        t.name,
+                        t.symbol,
+                        t.decimals,
+                        t.description,
+                        t.metadata_url,
+                        t.curve_config,
+                        t.created_at,
+                        t.token_type,
+                        t.supply,
+                        t.current_price,
+                        t.market_cap_usd as "marketCapUsd",
+                        t.volume_1h as volume
+                    FROM onstrument.tokens t
+                    WHERE t.token_type = 'custom'
+                    ORDER BY t.volume_1h DESC
+                    LIMIT $1 OFFSET $2
+                `;
+                break;
+            case 'volume5m':
+                query = `
+                    SELECT 
+                        t.mint_address,
+                        t.curve_address,
+                        t.name,
+                        t.symbol,
+                        t.decimals,
+                        t.description,
+                        t.metadata_url,
+                        t.curve_config,
+                        t.created_at,
+                        t.token_type,
+                        t.supply,
+                        t.current_price,
+                        t.market_cap_usd as "marketCapUsd",
+                        t.volume_5m as volume
+                    FROM onstrument.tokens t
+                    WHERE t.token_type = 'custom'
+                    ORDER BY t.volume_5m DESC
+                    LIMIT $1 OFFSET $2
+                `;
+                break;
+            default:
+                query = `
+                    SELECT 
+                        t.mint_address,
+                        t.curve_address,
+                        t.name,
+                        t.symbol,
+                        t.decimals,
+                        t.description,
+                        t.metadata_url,
+                        t.curve_config,
+                        t.created_at,
+                        t.token_type,
+                        t.supply,
+                        t.current_price,
+                        t.market_cap_usd as "marketCapUsd",
+                        t.volume_24h as volume
+                    FROM onstrument.tokens t
+                    WHERE t.token_type = 'custom'
+                    ORDER BY t.created_at DESC
+                    LIMIT $1 OFFSET $2
+                `;
         }
 
         const result = await pool().query(query, [limit, offset]);
@@ -495,7 +508,7 @@ router.get('/tokens', async (req, res) => {
             tokenType: token.token_type,
             supply: token.supply,
             totalSupply: token.supply,
-            volume: Number(token.volume || 0),
+            volume: token.volume || 0,
             currentPrice: Number(token.current_price || 0),
             marketCapUsd: token.marketCapUsd ? Number(token.marketCapUsd) : null
         }));
@@ -518,46 +531,16 @@ router.get('/market/tokens', async (req, res) => {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
         const offset = (page - 1) * limit;
-        const type = req.query.type as string;
         const sortBy = req.query.sortBy as string || 'volume24h';
 
-        // Build the WHERE clause for token type
-        const typeWhere = 'WHERE t.token_type = \'dex\'';  // Always filter for DEX tokens only
-
-        // Define the ORDER BY clause based on sortBy
-        let orderByClause;
-        let additionalSelect = '';
-
-        switch (sortBy) {
-            case 'marketCapUsd':
-                orderByClause = 'ORDER BY t.market_cap_usd DESC NULLS LAST';
-                break;
-            case 'volume5m':
-                additionalSelect = ', COALESCE(t.volume_5m, 0) as volume';
-                orderByClause = 'ORDER BY volume DESC';
-                break;
-            case 'volume1h':
-                additionalSelect = ', COALESCE(t.volume_1h, 0) as volume';
-                orderByClause = 'ORDER BY volume DESC';
-                break;
-            case 'volume24h':
-                additionalSelect = ', COALESCE(t.volume_24h, 0) as volume';
-                orderByClause = 'ORDER BY volume DESC';
-                break;
-            case 'priceChange24h':
-                orderByClause = 'ORDER BY t.price_change_24h DESC NULLS LAST';
-                break;
-            default:
-                orderByClause = 'ORDER BY t.volume_24h DESC NULLS LAST';
-        }
-
-        // Get total count
+        // Simplified count query using index
         const countResult = await pool().query(`
-            SELECT COUNT(*) FROM onstrument.tokens t ${typeWhere}
+            SELECT COUNT(*) FROM onstrument.tokens 
+            WHERE token_type = 'dex'
         `);
         const totalCount = parseInt(countResult.rows[0].count);
 
-        // Get paginated results
+        // Use index-driven sorting
         const query = `
             SELECT 
                 t.mint_address,
@@ -568,23 +551,19 @@ router.get('/market/tokens', async (req, res) => {
                 t.image_url,
                 t.current_price,
                 t.market_cap_usd,
-                t.volume_5m,
-                t.volume_1h,
                 t.volume_24h,
-                t.volume_7d,
-                t.price_change_5m,
-                t.price_change_1h,
-                t.price_change_24h,
-                t.price_change_7d,
-                t.created_at
-                ${additionalSelect}
+                t.volume_1h,
+                t.volume_5m,
+                t.price_change_24h
             FROM onstrument.tokens t
             WHERE t.token_type = 'dex'
-            AND t.name IS NOT NULL 
-            AND t.name != ''
-            AND t.symbol IS NOT NULL 
-            AND t.symbol != ''
-            ${orderByClause}
+            ORDER BY 
+                ${sortBy === 'marketCapUsd' ? 't.market_cap_usd DESC' :
+                sortBy === 'volume24h' ? 't.volume_24h DESC' :
+                    sortBy === 'volume1h' ? 't.volume_1h DESC' :
+                        sortBy === 'volume5m' ? 't.volume_5m DESC' :
+                            sortBy === 'priceChange24h' ? 't.price_change_24h DESC' :
+                                't.volume_24h DESC'}
             LIMIT $1 OFFSET $2
         `;
 
@@ -600,15 +579,10 @@ router.get('/market/tokens', async (req, res) => {
                 imageUrl: token.image_url,
                 currentPrice: token.current_price,
                 marketCapUsd: token.market_cap_usd ? Number(token.market_cap_usd) : null,
-                volume5m: token.volume_5m,
-                volume1h: token.volume_1h,
-                volume24h: token.volume_24h,
-                volume7d: token.volume_7d,
-                priceChange5m: token.price_change_5m,
-                priceChange1h: token.price_change_1h,
-                priceChange24h: token.price_change_24h,
-                priceChange7d: token.price_change_7d,
-                createdAt: token.created_at
+                volume24h: parseFloat(token.volume_24h),
+                volume1h: parseFloat(token.volume_1h),
+                volume5m: parseFloat(token.volume_5m),
+                priceChange24h: parseFloat(token.price_change_24h)
             })),
             pagination: {
                 total: totalCount,
