@@ -19,7 +19,7 @@ interface SubscriptionTier {
 const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     {
         id: 'monthly',
-        name: 'Monthly',
+        name: '1 Month',
         duration: 1,
         priceUSD: 20,  // Changed from 50 to 20
         goldenPoints: 1,
