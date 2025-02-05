@@ -301,6 +301,15 @@ router.post('/tokens', authMiddleware, async (req, res) => {
             // Get developer wallet from curve config
             const creatorWallet = curveConfig?.developer;
 
+            // Update user's created_tokens array
+            if (creatorWallet) {
+                await client.query(`
+                    UPDATE onstrument.users 
+                    SET created_tokens = array_append(created_tokens, $1)
+                    WHERE wallet_address = $2
+                `, [mintAddress, creatorWallet]);
+            }
+
             // Broadcast creation event
             if (creatorWallet) {
                 wsManager.broadcastCreation({
@@ -1570,6 +1579,37 @@ router.get('/recent-creations', async (_req, res) => {
     } catch (error) {
         console.error('Error fetching recent creations:', error);
         res.status(500).json({ error: 'Failed to fetch recent creations' });
+    }
+});
+
+// Get tokens created by user
+router.get('/users/:walletAddress/created-tokens', async (req, res) => {
+    try {
+        const { walletAddress } = req.params;
+
+        const query = `
+            SELECT t.* 
+            FROM onstrument.tokens t
+            JOIN onstrument.users u ON t.mint_address = ANY(u.created_tokens)
+            WHERE u.wallet_address = $1
+            ORDER BY t.created_at DESC
+        `;
+
+        const result = await pool().query(query, [walletAddress]);
+
+        res.json({
+            tokens: result.rows.map(token => ({
+                mintAddress: token.mint_address,
+                name: token.name,
+                symbol: token.symbol,
+                currentPrice: token.current_price,
+                marketCapUsd: token.market_cap_usd,
+                createdAt: token.created_at
+            }))
+        });
+    } catch (error) {
+        logger.error('Error fetching created tokens:', error);
+        res.status(500).json({ error: 'Failed to fetch created tokens' });
     }
 });
 

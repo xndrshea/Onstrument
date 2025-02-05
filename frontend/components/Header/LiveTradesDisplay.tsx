@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+/*import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { priceClient } from '../../services/priceClient';
 import { getFullHeaders } from '../../utils/headers';
@@ -115,4 +115,4 @@ export function LiveTradesDisplay() {
             <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent z-10" />
         </div>
     );
-} 
+} */
