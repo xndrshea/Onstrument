@@ -5,6 +5,7 @@ import { useSubscription } from '../../hooks/useSubscription';
 import { SubscribeModal } from '../Subscription/SubscribeModal';
 import { useAuth } from '../../hooks/useAuthQuery';
 import { Wallet } from '../Wallet';
+import { LiveTradesDisplay } from './LiveTradesDisplay';
 
 interface HeaderProps {
     onProfileClick: () => void;
@@ -72,6 +73,7 @@ export function Header({ onProfileClick, onSubscribeClick, isSubscribed }: Heade
                         <Wallet onProfileClick={onProfileClick} />
                     </div>
                 </div>
+                <LiveTradesDisplay />
             </div>
 
             {isSubscribeModalOpen && (

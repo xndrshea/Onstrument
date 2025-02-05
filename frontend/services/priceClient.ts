@@ -8,6 +8,7 @@ class WebSocketClient {
     private ws: WebSocket | null = null;
     private subscribers: Map<string, Set<(update: { price: number; time: number; volume?: number; isSell?: boolean }) => void>> = new Map();
     private clientId: string;
+    private tradeSubscribers: Set<(update: any) => void> = new Set();
 
     private constructor() {
         this.clientId = crypto.randomUUID();
@@ -90,19 +91,30 @@ class WebSocketClient {
     private handleMessage(event: MessageEvent) {
         try {
             const data = JSON.parse(event.data);
-            if (!data.mintAddress) return;
+            console.log('WebSocket received data:', data);
 
-            const subscribers = this.subscribers.get(data.mintAddress);
-            if (!subscribers) return;
+            // Handle price updates
+            if (data.type === 'price' && data.mintAddress) {
+                const subscribers = this.subscribers.get(data.mintAddress);
+                if (subscribers) {
+                    const update = {
+                        price: Number(data.close || data.price),
+                        time: Math.floor(Date.now() / 1000),
+                        volume: Number(data.volume || 0),
+                        isSell: data.isSell,
+                        mintAddress: data.mintAddress,
+                        timestamp: data.timestamp || Date.now(),
+                        walletAddress: data.walletAddress
+                    };
+                    console.log('Processed update:', update);
 
-            const update = {
-                price: Number(data.close || data.price),
-                time: Math.floor(Date.now() / 1000),
-                volume: Number(data.volume || 0),
-                isSell: data.isSell
-            };
+                    // Notify price subscribers
+                    subscribers.forEach(callback => callback(update));
 
-            subscribers.forEach(callback => callback(update));
+                    // Notify trade subscribers
+                    this.tradeSubscribers.forEach(callback => callback(update));
+                }
+            }
         } catch (error) {
             console.error('WebSocket message error:', error);
         }
@@ -131,6 +143,11 @@ class WebSocketClient {
         this.ws?.addEventListener('message', handler);
         return () => this.ws?.removeEventListener('message', handler);
     }
+
+    public subscribeToTrades(callback: (data: any) => void) {
+        this.tradeSubscribers.add(callback);
+        return () => this.tradeSubscribers.delete(callback);
+    }
 }
 
 export const priceClient = {
@@ -157,4 +174,7 @@ export const priceClient = {
 
     subscribeToChatMessages: (callback: (data: any) => void) =>
         WebSocketClient.getInstance().subscribeToChatMessages(callback),
+
+    subscribeToTrades: (callback: (data: any) => void) =>
+        WebSocketClient.getInstance().subscribeToTrades(callback),
 };
