@@ -3,13 +3,24 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { User, UserService } from '../../services/userService';
 import { TradingStats } from '../Profile/TradingStats';
 import { Portfolio } from '../Profile/Portfolio';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { getFullHeaders } from '../../utils/headers';
+
+interface CreatedToken {
+    mintAddress: string;
+    name: string;
+    symbol: string;
+    currentPrice: number;
+    marketCapUsd: number;
+    createdAt: string;
+}
 
 export function ProfilePage() {
     const { connected, publicKey, connecting, wallet } = useWallet();
     const navigate = useNavigate();
     const [user, setUser] = useState<User | null>(null);
     const [isInitializing, setIsInitializing] = useState(true);
+    const [createdTokens, setCreatedTokens] = useState<CreatedToken[]>([]);
 
     useEffect(() => {
         // Wait for wallet adapter to initialize
@@ -22,6 +33,7 @@ export function ProfilePage() {
 
     useEffect(() => {
         if (publicKey) {
+            // Fetch user data
             UserService.getUser(publicKey.toString())
                 .then(userData => {
                     if (userData) {
@@ -31,6 +43,21 @@ export function ProfilePage() {
                 .catch(error => {
                     console.error('Error fetching user data:', error);
                 });
+
+            // Fetch created tokens
+            const fetchTokens = async () => {
+                try {
+                    const response = await fetch(`/api/users/${publicKey.toString()}/created-tokens`, {
+                        headers: await getFullHeaders()
+                    });
+                    const data = await response.json();
+                    setCreatedTokens(data.tokens);
+                } catch (error) {
+                    console.error('Error fetching created tokens:', error);
+                }
+            };
+
+            fetchTokens();
         }
     }, [publicKey]);
 
@@ -82,6 +109,49 @@ export function ProfilePage() {
                         <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
                             <TradingStats />
                         </div>
+                    </div>
+
+                    {/* Created Tokens Section */}
+                    <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                        <h2 className="text-xl font-bold text-gray-900 mb-4">Created Tokens</h2>
+                        {createdTokens.length > 0 ? (
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Cap</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {createdTokens.map((token) => (
+                                        <tr key={token.mintAddress}
+                                            className="hover:bg-gray-50 cursor-pointer"
+                                            onClick={() => navigate(`/token/${token.mintAddress}`)}
+                                        >
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center">
+                                                    <div>
+                                                        <div className="text-sm font-medium text-gray-900">{token.name}</div>
+                                                        <div className="text-sm text-gray-500">{token.symbol}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                ${Number(token.marketCapUsd)?.toFixed(2) || '0.00'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {new Date(token.createdAt).toLocaleDateString()}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div className="text-gray-600 text-center py-8">
+                                No tokens created yet
+                            </div>
+                        )}
                     </div>
 
                     {/* Portfolio Section */}

@@ -91,8 +91,6 @@ export function LiveActivityDisplay() {
                     timestamp: normalizeTimestamp(creation.timestamp)
                 }));
 
-                console.log('Trades before combining:', trades);
-                console.log('Creations before combining:', creations);
 
                 // Combine and sort by timestamp
                 const combined = [...trades, ...creations]
@@ -100,7 +98,6 @@ export function LiveActivityDisplay() {
                     .sort((a, b) => b.timestamp - a.timestamp)
                     .slice(0, 50);
 
-                console.log('Combined and sorted:', combined);
                 setActivities(combined);
             } catch (error) {
                 console.error('Error fetching initial data:', error);
