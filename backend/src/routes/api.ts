@@ -295,10 +295,21 @@ router.post('/tokens', authMiddleware, async (req, res) => {
                 projectStory
             ];
 
-            console.log('About to execute query with values:', values);
-
             const result = await client.query(insertTokenQuery, values);
-            console.log('Query result:', result.rows[0]);
+            const createdToken = result.rows[0];
+
+            // Get developer wallet from curve config
+            const creatorWallet = curveConfig?.developer;
+
+            // Broadcast creation event
+            if (creatorWallet) {
+                wsManager.broadcastCreation({
+                    mintAddress,
+                    symbol,
+                    creator: creatorWallet,
+                    timestamp: Date.now()
+                });
+            }
 
             // Record initial price (existing logic)
             if (initialPriceUsd && initialPriceUsd > 0) {
@@ -326,8 +337,20 @@ router.post('/tokens', authMiddleware, async (req, res) => {
                 await client.query(priceHistoryQuery, [mintAddress, initialPriceUsd, initialMarketCapUsd]);
             }
 
+            // Add to recent creations
+            if (creatorWallet) {
+                await client.query(`
+                    INSERT INTO onstrument.recent_creations (
+                        mint_address,
+                        symbol,
+                        creator,
+                        timestamp
+                    ) VALUES ($1, $2, $3, to_timestamp($4 / 1000.0))
+                `, [mintAddress, symbol, creatorWallet, Date.now()]);
+            }
+
             await client.query('COMMIT');
-            res.json(result.rows[0]);
+            res.json(createdToken);
 
         } catch (error) {
             await client.query('ROLLBACK');
@@ -1485,7 +1508,7 @@ router.get('/trades/recent', async (req, res) => {
                 volume,
                 is_sell as "isSell",
                 wallet_address as "walletAddress",
-                trade_timestamp as "timestamp",
+                EXTRACT(EPOCH FROM trade_timestamp) * 1000 as timestamp,
                 symbol
             FROM onstrument.live_trades 
             ORDER BY trade_timestamp DESC 
@@ -1525,6 +1548,28 @@ router.post('/trades/dex', async (req, res) => {
     } catch (error) {
         logger.error('Error broadcasting DEX trade:', error);
         res.status(500).json({ error: 'Failed to broadcast trade' });
+    }
+});
+
+// Add this near other GET endpoints
+router.get('/recent-creations', async (_req, res) => {
+    try {
+        const query = `
+            SELECT 
+                mint_address as "mintAddress",
+                symbol,
+                creator,
+                EXTRACT(EPOCH FROM timestamp) * 1000 as timestamp
+            FROM onstrument.recent_creations
+            ORDER BY timestamp DESC
+            LIMIT 50
+        `;
+
+        const result = await pool().query(query);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching recent creations:', error);
+        res.status(500).json({ error: 'Failed to fetch recent creations' });
     }
 });
 

@@ -274,6 +274,22 @@ export class WebSocketManager extends EventEmitter {
             logger.error('Error cleaning up old messages:', error);
         }
     }
+
+    broadcastCreation(creation: {
+        mintAddress: string;
+        symbol: string;
+        creator: string;
+        timestamp: number;
+    }) {
+        this.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: 'creation',
+                    ...creation
+                }));
+            }
+        });
+    }
 }
 
 export const wsManager = WebSocketManager.getInstance(); 

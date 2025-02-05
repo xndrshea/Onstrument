@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { TokenCard } from '../TokenList/TokenCard';
 import { TokenRecord } from '../../../shared/types/token';
+import { priceClient } from '../../services/priceClient';
+import { getCsrfHeaders } from '../../utils/headers';
 
 export function LandingPage() {
     const { connected } = useWallet();
@@ -77,7 +79,44 @@ export function LandingPage() {
     };
 
     useEffect(() => {
-        fetchTokens();
+        void fetchTokens();
+
+        if (volumePeriod === 'newest' && currentPage === 1) {
+            const handleCreation = async (creation: any) => {
+                try {
+                    const response = await fetch(`/api/tokens/${creation.mintAddress}`, {
+                        headers: await getCsrfHeaders()
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const tokenData = await response.json();
+
+                    const newToken: TokenRecord = {
+                        mintAddress: creation.mintAddress,
+                        name: tokenData.name,
+                        symbol: tokenData.symbol,
+                        tokenType: 'custom',
+                        description: tokenData.description,
+                        metadataUrl: tokenData.metadata_url,
+                        curveConfig: tokenData.curve_config,
+                        createdAt: tokenData.created_at || creation.timestamp,
+                        volume24h: tokenData.volume_24h || 0,
+                        supply: tokenData.supply,
+                        currentPrice: tokenData.current_price,
+                        marketCapUsd: tokenData.market_cap_usd || 0
+                    };
+
+                    setTokens(prev => [newToken, ...prev]);
+                } catch (error) {
+                    console.error('Error fetching new token data:', error);
+                }
+            };
+
+            const unsubscribe = priceClient.wsClient.subscribeToCreations(handleCreation);
+            return () => {
+                unsubscribe();
+            };
+        }
+        return undefined;
     }, [volumePeriod, currentPage]);
 
     const handlePageChange = (newPage: number) => {
@@ -162,13 +201,18 @@ export function LandingPage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-4">
-                            {tokens.map(token => (
-                                <TokenCard
-                                    key={token.mintAddress}
-                                    token={token}
-                                    volumePeriod={volumePeriod}
-                                />
-                            ))}
+                            {tokens
+                                .filter((token, index, self) =>
+                                    // Ensure uniqueness by mint address and add index as fallback
+                                    index === self.findIndex((t) => t.mintAddress === token.mintAddress)
+                                )
+                                .map((token, index) => (
+                                    <TokenCard
+                                        key={`${token.mintAddress}-${index}`}
+                                        token={token}
+                                        volumePeriod={volumePeriod}
+                                    />
+                                ))}
                         </div>
                     </div>
                 </div>
