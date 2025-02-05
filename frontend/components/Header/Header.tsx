@@ -5,8 +5,7 @@ import { useSubscription } from '../../hooks/useSubscription';
 import { SubscribeModal } from '../Subscription/SubscribeModal';
 import { useAuth } from '../../hooks/useAuthQuery';
 import { Wallet } from '../Wallet';
-import { LiveTradesDisplay } from './LiveTradesDisplay';
-import { LiveCreationsDisplay } from './LiveCreationsDisplay';
+import { LiveActivityDisplay } from './LiveActivityDisplay';
 
 interface HeaderProps {
     onProfileClick: () => void;
@@ -75,8 +74,7 @@ export function Header({ onProfileClick, onSubscribeClick, isSubscribed }: Heade
                     </div>
                 </div>
                 <div className="flex items-center overflow-x-auto hide-scrollbar">
-                    <LiveCreationsDisplay />
-                    <LiveTradesDisplay />
+                    <LiveActivityDisplay />
                 </div>
             </div>
 
