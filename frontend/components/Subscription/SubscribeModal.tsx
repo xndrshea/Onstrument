@@ -174,7 +174,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                             Unlock Premium Features
                         </h2>
                         <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                            Subscribe to receive fee distribution, never pay transaction fees, earn points, and help us build the best launchpad.
+                            Subscribe to receive fee distribution, never pay transaction fees, earn points, and help Onstrument become the best launchpad.
                         </p>
                     </div>
 

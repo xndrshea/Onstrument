@@ -47,7 +47,7 @@ export function TokenomicsRoadmap() {
                     ))}
                 </div>
                 <p className="text-center text-sm text-gray-600 italic mt-4">
-                    We are not short on ideas, but going forward we will be implementing based on YOUR feedback. Our roadmap will adapt. Please reach out. Every detail matters.
+                    We are not short on ideas, but going forward we will be implementing based on YOUR feedback. The roadmap will adapt. Reach out and help shape Onstrument.
                 </p>
             </div>
 
@@ -84,8 +84,8 @@ export function TokenomicsRoadmap() {
                     <div className="bg-gradient-to-br from-blue-50 to-violet-50 p-8 rounded-2xl border border-blue-200">
                         <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600 mb-6">Airdrop</h2>
                         <p className="text-gray-700 text-lg mb-4">
-                            Join our community and earn your share of the airdrop. The points system is live,
-                            and we're committed to rewarding our early supporters.
+                            Join the community and earn your share of the airdrop. The points system is live,
+                            and Onstrument is committed to rewarding its early supporters.
                         </p>
                         <p className="text-gray-700 text-lg">
                             After the airdrop, a percentage of transaction fees will go to buy backs. Indefinitely. YOU decide the overall tokenomics.
