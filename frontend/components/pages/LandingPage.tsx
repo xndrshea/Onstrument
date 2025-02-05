@@ -16,7 +16,10 @@ export function LandingPage() {
     const [tokens, setTokens] = useState<TokenRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [volumePeriod, setVolumePeriod] = useState<'5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'marketCapUsd' | 'newest' | 'oldest'>('newest');
+    const [volumePeriod, setVolumePeriod] = useState<
+        '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' |
+        'marketCapUsd' | 'newest' | 'oldest'
+    >('newest');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const ITEMS_PER_PAGE = 100;
@@ -54,32 +57,17 @@ export function LandingPage() {
     const fetchTokens = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`/api/tokens?sortBy=${volumePeriod}&page=${currentPage}&limit=${ITEMS_PER_PAGE}`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            const response = await fetch(
+                `/api/tokens?sortBy=${volumePeriod}&page=${currentPage}&limit=${ITEMS_PER_PAGE}`
+            );
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const data = await response.json();
             setTotalPages(Math.ceil(data.total / ITEMS_PER_PAGE));
 
-            const tokensWithVolume = await Promise.all(data.tokens.map(async (token: any) => {
-                if (volumePeriod === '24h') {
-                    return {
-                        ...token,
-                        volume: token.volume
-                    };
-                }
-
-                const volumeResponse = await fetch(`/api/price-history/${token.mintAddress}/volume?period=24h`);
-                const volumeData = await volumeResponse.json();
-
-                return {
-                    ...token,
-                    volume: volumeData.volume
-                };
-            }));
-
-            setTokens(tokensWithVolume.map((token: any) => ({
+            // Map directly from API response
+            setTokens(data.tokens.map((token: any) => ({
                 mintAddress: token.mintAddress,
                 name: token.name,
                 symbol: token.symbol,
@@ -88,7 +76,7 @@ export function LandingPage() {
                 metadataUrl: token.metadataUri,
                 curveConfig: token.curveConfig,
                 createdAt: token.createdAt,
-                volume: token.volume,
+                volume: token.volume, // Now comes directly from API
                 supply: token.supply,
                 totalSupply: token.totalSupply,
                 currentPrice: token.currentPrice,
@@ -179,15 +167,10 @@ export function LandingPage() {
                                     className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2"
                                 >
                                     <option value="marketCapUsd">Market Cap</option>
-                                    <option value="5m">5m Volume</option>
-                                    <option value="30m">30m Volume</option>
-                                    <option value="1h">1h Volume</option>
-                                    <option value="4h">4h Volume</option>
-                                    <option value="12h">12h Volume</option>
-                                    <option value="24h">24h Volume</option>
-                                    <option value="all">All Time Volume</option>
-                                    <option value="newest">New</option>
-                                    <option value="oldest">Old</option>
+                                    <option value="volume24h">24h Volume</option>
+                                    <option value="volume1h">1h Volume</option>
+                                    <option value="volume5m">5m Volume</option>
+                                    <option value="newest">Newest</option>
                                 </select>
                             </div>
                         </div>
