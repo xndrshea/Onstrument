@@ -295,10 +295,21 @@ router.post('/tokens', authMiddleware, async (req, res) => {
                 projectStory
             ];
 
-            console.log('About to execute query with values:', values);
-
             const result = await client.query(insertTokenQuery, values);
-            console.log('Query result:', result.rows[0]);
+            const createdToken = result.rows[0];
+
+            // Get developer wallet from curve config
+            const creatorWallet = curveConfig?.developer;
+
+            // Broadcast creation event
+            if (creatorWallet) {
+                wsManager.broadcastCreation({
+                    mintAddress,
+                    symbol,
+                    creator: creatorWallet,
+                    timestamp: Date.now()
+                });
+            }
 
             // Record initial price (existing logic)
             if (initialPriceUsd && initialPriceUsd > 0) {
@@ -327,7 +338,7 @@ router.post('/tokens', authMiddleware, async (req, res) => {
             }
 
             await client.query('COMMIT');
-            res.json(result.rows[0]);
+            res.json(createdToken);
 
         } catch (error) {
             await client.query('ROLLBACK');

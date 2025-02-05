@@ -10,14 +10,6 @@ interface TokenCardProps {
     volumePeriod: '5m' | '30m' | '1h' | '4h' | '12h' | '24h' | 'all' | 'newest' | 'oldest' | 'marketCapUsd';
 }
 
-interface TokenMetadata {
-    name: string;
-    symbol: string;
-    description: string;
-    image: string;
-    attributes: any[];
-}
-
 export function TokenCard({ token, volumePeriod }: TokenCardProps) {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [volume, setVolume] = useState<number | null>(null);
@@ -25,10 +17,38 @@ export function TokenCard({ token, volumePeriod }: TokenCardProps) {
     useEffect(() => {
         const fetchMetadata = async () => {
             if (!token.metadataUrl) return;
+
             try {
-                const response = await fetch(token.metadataUrl);
-                const metadata = await response.json();
-                setImageUrl(metadata.image);
+                // Extract the IPFS hash from the URL
+                const ipfsHash = token.metadataUrl.split('/ipfs/')[1];
+
+                // Try different IPFS gateways in order
+                const gateways = [
+                    `https://ipfs.io/ipfs/${ipfsHash}`,
+                    `https://dweb.link/ipfs/${ipfsHash}`,
+                    `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`,
+                    // Pinata as last resort
+                    `https://gateway.pinata.cloud/ipfs/${ipfsHash}`
+                ];
+
+                for (const gateway of gateways) {
+                    try {
+                        console.log(`Trying gateway: ${gateway}`);
+                        const response = await fetch(gateway);
+                        if (!response.ok) continue;
+                        const metadata = await response.json();
+
+                        // If we get the metadata, also transform the image URL to use a working gateway
+                        if (metadata.image) {
+                            const imageIpfsHash = metadata.image.split('/ipfs/')[1];
+                            setImageUrl(`https://ipfs.io/ipfs/${imageIpfsHash}`);
+                        }
+                        break;
+                    } catch (error) {
+                        console.warn(`Failed to fetch from ${gateway}:`, error);
+                        continue;
+                    }
+                }
             } catch (error) {
                 console.error('Failed to fetch metadata:', error);
             }

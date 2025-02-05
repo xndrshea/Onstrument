@@ -9,6 +9,7 @@ class WebSocketClient {
     private subscribers: Map<string, Set<(update: { price: number; time: number; volume?: number; isSell?: boolean }) => void>> = new Map();
     private clientId: string;
     private tradeSubscribers: Set<(update: any) => void> = new Set();
+    private creationSubscribers = new Set<(creation: any) => void>();
 
     private constructor() {
         this.clientId = crypto.randomUUID();
@@ -115,6 +116,11 @@ class WebSocketClient {
                     this.tradeSubscribers.forEach(callback => callback(update));
                 }
             }
+
+            // Add this case
+            if (data.type === 'creation') {
+                this.creationSubscribers.forEach(cb => cb(data));
+            }
         } catch (error) {
             console.error('WebSocket message error:', error);
         }
@@ -148,6 +154,11 @@ class WebSocketClient {
         this.tradeSubscribers.add(callback);
         return () => this.tradeSubscribers.delete(callback);
     }
+
+    subscribeToCreations(callback: (creation: any) => void) {
+        this.creationSubscribers.add(callback);
+        return () => this.creationSubscribers.delete(callback);
+    }
 }
 
 export const priceClient = {
@@ -177,4 +188,7 @@ export const priceClient = {
 
     subscribeToTrades: (callback: (data: any) => void) =>
         WebSocketClient.getInstance().subscribeToTrades(callback),
+
+    subscribeToCreations: (callback: (data: any) => void) =>
+        WebSocketClient.getInstance().subscribeToCreations(callback),
 };
