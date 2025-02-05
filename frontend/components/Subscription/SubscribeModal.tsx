@@ -197,7 +197,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                                             ${tier.priceUSD}
                                         </div>
                                         <div className="text-sm text-gray-500">
-                                            {tier.goldenPoints} Golden Points
+                                            {tier.goldenPoints} Gold Points
                                         </div>
                                     </div>
 
@@ -227,7 +227,7 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
                     {/* Additional Info */}
                     <div className="mt-12 text-center text-gray-500">
                         <p>All subscriptions include unlimited access to premium features.</p>
-                        <p>Golden Points will be used for calculating your airdrop.</p>
+                        <p>Gold Points will be used for calculating your airdrop.</p>
                     </div>
                 </div>
             </div>
