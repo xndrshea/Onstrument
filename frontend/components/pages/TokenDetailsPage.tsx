@@ -297,6 +297,7 @@ export function TokenDetailsPage() {
     const [filterType, setFilterType] = useState<'All' | 'Onstrument' | 'Favorites'>('All');
     const { publicKey } = useWallet();
     const { user } = useAuth();
+    const [loadingFavorites, setLoadingFavorites] = useState(false);
 
     // Add useRef and useEffect for click-outside handling
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -468,7 +469,8 @@ export function TokenDetailsPage() {
                         currentPrice: token.current_price,
                         marketCapUsd: token.market_cap_usd,
                         volume24h: token.volume_24h,
-                        priceChange24h: token.price_change_24h
+                        priceChange24h: token.price_change_24h,
+                        isFavorite: true
                     }));
                     setTopTokens(tokens);
                 } else {
@@ -496,16 +498,13 @@ export function TokenDetailsPage() {
     const sortTokens = (tokens: TokenRecord[]) => {
         if (!tokens) return [];
 
-        // For Onstrument tokens, return them directly without any filtering
-        if (filterType === 'Onstrument') {
-            return tokens;
-        }
-
-        // Original filtering logic only for other types
-        const filteredTokens = tokens.filter(token =>
-            !(token.symbol === 'USDC' && token.mintAddress !== MAINNET_USDC_ADDRESS) &&
-            (token.imageUrl || (token.content?.metadata?.image))
-        );
+        // Only apply image/USDC filtering for non-favorites
+        const filteredTokens = filterType === 'Favorites' || filterType === 'Onstrument'
+            ? tokens
+            : tokens.filter(token =>
+                !(token.symbol === 'USDC' && token.mintAddress !== MAINNET_USDC_ADDRESS) &&
+                (token.imageUrl || (token.content?.metadata?.image))
+            );
 
         return filteredTokens.sort((a, b) => {
             const aValue = sortField === 'marketCapUsd' ? a.marketCapUsd : a[sortField];
@@ -633,7 +632,8 @@ export function TokenDetailsPage() {
                     currentPrice: token.current_price,
                     marketCapUsd: token.market_cap_usd,
                     volume24h: token.volume_24h,
-                    priceChange24h: token.price_change_24h
+                    priceChange24h: token.price_change_24h,
+                    isFavorite: true
                 }));
                 setTopTokens(transformedTokens);
             }
@@ -686,10 +686,7 @@ export function TokenDetailsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                if (filterType !== 'Favorites') {
-                                    setTopTokens([]);
-                                    setFilterType('Favorites');
-                                }
+                                setFilterType('Favorites');
                             }}
                             className={`px-3 py-1 rounded-md ${filterType === 'Favorites'
                                 ? 'bg-blue-500 text-white'
@@ -737,12 +734,16 @@ export function TokenDetailsPage() {
                     </button>
                 </div>
 
-                <div className="overflow-y-auto max-h-[360px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                    {sortTokens(topTokens).map(token => (
-                        filterType === 'Onstrument'
-                            ? <OnstrumentMenuItem key={token.mintAddress} token={token} navigate={navigate} />
-                            : <RegularMenuItem key={token.mintAddress} token={token} navigate={navigate} />
-                    ))}
+                <div className="overflow-y-auto max-h-[360px]">
+                    {loadingFavorites ? (
+                        <div className="p-4 text-center text-gray-500">Loading favorites...</div>
+                    ) : (
+                        sortTokens(topTokens).map(token => (
+                            filterType === 'Onstrument'
+                                ? <OnstrumentMenuItem key={token.mintAddress} token={token} navigate={navigate} />
+                                : <RegularMenuItem key={token.mintAddress} token={token} navigate={navigate} />
+                        ))
+                    )}
                 </div>
             </MenuItems>
         </Menu>
