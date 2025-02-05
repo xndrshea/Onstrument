@@ -166,6 +166,7 @@ export class BondingCurveProcessor extends BaseProcessor {
             const mint = new PublicKey(buffer.subarray(8, 40));
             const amount = Number(buffer.readBigUInt64LE(40));
             const solAmount = Number(buffer.readBigUInt64LE(48));
+            const buyer = new PublicKey(buffer.subarray(56, 88));
 
             await this.waitForNextBlock();
 
@@ -198,7 +199,26 @@ export class BondingCurveProcessor extends BaseProcessor {
                 isBuy: true
             });
 
-            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd, false);
+            // Store trade in database
+            await pool().query(`
+                INSERT INTO onstrument.live_trades 
+                (mint_address, price, volume, is_sell, wallet_address, trade_timestamp)
+                VALUES ($1, $2, $3, $4, $5, NOW())
+            `, [
+                mint.toString(),
+                priceInUsd,
+                volumeUsd,
+                false,
+                buyer.toString()
+            ]);
+
+            wsManager.broadcastPrice(
+                mint.toString(),
+                priceInUsd,
+                volumeUsd,
+                false,
+                buyer.toString()
+            );
 
         } catch (error) {
             logger.error('Error handling buy event:', error);
@@ -244,7 +264,26 @@ export class BondingCurveProcessor extends BaseProcessor {
                 isBuy: false
             });
 
-            wsManager.broadcastPrice(mint.toString(), priceInUsd, volumeUsd, true);
+            // Store trade in database
+            await pool().query(`
+                INSERT INTO onstrument.live_trades 
+                (mint_address, price, volume, is_sell, wallet_address, trade_timestamp)
+                VALUES ($1, $2, $3, $4, $5, NOW())
+            `, [
+                mint.toString(),
+                priceInUsd,
+                volumeUsd,
+                true,
+                seller.toString()
+            ]);
+
+            wsManager.broadcastPrice(
+                mint.toString(),
+                priceInUsd,
+                volumeUsd,
+                true,
+                seller.toString()
+            );
 
         } catch (error) {
             logger.error('Error handling sell event:', error);

@@ -339,6 +339,21 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 })
             });
 
+            if (token.tokenType === 'dex') {
+                // Broadcast trade
+                await fetch('/api/trades/dex', {
+                    method: 'POST',
+                    headers: await getFullHeaders(),
+                    body: JSON.stringify({
+                        mintAddress: token.mintAddress,
+                        price: priceInfo?.price || 0,
+                        volume: priceInfo?.totalCost || 0,
+                        isSell: isSelling,
+                        walletAddress: publicKey.toString()
+                    })
+                });
+            }
+
         } catch (error: any) {
             console.error('Transaction error:', error)
             setError(error.message || 'Transaction failed')

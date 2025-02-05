@@ -108,7 +108,7 @@ export class BondingCurve {
             this.program.programId
         );
 
-   
+
 
         const [metadataPDA] = PublicKey.findProgramAddressSync(
             [
@@ -237,7 +237,6 @@ export class BondingCurve {
                 const sim = await this.connection.simulateTransaction(transaction);
                 if (sim.value.err) {
                     const errorLogs = sim.value.logs?.join('\n') || '';
-                    console.log('Simulation logs:', errorLogs);  // For debugging
 
                     // Check for specific error patterns
                     if (errorLogs.includes('insufficient lamports')) {
@@ -283,7 +282,6 @@ export class BondingCurve {
             // Log explorer link
             const isDevnet = this.connection.rpcEndpoint.includes('devnet');
             const explorerUrl = `https://explorer.solana.com/tx/${signature}${isDevnet ? '?cluster=devnet' : ''}`;
-            console.log('View transaction:', explorerUrl);
 
             return signature;
         } catch (error: any) {

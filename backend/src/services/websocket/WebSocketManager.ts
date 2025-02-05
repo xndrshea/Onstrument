@@ -157,7 +157,7 @@ export class WebSocketManager extends EventEmitter {
         }
     }
 
-    broadcastPrice(mintAddress: string, price: number, volume?: number, isSell?: boolean) {
+    broadcastPrice(mintAddress: string, price: number, volume?: number, isSell?: boolean, walletAddress?: string) {
         const message = {
             type: 'price',
             mintAddress,
@@ -169,7 +169,8 @@ export class WebSocketManager extends EventEmitter {
             timestamp: Date.now(),
             time: Date.now(),
             volume: volume,
-            isSell: isSell
+            isSell: isSell,
+            walletAddress: walletAddress
         };
 
         if (this.wss) {
