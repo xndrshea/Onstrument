@@ -63,7 +63,7 @@ export function Wallet({ onProfileClick }: { onProfileClick: () => void }) {
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="bg-blue-500 hover:bg-blue-600 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white flex items-center gap-2"
+                className="bg-blue-500 hover:bg-blue-600 transition-colors duration-200 rounded-lg px-4 py-2 text-sm font-medium text-white flex items-center gap-2 relative z-[999]"
             >
                 <span>
                     {publicKey.toString().slice(0, 4)}...{publicKey.toString().slice(-4)}
@@ -79,7 +79,7 @@ export function Wallet({ onProfileClick }: { onProfileClick: () => void }) {
             </button>
 
             {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 rounded-lg shadow-lg bg-white border border-gray-200">
+                <div className="absolute right-0 mt-2 w-48 rounded-lg shadow-lg bg-white border border-gray-200 z-[9999]">
                     <div className="py-1" role="menu">
                         <button
                             onClick={handleViewProfile}
