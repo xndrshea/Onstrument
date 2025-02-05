@@ -253,24 +253,46 @@ const OnstrumentMenuItem = ({ token, navigate }: { token: TokenRecord, navigate:
     );
 };
 
-const RegularMenuItem = ({ token, navigate }: { token: TokenRecord, navigate: any }) => (
-    <MenuItem
-        as="div"
-        onClick={() => navigate(`/token/${token.mintAddress}`, { state: { tokenType: token.tokenType || 'dex' } })}
-        className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-gray-50 text-gray-900"
-    >
-        <div className="flex items-center gap-2">
-            {token.imageUrl && (
-                <img src={token.imageUrl} alt={token.name} className="w-5 h-5 rounded-full"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-            )}
-            <span className="font-medium">{token.symbol}</span>
-        </div>
-        <div className="text-left text-gray-600">{formatMarketCap(token.marketCapUsd || null)}</div>
-        <div className="text-right text-gray-600">${formatNumber(token.volume24h || 0)}</div>
-    </MenuItem>
-);
+const RegularMenuItem = ({ token, navigate }: { token: TokenRecord, navigate: any }) => {
+    const [tokenImage, setTokenImage] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchMetadata = async () => {
+            if (token.tokenType === 'custom' && token.metadataUri) {
+                try {
+                    const response = await fetch(token.metadataUri);
+                    const metadata = await response.json();
+                    setTokenImage(metadata.image);
+                } catch (error) {
+                    console.error('Failed to fetch metadata:', error);
+                }
+            }
+        };
+        fetchMetadata();
+    }, [token.metadataUri, token.tokenType]);
+
+    return (
+        <MenuItem
+            as="div"
+            onClick={() => navigate(`/token/${token.mintAddress}`, { state: { tokenType: token.tokenType || 'dex' } })}
+            className="grid grid-cols-[2fr_1.2fr_1.2fr] px-4 py-2 cursor-pointer items-center text-sm font-mono hover:bg-gray-50 text-gray-900"
+        >
+            <div className="flex items-center gap-2">
+                {(tokenImage || token.imageUrl) && (
+                    <img
+                        src={tokenImage || token.imageUrl}
+                        alt={token.name}
+                        className="w-5 h-5 rounded-full"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                )}
+                <span className="font-medium">{token.symbol}</span>
+            </div>
+            <div className="text-left text-gray-600">{formatMarketCap(token.marketCapUsd || null)}</div>
+            <div className="text-right text-gray-600">${formatNumber(token.volume24h || 0)}</div>
+        </MenuItem>
+    );
+};
 
 export function TokenDetailsPage() {
     const { mintAddress } = useParams();
@@ -466,6 +488,7 @@ export function TokenDetailsPage() {
                         decimals: token.decimals,
                         tokenType: token.token_type,
                         imageUrl: token.image_url,
+                        metadataUri: token.metadata_uri,
                         currentPrice: token.current_price,
                         marketCapUsd: token.market_cap_usd,
                         volume24h: token.volume_24h,
@@ -629,6 +652,7 @@ export function TokenDetailsPage() {
                     decimals: token.decimals,
                     tokenType: token.token_type,
                     imageUrl: token.image_url,
+                    metadataUri: token.metadata_uri,
                     currentPrice: token.current_price,
                     marketCapUsd: token.market_cap_usd,
                     volume24h: token.volume_24h,
@@ -739,9 +763,11 @@ export function TokenDetailsPage() {
                         <div className="p-4 text-center text-gray-500">Loading favorites...</div>
                     ) : (
                         sortTokens(topTokens).map(token => (
-                            filterType === 'Onstrument'
-                                ? <OnstrumentMenuItem key={token.mintAddress} token={token} navigate={navigate} />
-                                : <RegularMenuItem key={token.mintAddress} token={token} navigate={navigate} />
+                            (token.tokenType === 'custom' || filterType === 'Onstrument') ? (
+                                <OnstrumentMenuItem key={token.mintAddress} token={token} navigate={navigate} />
+                            ) : (
+                                <RegularMenuItem key={token.mintAddress} token={token} navigate={navigate} />
+                            )
                         ))
                     )}
                 </div>
