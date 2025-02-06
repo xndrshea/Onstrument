@@ -613,6 +613,40 @@ export class BondingCurve {
         isSubscribed: boolean;
     }) {
         if (!this.mintAddress || !this.curveAddress) throw new Error('Required addresses missing');
+        if (!this.wallet?.publicKey) throw new Error('Wallet not connected');
+
+        // 1. Check/create buyer ATA
+        const buyerATA = await getAssociatedTokenAddress(this.mintAddress, this.wallet.publicKey);
+        const buyerATAInfo = await this.connection.getAccountInfo(buyerATA);
+
+        const instructions: TransactionInstruction[] = [];
+
+        if (!buyerATAInfo) {
+            instructions.push(
+                createAssociatedTokenAccountInstruction(
+                    this.wallet.publicKey,
+                    buyerATA,
+                    this.wallet.publicKey,
+                    this.mintAddress
+                )
+            );
+        }
+
+        // 2. Check migration admin ATA (even if created earlier)
+        const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
+        const migrationAdminATA = await getAssociatedTokenAddress(this.mintAddress, migrationAdmin);
+        const adminATAInfo = await this.connection.getAccountInfo(migrationAdminATA);
+
+        if (!adminATAInfo) {
+            instructions.push(
+                createAssociatedTokenAccountInstruction(
+                    this.wallet.publicKey, // Payer
+                    migrationAdminATA,
+                    migrationAdmin,
+                    this.mintAddress
+                )
+            );
+        }
 
         // Get curve account to get correct seeds
         const curveAccount = await this.program.account.bondingCurve.fetch(this.curveAddress);
