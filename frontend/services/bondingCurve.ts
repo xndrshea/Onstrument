@@ -639,6 +639,7 @@ export class BondingCurve {
 
         const instructions: TransactionInstruction[] = [];
 
+        // Add ATA creation if needed (preserves existing logic)
         if (!buyerATAInfo) {
             instructions.push(
                 createAssociatedTokenAccountInstruction(
@@ -650,7 +651,7 @@ export class BondingCurve {
             );
         }
 
-        // 2. Check migration admin ATA (even if created earlier)
+        // 2. Check migration admin ATA (NEW CRITICAL FIX)
         const migrationAdmin = new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu');
         const migrationAdminATA = await getAssociatedTokenAddress(this.mintAddress, migrationAdmin);
         const adminATAInfo = await this.connection.getAccountInfo(migrationAdminATA);
@@ -666,10 +667,13 @@ export class BondingCurve {
             );
         }
 
-        // Get curve account to get correct seeds
-        const curveAccount = await this.program.account.bondingCurve.fetch(this.curveAddress);
+        // 3. Existing price calculation remains
+        const rawSolAmount = new BN(params.solAmount * LAMPORTS_PER_SOL);
+        const priceQuote = await this.getPriceQuote(params.solAmount, false);
+        const minTokens = new BN(Math.floor(priceQuote.price * TOKEN_DECIMAL_MULTIPLIER));
 
-        // Derive token vault with correct seeds
+        // 4. Existing curve account fetch remains
+        const curveAccount = await this.program.account.bondingCurve.fetch(this.curveAddress);
         const [tokenVault] = PublicKey.findProgramAddressSync(
             [
                 Buffer.from("token_vault"),
@@ -679,33 +683,14 @@ export class BondingCurve {
             this.program.programId
         );
 
-        // Rest of the method stays the same
-        const buyerTokenAccount = await getAssociatedTokenAddress(
-            this.mintAddress,
-            this.wallet!.publicKey!
-        );
-
-        const rawSolAmount = new BN(params.solAmount * LAMPORTS_PER_SOL);
-        const priceQuote = await this.getPriceQuote(params.solAmount, false);
-        const minTokens = new BN(Math.floor(priceQuote.price * TOKEN_DECIMAL_MULTIPLIER));
-
-        // Add curve signer seeds
-        const [curve] = PublicKey.findProgramAddressSync(
-            [
-                Buffer.from("bonding_curve"),
-                curveAccount.config.developer.toBuffer(),
-                Buffer.from(curveAccount.tokenSeed)
-            ],
-            this.program.programId
-        );
-
-        return await this.buildAndSendTransaction([
+        // 5. Modified instruction with proper ATA references
+        instructions.push(
             await this.program.methods
                 .buyWithSol(rawSolAmount, minTokens, params.isSubscribed)
                 .accounts({
-                    buyer: this.wallet!.publicKey!,
+                    buyer: this.wallet.publicKey,
                     mint: this.mintAddress,
-                    buyerTokenAccount,
+                    buyerTokenAccount: buyerATA, // Use computed ATA
                     // @ts-ignore - Anchor types mismatch
                     curve: this.curveAddress,
                     tokenVault,
@@ -713,15 +698,13 @@ export class BondingCurve {
                     systemProgram: SystemProgram.programId,
                     rent: SYSVAR_RENT_PUBKEY,
                     feeCollector: new PublicKey('E5Qsw5J8F7WWZT69sqRsmCrYVcMfqcoHutX31xCxhM9L'),
-                    migrationAdmin: new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu'),
-                    migrationAdminTokenAccount: await getAssociatedTokenAddress(
-                        this.mintAddress,
-                        new PublicKey('G6SEeP1DqZmZUnXmb1aJJhXVdjffeBPLZEDb8VYKiEVu')
-                    )
+                    migrationAdmin: migrationAdmin,
+                    migrationAdminTokenAccount: migrationAdminATA
                 })
-                .signers([])
                 .instruction()
-        ], []);
+        );
+
+        return await this.buildAndSendTransaction(instructions, []);
     }
 
     async getCurrentPrice(): Promise<number> {
