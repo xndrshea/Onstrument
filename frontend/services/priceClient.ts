@@ -92,7 +92,6 @@ class WebSocketClient {
     private handleMessage(event: MessageEvent) {
         try {
             const data = JSON.parse(event.data);
-            console.log('WebSocket received data:', data);
 
             // Handle price updates
             if (data.type === 'price' && data.mintAddress) {
@@ -107,7 +106,6 @@ class WebSocketClient {
                         timestamp: data.timestamp || Date.now(),
                         walletAddress: data.walletAddress
                     };
-                    console.log('Processed update:', update);
 
                     // Notify price subscribers
                     subscribers.forEach(callback => callback(update));

@@ -232,24 +232,9 @@ export class BondingCurve {
 
             const transaction = new VersionedTransaction(messageV0);
 
-            // Add transaction structure logging
-            console.log('Transaction Structure:', {
-                instructions: instructions.map(ix => ({
-                    programId: ix.programId.toString(),
-                    keys: ix.keys.map(k => ({
-                        pubkey: k.pubkey.toString(),
-                        isSigner: k.isSigner,
-                        isWritable: k.isWritable
-                    })),
-                    data: ix.data.toString('hex')
-                })),
-                signers: signers.map(s => s.publicKey.toString())
-            });
-
             // Simulate first
             try {
                 const sim = await this.connection.simulateTransaction(transaction);
-                console.log('Raw Simulation Result:', JSON.stringify(sim, null, 2));
 
                 if (sim.value.err) {
                     const errorLogs = sim.value.logs?.join('\n') || '';

@@ -8,6 +8,7 @@ import { PublicKey } from '@solana/web3.js'
 import { TOKEN_DECIMALS } from '../../services/bondingCurve'
 import { UserService } from '../../services/userService'
 import { pinataService } from '../../services/pinataService'
+import { useNavigate } from 'react-router-dom'
 
 interface TokenCreationFormProps {
     onSuccess?: () => void
@@ -28,6 +29,7 @@ const MIN_SUPPLY = 10;
 export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: TokenCreationFormProps) {
     const { connection } = useConnection()
     const wallet = useWallet()
+    const navigate = useNavigate()
     const tokenTransactionService = new TokenTransactionService(wallet, connection, { tokenType: 'custom' })
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -210,6 +212,7 @@ export function TokenCreationForm({ onSuccess, onTokenCreated, projectData }: To
             setSuccess(true)
             onSuccess?.()
             onTokenCreated?.()
+            navigate(`/token/${result.mintAddress}`)
         } catch (error: any) {
             console.error('Token creation failed:', error)
             setError(error.message || 'Failed to create token')
