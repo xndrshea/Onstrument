@@ -232,11 +232,35 @@ export class BondingCurve {
 
             const transaction = new VersionedTransaction(messageV0);
 
+            // Add transaction structure logging
+            console.log('Transaction Structure:', {
+                instructions: instructions.map(ix => ({
+                    programId: ix.programId.toString(),
+                    keys: ix.keys.map(k => ({
+                        pubkey: k.pubkey.toString(),
+                        isSigner: k.isSigner,
+                        isWritable: k.isWritable
+                    })),
+                    data: ix.data.toString('hex')
+                })),
+                signers: signers.map(s => s.publicKey.toString())
+            });
+
             // Simulate first
             try {
                 const sim = await this.connection.simulateTransaction(transaction);
+                console.log('Raw Simulation Result:', JSON.stringify(sim, null, 2));
+
                 if (sim.value.err) {
                     const errorLogs = sim.value.logs?.join('\n') || '';
+                    console.error('Transaction Simulation Failed. Full Logs:\n', errorLogs);
+
+                    // NEW: Parse program-specific errors
+                    const errorIndex = errorLogs.indexOf('Program log: Error:');
+                    if (errorIndex > -1) {
+                        const errorMessage = errorLogs.substring(errorIndex).split('\n')[0];
+                        console.error('Program Error Message:', errorMessage.replace('Program log: Error: ', ''));
+                    }
 
                     // Check for specific error patterns
                     if (errorLogs.includes('insufficient lamports')) {
@@ -247,30 +271,29 @@ export class BondingCurve {
                         }
                     }
 
-                    // Check for custom program errors
-                    if (errorLogs.includes('custom program error')) {
-                        // Add specific program error handling here
-                        if (errorLogs.includes('TokenAccountNotFound')) {
-                            throw new Error('Token account not found. Please try again.');
-                        }
-                        // Add more specific error cases as needed
+                    // NEW: Log program-specific error codes
+                    const errorCodeMatch = errorLogs.match(/Custom program error: (\d+)/);
+                    if (errorCodeMatch) {
+                        console.error('Anchor Error Code:', errorCodeMatch[1]);
+                        // You can add error code mapping here based on your program's error codes
                     }
 
-                    // If we can't identify the specific error, provide a more generic message
                     throw new Error('Transaction failed during simulation. Please check your inputs and try again.');
                 }
             } catch (simError: any) {
-                // Handle simulation errors
+                console.error('Simulation Error Details:', {
+                    message: simError.message,
+                    logs: simError.logs || [],
+                    stack: simError.stack
+                });
 
-                if (simError.message) {
-                    // Clean up technical error messages
-                    if (simError.message.includes('{"InstructionError"')) {
-                        throw new Error('Transaction failed during simulation. Please check your inputs and try again.');
-                    }
-                    throw simError;
+                // NEW: Check for account existence issues
+                if (simError.message.includes('Account does not exist')) {
+                    const match = simError.message.match(/Account ([\w]+) does not exist/);
+                    if (match) console.error('Missing account:', match[1]);
                 }
 
-                throw new Error('Failed to simulate transaction. Please try again.');
+                throw simError;
             }
 
             if (signers.length > 0) {
@@ -285,18 +308,13 @@ export class BondingCurve {
 
             return signature;
         } catch (error: any) {
-            console.error('Transaction error:', error);
-
-            // Ensure we always throw a user-friendly message
-            if (error.message) {
-                // Clean up any remaining technical error messages
-                if (error.message.includes('{"InstructionError"')) {
-                    throw new Error('Transaction failed. Please check your inputs and try again.');
-                }
-                throw error;
-            }
-
-            throw new Error('Transaction failed. Please try again or contact support if the issue persists.');
+            console.error('Full Error Context:', {
+                message: error.message,
+                stack: error.stack,
+                instructionData: instructions.map(ix => ix.data),
+                signers: signers.map(s => s.publicKey.toString())
+            });
+            throw error;
         }
     }
 
