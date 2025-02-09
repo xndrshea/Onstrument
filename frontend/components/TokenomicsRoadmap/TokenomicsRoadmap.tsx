@@ -9,7 +9,7 @@ export function TokenomicsRoadmap() {
                 <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10"></div>
                 <div className="relative">
                     <p className="text-center text-xl font-bold text-white">
-                        50% of all transaction fees are distributed to our subscribers
+                        100% of all transaction fees are distributed to our subscribers
                     </p>
                 </div>
             </div>
@@ -64,7 +64,7 @@ export function TokenomicsRoadmap() {
 
                 {/* Table rows - using a lighter theme */}
                 {[
-                    ["Fee Distribution", "0%", "50%"],
+                    ["Fee Distribution", "0%", "100%"],
                     ["Onstrument Transaction Fee", "1%", "0%"],
                     ["Market Transaction Fee", "1%", "0%"],
                     ["Migration Reward", "0.5 SOL", "3 SOL"],

@@ -130,10 +130,10 @@ export function LandingPage() {
                 {/* Hero Section - centered */}
                 <div className="max-w-7xl mx-auto px-4 mb-16 text-center">
                     <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-violet-500 mb-6">
-                        For The Trenches
+                        Launch, Trade, Earn, Subscribe
                     </h1>
                     <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
-                        Subscribe, earn, launch,trade.
+                        100% of fees are distributed to our subscribers.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-4">
                         <div className="flex flex-col items-center">
