@@ -148,16 +148,6 @@ export function LandingPage() {
 
                         <div className="flex flex-col items-center">
                             <Link
-                                to="/create"
-                                className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-8 py-3.5 text-lg font-medium transition-colors duration-200 shadow-lg border border-sky-400"
-                            >
-                                Start Project
-                            </Link>
-                            <span className="text-sm text-gray-500 italic mt-2">in minutes</span>
-                        </div>
-
-                        <div className="flex flex-col items-center">
-                            <Link
                                 to="/contact"
                                 className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg px-8 py-3.5 text-lg font-medium transition-colors duration-200 shadow-lg border border-cyan-400"
                             >
