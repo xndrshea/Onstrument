@@ -237,18 +237,6 @@ export function LandingPage() {
                         </button>
                     </div>
                 )}
-
-                {/* CTA Section */}
-                <div className="max-w-7xl mx-auto px-4">
-                    <div className="text-center p-12">
-                        <Link
-                            to="/create"
-                            className="inline-flex items-center gap-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg px-8 py-3 text-lg font-medium transition-colors duration-200 shadow-lg border border-sky-400"
-                        >
-                            Start Building
-                        </Link>
-                    </div>
-                </div>
             </div>
         </div>
     );
