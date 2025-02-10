@@ -9,7 +9,7 @@ export function TokenomicsRoadmap() {
                 <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10"></div>
                 <div className="relative">
                     <p className="text-center text-xl font-bold text-white">
-                        100% of all transaction fees are distributed to our subscribers
+                        Every week, 100% of all transaction fees are distributed to our subscribers
                     </p>
                 </div>
             </div>
