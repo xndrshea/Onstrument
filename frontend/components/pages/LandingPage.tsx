@@ -135,9 +135,6 @@ export function LandingPage() {
                     <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-4">
                         At Onstrument, users only pay gas.
                     </p>
-                    <p className="text-lg text-gray-500 max-w-2xl mx-auto mb-8 italic">
-                        (Yes, this was always possible.)
-                    </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-4">
                         <div className="flex flex-col items-center">
                             <button
