@@ -4,16 +4,6 @@ import './TokenomicsRoadmap.css';
 export function TokenomicsRoadmap() {
     return (
         <div className="roadmap-container">
-            {/* Transaction Fee Banner */}
-            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-violet-600 to-blue-600 p-6 mb-8 rounded-xl shadow-lg">
-                <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10"></div>
-                <div className="relative">
-                    <p className="text-center text-xl font-bold text-white">
-                        Every week, 100% of all transaction fees are distributed to our subscribers
-                    </p>
-                </div>
-            </div>
-
             {/* Roadmap Section */}
             <div className="roadmap-section mb-16">
                 <div className="text-center mb-8">
