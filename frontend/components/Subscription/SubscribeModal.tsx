@@ -24,8 +24,6 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         priceUSD: 20,  // Changed from 50 to 20
         goldenPoints: 1,
         features: [
-            'Share 100% of Platform Trading Fees',
-            'Zero Trading Fees',
             '1 Gold Point',
             '3 SOL Migration Reward'
         ]
@@ -37,8 +35,6 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         priceUSD: 60,  // Changed from 150 to 60 (20 * 3)
         goldenPoints: 5,
         features: [
-            'Share 100% of Platform Trading Fees',
-            'Zero Trading Fees',
             '5 Gold Points',
             '3 SOL Migration Reward'
         ]
@@ -50,8 +46,6 @@ const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
         priceUSD: 120,  // Changed from 300 to 120 (20 * 6)
         goldenPoints: 12,
         features: [
-            'Share 100% of Platform Trading Fees',
-            'Zero Trading Fees',
             '12 Gold Points',
             '3 SOL Migration Reward',
             'Early Access to New Features'

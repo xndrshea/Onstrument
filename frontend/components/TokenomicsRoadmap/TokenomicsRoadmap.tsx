@@ -25,7 +25,7 @@ export function TokenomicsRoadmap() {
 
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-8">
                     {[
-                        { text: "Onstrument Projects", status: "Completed" },
+                        { text: "Onstrument Bonding Curves", status: "Completed" },
                         { text: "Solana Ecosystem Trading", status: "Completed" },
                         { text: "Integrated Telegram Bots" },
                         { text: "Onstrument News Terminal" },
@@ -64,9 +64,6 @@ export function TokenomicsRoadmap() {
 
                 {/* Table rows - using a lighter theme */}
                 {[
-                    ["Fee Distribution", "0%", "100%"],
-                    ["Onstrument Transaction Fee", "1%", "0%"],
-                    ["Market Transaction Fee", "1%", "0%"],
                     ["Migration Reward", "0.5 SOL", "3 SOL"],
                     ["Onstrument Team Migration Reward", "0%", "0%"]
                 ].map(([label, free, sub], index) => (
@@ -86,10 +83,6 @@ export function TokenomicsRoadmap() {
                         <p className="text-gray-700 text-lg mb-4">
                             Join the community and earn your share of the airdrop. The points system is live,
                             and Onstrument is committed to rewarding its early supporters.
-                        </p>
-                        <p className="text-gray-700 text-lg">
-                            After the airdrop, a percentage of transaction fees will go to buy backs. Indefinitely. YOU decide the overall tokenomics.
-                            Nothing is set in stone.
                         </p>
                     </div>
 

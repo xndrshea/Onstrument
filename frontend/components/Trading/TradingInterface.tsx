@@ -42,7 +42,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
     const [priceInfo, setPriceInfo] = useState<{ price: number; totalCost: number } | null>(null)
     const [slippageTolerance, setSlippageTolerance] = useState<number>(0.05)
     const [isTokenTradable, setIsTokenTradable] = useState<boolean>(true)
-    const [isUserSubscribed, setIsUserSubscribed] = useState(false)
+    const [isUserSubscribed, setIsUserSubscribed] = useState(true)
     const [isMigrating, setIsMigrating] = useState(false)
     const [spotPrice, setSpotPrice] = useState<number | null>(_currentPrice || null);
 
@@ -309,7 +309,7 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
                 } else {
                     // Buying uses SOL amounts
                     const solAmount = parseFloat(amount)
-                    const feeAmount = isUserSubscribed ? 0 : (solAmount * 0.01) // 100 BPS = 1%
+                    const feeAmount = 0; // Previously: isUserSubscribed ? 0 : (solAmount * 0.01)
                     const minRequired = solAmount + feeAmount + 0.001 // Add 0.001 SOL for rent/gas
                     if (solBalance < minRequired) {
                         throw new Error(`Insufficient SOL. Need ${minRequired.toFixed(4)} SOL (including fees)`)
@@ -394,16 +394,6 @@ export function TradingInterface({ token, currentPrice: _currentPrice, onPriceUp
             return () => clearInterval(interval);
         }
     }, [token.mintAddress, token.tokenType]);
-
-    useEffect(() => {
-        async function checkSubscription() {
-            if (publicKey) {
-                const user = await UserService.getUser(publicKey.toString());
-                setIsUserSubscribed(user?.isSubscribed || false);
-            }
-        }
-        checkSubscription();
-    }, [publicKey]);
 
     // Add this useEffect to check tradability when component mounts
     useEffect(() => {
