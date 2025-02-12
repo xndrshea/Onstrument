@@ -81,8 +81,6 @@ export function TokenomicsRoadmap() {
                             {[
                                 "Points system is already live",
                                 <>We will be distributing points every month, and a subscription gets you <span className="text-amber-600 font-bold">gold</span> points</>,
-                                "We will be airdropping a minimum of 80%+ to Onstrument users",
-                                "Maximum 20% for team",
                             ].map((item, index) => (
                                 <div
                                     key={index}
